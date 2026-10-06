@@ -1,0 +1,1115 @@
+{
+  "summary": "Research how fast small-cap pump-and-dump moves form, the signals and data that detect them early, dilution risk, and the evidence; fact-check",
+  "agentCount": 4,
+  "logs": [
+    "3/3 sweeps returned",
+    "[stall] agent \"verify:claims\" stalled (no progress) after 656s — retrying (1/5)",
+    "[stall] agent \"verify:claims\" stalled (no progress) after 2516s — retrying (2/5)",
+    "[verify:claims] failed: You've hit your monthly spend limit · raise it at claude.ai/settings/usage?from=cc_cli_limit_message · your session limit resets 6pm (America/New_York)"
+  ],
+  "result": {
+    "research": [
+      {
+        "key": "mechanics",
+        "summary": "Scope note: the user's broad \"stock flips\" definition (gaps, breakouts, momentum bursts, reversals, halts, squeezes, insider cluster buys) and the narrower \"fast small-cap pump\" focus are compatible; this research covers the pump anatomy in depth and supplies numeric signal definitions that also serve the broader detector (insider cluster buys and squeeze inputs included). \n\nAnatomy (2025-2026): A fast small-cap pump is now two distinct species. (1) The classic intraday \"runner\": a sub-$20, <10-20M-float Nasdaq/NYSE name with a catalyst (PR, FDA, crypto/AI pivot) gaps pre-market on 5x+ relative volume, spikes in the first 15 minutes (46.6% of highs of day form by 9:45, 85%+ by 10:30 on a 3,200-event Jan 2022-Mar 2026 sample), trips 10% or 20% LULD bands repeatedly (\"halt train\"), and then fades: 67% close below the open, 72.7% gap down the next day, and runs are frequently capped by a same-day/after-hours 424B5 offering or ATM sales (offering announcements average a 20-30% drop). (2) The \"ramp-and-dump\" on recent microcap IPOs: Cayman/BVI holdcos with China/HK/SE-Asia operations, $4-$5 IPO price, $5-15M proceeds, boutique underwriters, nominee accounts holding the float; victims recruited via Facebook/Instagram ads into WhatsApp/Telegram \"investment clubs\" and told when and at what price to buy over weeks or months; then a 50-93% collapse in one or two days. Bloomberg (Jan 29, 2026) found a quarter of the 250+ smallest-tier Nasdaq IPOs since 2023 followed this pattern (~60 firms, ~$16B of market cap destroyed); the FBI logged a 300%+ rise in complaints in 2025; the SEC created a Cross-Border Task Force (Sept 5, 2025) and suspended 15 such issuers between Sept 26, 2025 and June 11, 2026 (QMMM, SDM, EFTY, PLTS, PTNM, EMPG, NUTR, PC, LAWR, MCTA, MAMK, MAGH, JMG, TCGL, HCHL). Examples: QMMM ~$1 to >$300 intraday on a crypto pivot (Sept 9, 2025); MCTA $4 to $29.36 within 10 days of IPO; TCGL $8 to >$300 in two days. \n\nRegulatory response that changes the universe going forward: IPO proceeds must now fund the entire public float (Mar 2025); minimum public float raised to $15M (effective Jan 2026); $0.10-bid automatic delisting (Jan 2026); no cure period after a reverse split within 1 year or 1:250 cumulative over 2 years (Jan 2025); Nasdaq discretionary denial for manipulation risk (IM-5101-3, Dec 2025) and discretionary delisting after an SEC suspension (IM-5101-4, approved June 3, 2026); $25M minimum IPO for China-based issuers (approved May 14, 2026); $5M MVLS accelerated delisting (approved July 22, 2026 but stayed July 29, 2026 pending Commission review). Expect fewer sub-$15M-float new listings but the existing 2023-2025 cohort remains the hunting ground, and the FINRA 2026 report notes schemes now occur months after IPO rather than at IPO, with the same issuer pumped multiple times. \n\nFor the detector: the early long-side edge is confined to the first 5-15 minutes after the open (or pre-market) on catalyst-backed gappers with no active ATM/shelf and adequate cash; everything else in the dataset says \"bag-holder risk,\" and the recent-IPO ramp profile should be a hard warning flag rather than a long candidate.",
+        "signals": [
+          {
+            "name": "Pre-market gapper (runner candidate)",
+            "definition": "Price $1-$20; float <10M (Warrior Trading) or <20M; gap >=10% vs prior close for broad 'flips', >=50% for the pump-fade universe (SmallCapLab) and >=100% for Dux's gap-up short universe; relative volume >=5x 30-day average; pre-market volume >=50k shares by 8:00 ET; a news item (PR/8-K/6-K) in the last 24h. Red flag inside the signal: pre-market volume >50M shares or float rotation >15x (Dux) = exhaustion.",
+            "data_needed": "Pre-market trades/quotes 4:00-9:30 ET (consolidated feed), float (audited float from Dilution Tracker/Fintel/Finviz), 30-day avg volume, news/PR feed, EDGAR 8-K/6-K.",
+            "timing": "Pre-market (4:00-9:30 ET); most actionable 8:00-9:30.",
+            "reliability": "moderate",
+            "source": "Warrior Trading '5 pillars' (secondary summaries); Steven Dux small-cap short statistics (tradezella.com/strategies/small-cap-short-strategy); SmallCapLab research (smallcaplab.com/research)"
+          },
+          {
+            "name": "Open-spike exhaustion clock (bag-holder timer)",
+            "definition": "On 50%+ gappers (3,200+ events, Jan 2022-Mar 2026): 46.6% of highs of day are set 9:30-9:45, 85%+ by 10:30; median HOD = +36.1% above open; average LOD = -23.4% below open; 67.2% close below open; 75% close below VWAP; only 3.7% fully round-trip below prior close. Dux: average post-open push 30-35% on 1-2M floats, 20-25% on 5-10M floats, with the best short entries 10:00-11:00. Rule: a long entered after 10:30 on a gapper is trading against a ~70% fade base rate.",
+            "data_needed": "1-minute bars, VWAP, open price, HOD/LOD tracking, float bucket.",
+            "timing": "First 15 minutes (signal window), degrading sharply after 10:30.",
+            "reliability": "strong",
+            "source": "SmallCapLab research page (unaudited vendor stats); Steven Dux strategy page"
+          },
+          {
+            "name": "HOD climax volume vs LOD volume",
+            "definition": "Median 5-minute volume at the high of day is 2.95M shares (~$10.6M) vs 487K at the low of day (6.1x lower). A 5-minute bar with volume >=3x the prior 5-minute median that fails to make a new high within 5 minutes is a climax/top candidate.",
+            "data_needed": "1- or 5-minute volume bars.",
+            "timing": "During (real time).",
+            "reliability": "moderate",
+            "source": "SmallCapLab research page"
+          },
+          {
+            "name": "LULD halt train",
+            "definition": "Tier 2 NMS stock bands: 10% if prior close >$3.00; 20% if $0.75-$3.00; lesser of $0.15 or 75% if <$0.75 (bands doubled 3:35-4:00 ET for <=$3 names per Nasdaq FAQ). Limit State 15 seconds then 5-minute pause (LUDP); reopen by Nasdaq halt cross with auction collars derived from the triggering band, extended in 5-minute Display Only Periods with collars widened 5%/$0.15 in the imbalance direction; max 10 minutes before other venues may resume. Signal: >=2 LUDP halts within 30 minutes (upward) = strong momentum but not continuation; the most-halted names run 8-9 halts in 30 days. Reference price = 5-minute mean of eligible trades, updated only if >=1% away; bands republished every 30 s.",
+            "data_needed": "Nasdaq Trader trading-halts page/RSS (reason code LUDP, pause threshold price), SIP LULD band messages, or a halt feed from Benzinga/Trade Ideas/StockTitan.",
+            "timing": "During; the first halt typically within the opening 5-15 minutes on a runner.",
+            "reliability": "moderate",
+            "source": "Nasdaq LULD FAQ (nasdaqtrader.com/content/MarketRegulation/LULD_FAQ.pdf); SR-NASDAQ-2024-065 (sec.gov 34-101620.pdf) describing Rule 4120(c)(10) collars; thedesperatetrader.com most-halted list"
+          },
+          {
+            "name": "News halt reopen collars (T1/T2/T12)",
+            "definition": "Non-LULD halts (98% news-related in 2023) now reopen through a halt cross with +/-10% collars around the Nasdaq last sale (or prior NOCP), widened by another 10% after a 5-minute display-only period, then 20% per subsequent period (SEC approved Feb 2025). T12 = exchange requested additional information (hours to overnight); H10 = SEC trading suspension (10 business days, exchanges have extended beyond).",
+            "data_needed": "Halt reason codes from Nasdaq/NYSE halt feeds.",
+            "timing": "During; T1 can come pre-market on PR; T12 is a late-stage warning.",
+            "reliability": "strong",
+            "source": "SR-NASDAQ-2024-065 notice (sec.gov) and Federal Register 2025-02386 (Feb 10, 2025); StockTitan halt-code glossary"
+          },
+          {
+            "name": "Short-sale restriction (SSR) trigger",
+            "definition": "Reg SHO Rule 201: when the listing market determines the price fell >=10% from the prior day's regular-session close (last-sale-eligible trades), short sales may only execute above the NBB for the remainder of that day and the next day; can re-trigger daily; applies whenever an NBB is disseminated (including pre-market). For runners, SSR on day 2 after a dump identifies 'backside' names and reduces short pressure, which some traders use for bounce longs.",
+            "data_needed": "Prior close, intraday low, SIP SSR indicator (or compute).",
+            "timing": "During (first trigger often in the first hour of a red day) and carries into the next day.",
+            "reliability": "moderate",
+            "source": "SEC Division of Trading and Markets Rule 201 FAQ (sec.gov/divisions/marketreg/rule201faq.htm)"
+          },
+          {
+            "name": "Float rotation / dilution capacity (run cap)",
+            "definition": "Compute cumulative volume / float: >=1x by 10:30 is typical of a runner; >=15x (Dux) marks exhaustion. Combine with Dilution Tracker-style fields: active S-3/F-3 shelf with remaining capacity, open ATM agreement (any 424B5 or 8-K Item 1.01 naming a sales agent), warrants/convertibles with exercise/conversion prices below current price, cash runway <6 months. ATM capacity / market cap >=1x = treat the run as capped. Offering-window heuristic: 40%+ move over 1-5 sessions closing near the high on >=2x 30-day volume = high same-day/after-hours offering probability; 424B5s typically hit EDGAR ~4:05 pm ET and produce a gap-down next open; announcement-day average drop 20-30%.",
+            "data_needed": "EDGAR full-text/RSS for 424B5, 424B3, S-1, S-3/F-3, 8-K Item 1.01/3.02, 6-K; Dilution Tracker (paid) or own parser; float and shares outstanding.",
+            "timing": "Pre-market (shelf map) and 4:00-6:00 pm ET (filing watch); same-day registered directs can print intraday.",
+            "reliability": "strong",
+            "source": "Guy Gentile dilution guide (guygentile.com/articles/guide-to-stock-dilution-tracking); BIT 'ATM dilution trap' (bit.com knowledge hub); Dilution Tracker research as cited by thestockdork.com; Steven Dux strategy page"
+          },
+          {
+            "name": "Recent small IPO ramp-and-dump profile (hard warning)",
+            "definition": "IPO within the last 24 months on Nasdaq Capital Market or NYSE American; IPO price $4-$5; gross proceeds $5-$25M; <20M shares issued; Cayman/BVI holdco with operations in China/HK/Singapore/Malaysia/Indonesia; underwriter in the Bloomberg-named group (WestPark, D. Boral, Dominari, Revere, R.F. Lafferty, Cathay, Bancroft, Prime Number, Benjamin, Joseph Stone); 70-90% of IPO allocation to HK broker-dealers (FINRA 22-25). Behavioral trigger: multi-week grind up (e.g., 2x-5x) on rising volume with no 8-K/6-K/PR, often with layered limit buys above round numbers, followed by a 50%+ drop in 1-2 days. Bloomberg: ~25% of 250+ smallest-tier IPOs since 2023 fit; SEC suspensions came 17 days (PLTS) to months after IPO and generally after the peak.",
+            "data_needed": "IPO calendar with underwriters/proceeds/jurisdiction (EDGAR F-1/424B4), daily bars, news feed, float concentration.",
+            "timing": "Weeks before the dump (grind-up phase); dump occurs over 1-2 sessions; SEC suspension is late.",
+            "reliability": "strong",
+            "source": "FINRA Regulatory Notice 22-25 (Nov 17, 2022); FINRA 2026 Annual Regulatory Oversight Report, Manipulative Trading; Bloomberg Jan 29, 2026 investigation as quoted in House Financial Services letter (July 1, 2026); Cooley (Apr 28, 2026) and securitieslawyer101 suspension analyses; SEC suspension orders 34-104112/104113"
+          },
+          {
+            "name": "No-news parabolic move (manipulation prior)",
+            "definition": "Close-to-close gain >=100% over <=5 sessions, or >=300% over <=20 sessions, with zero EDGAR filings or PRs in the window, on a sub-$300M microcap. This is the SEC's stated basis language ('recommendations made to investors by unknown persons via social media ... designed to artificially inflate the price and volume') and Atkins' Feb 6, 2026 framing ('no material news ... that would explain the unusual rise').",
+            "data_needed": "Daily bars, EDGAR filings index, PR wires.",
+            "timing": "Late in the ramp (days to weeks in); use as a 'do not chase' flag.",
+            "reliability": "moderate",
+            "source": "SEC trading suspension order for QMMM (34-104113); Fox Business interview with Chairman Atkins (Feb 6, 2026)"
+          },
+          {
+            "name": "Social-media noise burst",
+            "definition": "Abnormal post volume >=3 standard deviations vs the ticker's 30-day baseline on StockTwits/X/Reddit plus coordinated identical messaging or new-account clustering; invitations to WhatsApp/Telegram 'investment clubs', 'professor/assistant' personas, screenshot-posting of fills. Academic: +1 unit of noise index = 6-7% higher manipulator profit and ~50% more volume; failed pumps show 14% lower abnormal tweet volume and 29% fewer followers.",
+            "data_needed": "StockTwits API (free tier), X API (paid), Reddit API, ad-library scraping (optional); NLP classifier (Claude pass).",
+            "timing": "Pre-market and overnight for runners; weeks ahead for ramp-and-dumps.",
+            "reliability": "weak",
+            "source": "Cumming & Tran, 'Social Media Noise and Stock Manipulation' (Dec 2025) via Swedroe summary; FBI PSA I-070325 (July 3, 2025); securitieslawyer101 HCHL playbook (July 16, 2026)"
+          },
+          {
+            "name": "Pivot PR catalyst (crypto/AI/treasury)",
+            "definition": "Microcap (<$100M cap) press release announcing a business pivot to crypto treasury, AI, or similar buzzword with no revenue attached. QMMM: ~$1 to >$300 intraday on Sept 9, 2025 (close $207), suspended 20 days later. Treat as a runner catalyst for the first 15 minutes and as a dump setup thereafter.",
+            "data_needed": "PR wire feed (GlobeNewswire/PRNewswire/ACCESSWIRE), 6-K/8-K.",
+            "timing": "Pre-market (PR typically 7:00-9:00 ET) or intraday.",
+            "reliability": "moderate",
+            "source": "securitieslawyer101 QMMM/SDM analysis (Sept 30, 2025); SEC order 34-104113"
+          },
+          {
+            "name": "Post-reverse-split tiny float",
+            "definition": "Reverse split effective in the last 30 days (Nasdaq requires 10 calendar days' notice and 2 business days' public disclosure; Nasdaq halts into the effective date and reopens with a halt cross at 9:00 ET under a 2026 rule) producing float <3M shares. Spike-prone on any catalyst because of thin float and borrow scarcity, but academic 20-day post-split CAR is about -19% (worse when controlled), and a split within 1 year (or 1:250 cumulative over 2 years) removes the bid-price cure period, raising delisting risk.",
+            "data_needed": "Nasdaq corporate-action calendar, 8-K Item 5.03, float after split.",
+            "timing": "Pre-market on effective date and following weeks.",
+            "reliability": "weak",
+            "source": "Nasdaq Rule 5250(e)(7) (effective Jan 30, 2025; AFS Law summary); Rule 5810(c)(3)(A)(iv) (SEC approved Jan 2025; reflected in issuer proxy filings); USU graduate report on short selling around reverse splits (not directly fetched; search-level only)"
+          },
+          {
+            "name": "Insider cluster buy (microcap)",
+            "definition": "Form 4 open-market purchase (code P) by an insider when another insider bought within the prior 30 days; filing arrives within 2 business days of the trade. Microcaps ($30M-$500M, 2018-2024, 13,534 purchases): first-day abnormal return 4.4% for clustered vs 2.7% unclustered; 4.13% when the stock is far below its 52-week high vs 0.86% near it; reaction concentrated on day 1 with 2-3 sessions of continuation and no reliable longer drift.",
+            "data_needed": "EDGAR Form 4 feed (or OpenInsider), 52-week high, market cap.",
+            "timing": "After-hours/pre-market following the filing; trade the next open.",
+            "reliability": "moderate",
+            "source": "Zhao, 'Insider Purchases Far Below the 52-Week High' (arXiv 2602.06198v2, 2026)"
+          },
+          {
+            "name": "Day-2 / first-red-day regime",
+            "definition": "After a 50%+ gap day: 72.7% gap down next day (median -4.3%), 75.5% open below day-1 open. Dux first-red-day short: >=3 consecutive green days, >=300% range from the breakout (or ~1,000% in 2 days), less than 50% of the move already faded. Long-side multi-day runs are the minority case and usually require fresh news or a squeeze setup.",
+            "data_needed": "Daily bars, consecutive-green-day counter, breakout reference.",
+            "timing": "Pre-market of day 2+.",
+            "reliability": "moderate",
+            "source": "SmallCapLab research page; Steven Dux strategy page"
+          },
+          {
+            "name": "Squeeze inputs",
+            "definition": "Short interest >=20% of float (FINRA settlement data, published twice monthly with ~9-day lag), cost-to-borrow >=50% and utilization >=90% (Ortex/Fintel intraday estimates), Reg SHO threshold-list membership (>=0.5% of shares outstanding failing to deliver for 5 consecutive days), float <10M. Note: ramp-and-dump names typically have little real short interest; a 'squeeze' narrative in a WhatsApp group is a pump tell, not a signal.",
+            "data_needed": "FINRA short interest, exchange threshold lists (daily), SEC FTD files (twice monthly), Ortex/Fintel borrow data.",
+            "timing": "Pre-market (daily refresh) with intraday borrow updates.",
+            "reliability": "moderate",
+            "source": "Ortex pricing/feature articles (public.ortex.com); Fintel plans page (fintel.io/checkout); FINRA/SEC data descriptions (general knowledge, not fetched)"
+          },
+          {
+            "name": "Terminal regulatory events",
+            "definition": "SEC Section 12(k) suspension (H10 code, 10 business days; the 2025-26 cohort stayed halted for months and Nasdaq can now delist under IM-5101-4); Nasdaq T12 'additional information requested' halt; closing bid <=$0.10 for 10 consecutive days (immediate delisting from Jan 19, 2026); MVLS <$5M for 30 consecutive business days (rule approved July 22, 2026, stayed July 29, 2026).",
+            "data_needed": "SEC trading-suspensions RSS (sec.gov/enforcement-litigation/trading-suspensions/rss), Nasdaq halt feed, daily close and MVLS.",
+            "timing": "Late (after the dump) but useful to purge watchlists and block longs.",
+            "reliability": "strong",
+            "source": "SEC trading suspensions page; Norton Rose Fulbright Nasdaq rule update; Greenberg Traurig (July 2026) and Thomson Reuters (July 29, 2026) on the $5M MVLS rule"
+          }
+        ],
+        "facts": [
+          {
+            "claim": "Gap-up universe stats (stocks opening >=50% above prior close, min price $0.30, Jan 2022-Mar 2026, 3,200+ events): 67.2% close below open; 46.6% of HODs set 9:30-9:45 and 85%+ by 10:30; median HOD +36.1% from open; average LOD -23.4%; 3.7% full gap fill; 72.7% gap down next day (median -4.3%); fade rate 69.1% for cash-crisis names vs 60.6% for cash-flow-positive; fade rates by gap bucket 69.7% (45-75%), 71.9% (75-100%), 70.5% (100-150%).",
+            "source": "https://www.smallcaplab.com/research",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Dux's small-cap short framework: gap-up shorts on stocks up >100% with initial market cap <$100M, float <50M, price >$3; average post-open push 30-35% on 1-2M floats and 20-25% on 5-10M floats; average risk ~7% vs fade 24-26%; pre-market volume >50M shares or float rotation >15x are warning thresholds; pre-market to full-day volume ratio 1:5 to 1:10.",
+            "source": "https://www.tradezella.com/strategies/small-cap-short-strategy",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Warrior Trading '5 pillars': relative volume >=5x, daily change >=10%, price $1-$20, float <10M, news catalyst; the free TDPro gapper scanner implements float <=10M, >=50k pre-market volume, $1-$20, news within 24h, gap >=10%.",
+            "source": "https://mcpservers.org/servers/www-traderdaddy-pro-premarket-gappers (secondary); Warrior Trading materials via secondary summaries",
+            "confidence": "medium"
+          },
+          {
+            "claim": "LULD bands (Nasdaq FAQ): Tier 2 prior close >$3.00 = 10% all day; $0.75-$3.00 = 20% (doubled to 40% 3:35-4:00 pm); <$0.75 = lesser of $0.15 or 75%; Limit State lasts 15 seconds then a 5-minute pause; reference price is the 5-minute arithmetic mean of eligible trades, updated only if >=1% away, republished every 30 seconds; max pause 10 minutes after which other venues may resume; reopening price becomes the new reference if reopened within 10 minutes.",
+            "source": "https://www.nasdaqtrader.com/content/MarketRegulation/LULD_FAQ.pdf",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq reopens LULD pauses via its halt cross with initial auction collars based on the triggering price band (since 2017), extending in 5-minute Display Only Periods with collars widened in the imbalance direction; the collar threshold for LULD/MWCB is 5% of the auction reference price with a $0.15 minimum. For news and other non-LULD halts (98% news-related in 2023), SR-NASDAQ-2024-065 added symmetric 10% collars (greater of $1 or 10% above $1; $0.50 or 10% at <=$1), widened by 10% after the first extension and 20% thereafter until the price falls within collars; SEC approved Feb 2025.",
+            "source": "https://www.sec.gov/files/rules/sro/nasdaq/2024/34-101620.pdf; https://www.federalregister.gov/documents/2025/02/10/2025-02386",
+            "confidence": "high"
+          },
+          {
+            "claim": "Reg SHO Rule 201: short-sale price test activates when the listing market determines a >=10% decline from the prior day's regular-session close (last-sale-eligible trades 9:30-4:00), lasts the remainder of the day and the next day, can re-trigger without limit, and applies whenever an NBB is disseminated including outside regular hours.",
+            "source": "https://www.sec.gov/divisions/marketreg/rule201faq.htm",
+            "confidence": "high"
+          },
+          {
+            "claim": "SR-NASDAQ-2024-084 (SEC accelerated approval March 12, 2025): a company listing via IPO must satisfy the minimum Market Value of Unrestricted Publicly Held Shares solely from offering proceeds; previously registered resale shares no longer count. Minimums at the time: Capital Market $5M (net income standard) / $15M (equity or MVLS standards); Global Market $8M / $18M / $20M.",
+            "source": "https://www.sec.gov/files/rules/sro/nasdaq/2025/34-102622.pdf; https://listingcenter.nasdaq.com/assets/rulebook/nasdaq/filings/SR-NASDAQ-2024-084.pdf",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq's Sept 3, 2025 proposal raised MVUPHS under the net income standard to $15M (Capital Market from $5M; Global Market from $8M), required China-based IPOs to raise >=$25M gross, and proposed accelerated delisting for companies with MVLS <$5M (10 consecutive business days in the proposal) plus another deficiency, citing 'concerns about manipulative practices, including pump-and-dump schemes, in smaller company securities.' SEC approved the $15M float rule Dec 18, 2025; operative Jan 16-17, 2026.",
+            "source": "https://acrosstheboard.mayerbrown.com/2025/09/nasdaq-rule-proposal-seeks-enhanced-float-and-ipo-listing-requirements-faster-delisting-for-non-compliant-companies/; https://www.nortonrosefulbright.com/en/knowledge/publications/3fe61375/nasdaq-rule-update",
+            "confidence": "high"
+          },
+          {
+            "claim": "Low-price rule: SEC approved Dec 5, 2025, operative Jan 19, 2026: a closing bid of $0.10 or less for 10 consecutive trading days triggers an immediate delisting determination with no cure period and immediate trading suspension.",
+            "source": "https://www.nortonrosefulbright.com/en/knowledge/publications/3fe61375/nasdaq-rule-update",
+            "confidence": "high"
+          },
+          {
+            "claim": "Reverse-split rules: Nasdaq Rule 5810(c)(3)(A)(iv) (SEC approved Jan 2025) denies any bid-price compliance period if the company effected a reverse split in the prior one year or splits totaling >=1:250 in the prior two years; Rule 5250(e)(7) (from Jan 30, 2025) requires notice to Nasdaq 10 calendar days before the split's market effective date and public disclosure 2 business days before; a 2026 filing (34-105860) has Nasdaq halting the security before the effective date and reopening via halt cross at 9:00 am ET.",
+            "source": "https://www.afslaw.com/perspectives/alerts/nasdaq-rule-change-lengthens-reverse-stock-split-notice-period; https://www.sec.gov/files/rules/sro/nasdaq/2026/34-105860.pdf; Nasdaq issuer proxy disclosures (e.g., Reviva PRE 14A, Oct 2025)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq IM-5101-3 (effective Dec 19, 2025) lets Nasdaq deny initial listings whose securities are 'susceptible to manipulation', considering jurisdiction/remedies, concentration of public float and underwriter allocations, advisors' involvement in prior offerings with 'concerning or volatile trading patterns', FINRA/SEC referrals, and going-concern opinions; it was framed as a response to SEC suspensions based on social-media-driven manipulation without issuer misconduct.",
+            "source": "https://www.morganlewis.com/pubs/2026/01/nasdaq-expands-discretionary-authority-to-deny-initial-listings-based-on-manipulation-risk",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq IM-5101-4 (filed Feb 20, 2026; SEC accelerated approval June 3, 2026) authorizes Nasdaq to delist a security after an SEC trading suspension even if the issuer meets all listing standards and had no connection to the trading, considering float, trading patterns, jurisdiction, recent capital raises/resale dynamics, disclosure adequacy, and advisors' regulatory history.",
+            "source": "https://listingcenter.nasdaq.com/assets/rulebook/nasdaq/filings/SR-NASDAQ-2026-009.pdf; https://www.sec.gov/file/34-105603",
+            "confidence": "high"
+          },
+          {
+            "claim": "SEC approved Nasdaq's $25M minimum firm-commitment IPO proceeds requirement for China-based (incl. Hong Kong and Macau) companies on May 14, 2026, operative mid-June 2026; Nasdaq's filing stated that from Aug 2022 to Apr 2025 about 70% of its market-manipulation enforcement referrals involved Chinese companies although they are under 10% of Nasdaq listings.",
+            "source": "https://www.gtlaw.com/en/insights/2026/5/sec-approves-nasdaqs-25-million-ipo-requirement-for-china-based-companies",
+            "confidence": "high"
+          },
+          {
+            "claim": "The $5M MVLS continued-listing rule (SR-NASDAQ-2026-004: MVLS <$5M for 30 consecutive business days = immediate suspension and delisting, no cure, hearing request does not stay suspension) was approved July 22, 2026 and effective July 23, 2026, then stayed by the Commission on July 29, 2026 pending review after five petitions; roughly 100-200 listed companies are below $5M and SEC analysis found 983 companies would have triggered it 2006-2025.",
+            "source": "https://www.gtlaw.com/en/insights/2026/7/sec-approves-nasdaqs-new-$5-million-mvls-continued-listing-standard; https://tax.thomsonreuters.com/news/sec-stays-controversial-nasdaq-5-million-listing-rule-pending-review/",
+            "confidence": "high"
+          },
+          {
+            "claim": "FINRA Regulatory Notice 22-25 (Nov 17, 2022) profiled small-cap IPO ramp-and-dumps: raises under $25M, issuers valued under $100M, fewer than 20M shares issued, many China-based, Hong Kong broker-dealers allocated up to 90% of shares; price spikes in the opening trade and in the day(s) after listing with no news, then declines to at or below the IPO price; nominee accounts place layered buy limit orders above the IPO price at the same time.",
+            "source": "https://www.finra.org/rules-guidance/notices/22-25",
+            "confidence": "high"
+          },
+          {
+            "claim": "FINRA's 2026 Annual Regulatory Oversight Report says suspected pump-and-dumps now occur less often at the IPO and more often months after it, the same issuer can be pumped multiple times, nominee accounts transfer shares to foreign omnibus accounts to concentrate float, issuers do large privately placed secondaries to select foreign investors, account-takeover fraud is used to buy targeted stocks, and 'investment clubs' direct victims on the time and price to buy while foreign-controlled accounts sell.",
+            "source": "https://www.finra.org/rules-guidance/guidance/reports/2026-finra-annual-regulatory-oversight-report/manipulative-trading",
+            "confidence": "high"
+          },
+          {
+            "claim": "FBI PSA I-070325 (July 3, 2025): ramp-and-dump operators use social-media ads to recruit into 'investment clubs' on messaging apps (with bots/fake members), secretly control a large block of a low-priced stock, ramp it over 'several weeks or months', then dump; the FBI saw at least a 300% increase in such complaints in 2025 vs 2024.",
+            "source": "https://www.ic3.gov/PSA/2025/PSA250703",
+            "confidence": "high"
+          },
+          {
+            "claim": "The SEC announced a Cross-Border Task Force within Enforcement on Sept 5, 2025, focused on foreign issuers (China named), pump-and-dump/ramp-and-dump manipulation, and gatekeepers (auditors, underwriters).",
+            "source": "https://sle.cooley.com/2025/09/18/sec-creates-cross-border-task-force-to-combat-fraud/; https://www.mayerbrown.com/en/insights/publications/2025/09/sec-announces-formation-of-cross-border-task-force-to-combat-fraud",
+            "confidence": "high"
+          },
+          {
+            "claim": "SEC trading suspensions of Nasdaq/NYSE small caps, all citing 'recommendations made to investors by unknown persons via social media': SDM and QMMM (Sept 26, 2025), EFTY/PLTS/PTNM (Oct 3), EMPG/NUTR (Oct 8), PC (Oct 16), LAWR (Oct 22), MCTA (Nov 11), MAMK (Nov 14), MAGH (Dec 4), JMG (Jan 14, 2026), TCGL (Feb 1, 2026), HCHL (June 11, 2026). Per Cooley (Apr 28, 2026): 14 Asia-based issuers, 12 IPO'd in 2025 and 2 in 2024, proceeds $5-15M, all microcaps, 13 priced at $4; exchanges extended halts beyond the SEC's 10 business days and all remained halted.",
+            "source": "https://www.sec.gov/enforcement-litigation/trading-suspensions; https://sle.cooley.com/2026/04/28/what-foreign-issuers-should-know-about-sec-trading-suspensions/",
+            "confidence": "high"
+          },
+          {
+            "claim": "Case numbers: QMMM listed July 19, 2024 at $4, traded ~$1 through mid-2025, announced a crypto pivot Sept 9, 2025, hit >$300 intraday and closed $207, was $119.40 on Sept 28, suspended Sept 29-Oct 10; SDM listed May 1, 2024 at $4 and was $1.85 pre-suspension; PLTS IPO'd Sept 19, 2025 at $4, ran to the mid/high teens, suspended Oct 6 (17 days post-IPO); EFTY IPO Aug 8, 2025 at $4, last $15.02; PTNM IPO May 30, 2025 at $4, peak ~$14.79; MCTA IPO Oct 21, 2025 at $4, $29.36 within 10 days, suspended Nov 12; TCGL IPO Oct 15, 2025 at $4, went from $8 to >$300 in two days before its Jan/Feb 2026 halt; HCHL IPO June 24, 2025 at $5 (1.2M shares, ~$6.06M; Dominari/Revere/Pacific Century), 52-week range $0.80-$7.25, suspended June 12, 2026, Nasdaq T12 halt June 29, 2026.",
+            "source": "https://www.securitieslawyer101.com/2025/09/30/sec-trading-suspensions-of-qmmm-sdm-new-sec-cross-border-task-force/; https://www.securitieslawyer101.com/2026/02/03/latest-sec-trading-suspensions-should-be-a-wake-up-call-for-foreign-issuers/; https://www.securitieslawyer101.com/2026/07/16/happy-city-holdings-hchl-sec-suspension-whatsapp-scam/",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Bloomberg (Jan 29, 2026): a quarter of the 250+ companies that listed on Nasdaq's smallest tier since 2023 were promoted in WhatsApp group chats and then crashed or were suspended; ~60 firms, ~$16B cumulative market-cap destruction; targets 'suffered a one- or two-day 50% share price decline'; recurring underwriters: WestPark Capital, D. Boral Capital, Dominari Securities, Revere Securities, R.F. Lafferty, Cathay Securities, Bancroft Capital, Prime Number Capital, Benjamin Securities, Joseph Stone Capital. Also cited: in July 2025 alone seven Chinese stocks on Nasdaq fell 80-93% (~$3.7B); InvestorLink claims 50 events in 2025 (~$15B), 46 on Nasdaq.",
+            "source": "https://democrats-financialservices.house.gov/uploadedfiles/070126_sec_re_rd_enf.pdf (House Financial Services letter, July 1, 2026, quoting Bloomberg and comment letters; Bloomberg article itself not fetched)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "2022 precedent: AMTD Digital rose >32,000% post-IPO; Magic Empire Global closed its debut +2,325% at $97 vs a $4 IPO; Addentax priced at $5, opened $27 and hit $656 intraday on Aug 31, 2022; 7 of 10 HK/China small IPOs in the period had >=4x intraday first-day gains; Nasdaq began questioning advisers of small Chinese IPO candidates about shareholder identity and funding in mid-Sept 2022.",
+            "source": "https://www.bnnbloomberg.ca/nasdaq-increases-scrutiny-of-small-cap-ipos-after-big-swings-1.1822361; https://www.bnnbloomberg.ca/tiny-ipo-spikes-1-150-in-us-debut-in-wake-of-amtd-digital-1.1802110",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Cumming & Tran (Dec 2025), using 3,800+ US small caps 2010-2018, ~80M StockTwits posts and 56,000+ Nasdaq SMARTS manipulation alerts: a one-unit rise in their noise index raises manipulator profits 6-7% and volume ~50%; failed manipulations had 14% lower abnormal tweet volume and 29% fewer followers; bot-isolated tweets roughly doubled the profitability effect.",
+            "source": "https://larryswedroe.substack.com/p/social-media-noise-and-stock-manipulation (summary of the paper; paper not fetched)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Zhao (arXiv 2602.06198v2, 2026): 13,534 insider open-market purchases across 1,192 microcaps ($30M-$500M), 2018-2024; day-1 abnormal return 4.13% when far below the 52-week high vs 0.86% near it; purchases preceded by another insider's buy within 30 days earned 4.4% vs 2.7%; reaction concentrated on day 1 with 2-3 sessions of continuation; no significant longer-run alpha; volatility is the dominant predictor.",
+            "source": "https://arxiv.org/html/2602.06198v2",
+            "confidence": "medium"
+          },
+          {
+            "claim": "OTC vs listed: LULD covers NMS stocks only and Rule 201 covers exchange-listed securities, so OTC names have neither; amended Rule 15c2-11 (effective Sept 28, 2021) moved 2,000+ non-current issuers to the Expert Market and limits shell quotation to 18 months, pushing promotion activity toward exchange-listed microcap IPOs; OTC Markets applies a Promotion flag and Caveat Emptor designation and refers promotions to the SEC/FINRA.",
+            "source": "https://www.otcmarkets.com/learn/policy-on-stock-promotion; https://www.securitieslawyer101.com/2021/the-amended-rule-15c2-11-is-bad-news-for-shell-vendors; Nasdaq LULD FAQ; SEC Rule 201 FAQ",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Dilution mechanics per trader guides: 424B5 prospectus supplements typically post ~4:05 pm ET and produce gap-down opens; banks pitch deals 'into strength' with a 40%+ move over 1-5 sessions on 2x+ average volume as the window; ATMs provide continuous supply on every rally with no real-time tape (sales disclosed later in 424B5/6-K/10-Q); S-3 shelf capacity = registered amount minus prior takedowns; Dilution Tracker research cites average announcement-day drops of ~20-30% for small-cap offerings.",
+            "source": "https://guygentile.com/articles/guide-to-stock-dilution-tracking; https://www.bit.com/knowledge-hub/the-atm-dilution-trap; https://www.thestockdork.com/dilution-tracker-review/",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Post-reverse-split returns: a graduate study reports average 20-day cumulative abnormal returns of about -19.1% after reverse splits (-38.6% with controls); large squeezes after splits require very low float, high short interest and scarce borrow. (Primary PDF returned 403; figure from search snippet.)",
+            "source": "https://digitalcommons.usu.edu/cgi/viewcontent.cgi?article=2564&context=gradreports (not fetched; unverified)",
+            "confidence": "low"
+          },
+          {
+            "claim": "Halt data access: Nasdaq Trader's trading-halts page lists reason codes and a 'Pause Threshold Price' and offers a Trading Halt RSS feed and halt history; codes LUDP (5-minute LULD pause), T1 (news pending), T2 (news released), T12 (additional information requested), H10 (SEC suspension), H4 (non-compliance). The most-halted names over a 30-day window run 8-9 halts.",
+            "source": "https://www.nasdaqtrader.com/trader.aspx?id=TradeHalts; https://www.stocktitan.net/stock-halt-tracker/codes; https://www.thedesperatetrader.com/most-halted-stocks",
+            "confidence": "high"
+          },
+          {
+            "claim": "Vendor prices (checked Oct 2026 unless noted): Dilution Tracker Premium $74/month or $588/year ($49/month equivalent), 7-day trial, free tier covers 2,300+ tickers with audited float (thestockdork, Sept 2026); another review (daytradereview, Apr 2026) quotes $60/month or $468/year, so confirm on site; free via Cobra Trading and Centerpoint/Clear Street for active traders. Finviz Elite $39.50/month or $299.50/year with pre-market 4:00-9:30 data and unlimited alerts (vendor page). Benzinga Pro Basic $37/month, Streamlined $147/month (includes Audio Squawk), Essential $197/month; annual ~$30.58/$124.75/$166.42 per month (luxalgo, verified Sept-Oct 2026). Ortex Basic $39/month ($348/year) with delayed short interest; Advanced $129/month ($948/year) with real-time short-interest estimates, cost-to-borrow, utilization. Trade Ideas Basic $127/month ($89 annual), Premium $254/month ($178 annual) with halt alerts and pre-market gap scanners. Fintel tiers Free/Bronze/Silver/Gold with short interest, insider and institutional data from Bronze up and options flow at Gold; third-party pricing of $14.95/$29.75/$95 per month is unverified (vendor page shows no prices).",
+            "source": "https://www.thestockdork.com/dilution-tracker-review/; https://daytradereview.com/dilution-tracker-review/; https://finviz.com/elite.ashx; https://www.luxalgo.com/blog/benzinga-pro-review-is-news-edge-worth-cost/; https://public.ortex.com/articles/a-new-pricing-structure-for-ortex; https://daytradingtoolkit.com/trading-tools-tutorials/trade-ideas-pricing-explained; https://fintel.io/checkout; https://nexusfi.com/d/data-providers/fintel/ (unverified)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Community/alert sources: Investors Underground ~$150-200/month (live scanner commentary); Black Box Stocks from $59/month; Scanz from $89/month; many X 'runners list' accounts are marketing funnels for paid Discords and their track records are unverifiable; the FBI and FINRA note that bots and fake accounts inflate these groups.",
+            "source": "https://fortraders.com/blog/trading-discords-communities; https://daytradingz.com/trade-ideas-alternatives/; FBI PSA I-070325",
+            "confidence": "low"
+          }
+        ],
+        "recommendations": [
+          "Treat the detector as two separate classifiers: (A) 'runner' (intraday catalyst-driven gapper) where the only long edge is pre-market to ~9:45 ET and everything after 10:30 is short/fade territory by base rate; (B) 'ramp-and-dump' (recent microcap IPO, grind-up without news) which should never emit a long alert and should emit a 'do not touch / bag-holder' alert once the grind-up exceeds ~100% over 20 sessions with no filings.",
+          "Cheap rules pass for A (all free data): price $1-$20, float <20M (hard cap) with <10M preferred, pre-market gap >=10% (broad) / >=50% (pump universe), pre-market volume >=50k by 8:00 ET and relative volume >=5x, a news item or 8-K/6-K within 24h, and no 424B5/S-1/S-3 filed in the last 5 sessions. Score down: float rotation >1x pre-market, pre-market volume >50M shares, prior-day run already >=300% from breakout, cash runway <6 months or active ATM/shelf (DilutionTracker or own EDGAR parser), reverse split in last 30 days.",
+          "Cheap rules pass for B: IPO within 24 months on Nasdaq Capital Market/NYSE American, IPO price $4-$5, proceeds <=$25M, foreign (Cayman/BVI) holdco with China/HK/SE-Asia operations, underwriter in the Bloomberg-named list, float <20M; then watch for 5-day gain >=50% or 20-day gain >=100% with zero EDGAR filings. Send Claude only the survivors with the news/filing context so it can judge 'is there a real catalyst' (the SEC's own test).",
+          "Instrument the halt and SSR state machine directly: subscribe to Nasdaq Trader's halt RSS (or a Polygon/Databento-style halt/LULD feed), compute band width from the prior close ($3.00 and $0.75 thresholds), count LUDP halts per 30 minutes, and compute SSR from the prior close; 2+ up-halts inside 30 minutes plus float rotation >=1x is the 'climax zone' in the data, not a buy signal.",
+          "Add a 4:00-6:00 pm ET EDGAR watcher for 424B5/424B3/8-K Item 1.01 and 3.02/6-K on every name that ran >=40% in the last 1-5 sessions; an offering print should cancel any day-2 long thesis and generate a 'gap-down expected' alert (announcement-day average drop 20-30%).",
+          "Add Form 4 cluster-buy detection for the broad 'flips' interpretation: purchases (code P) by >=2 insiders within 30 days on a $30M-$500M name far below its 52-week high, alert on the filing evening and expect a day-1 reaction of a few percent with 2-3 days of follow-through; keep position expectations small.",
+          "For squeeze setups, pay for one borrow-data source (Ortex Advanced $129/month or Fintel) rather than relying on twice-monthly FINRA data, and discount any 'squeeze' narrative on a name that fits the ramp-and-dump profile.",
+          "Data/tool budget guidance: a free-first stack (EDGAR full-text + RSS, Nasdaq halt RSS, SEC suspensions RSS, StockTwits API, Finviz Elite $39.50 for screens) plus one of Dilution Tracker ($49-74/month) and one halt/scanner feed (Benzinga Pro Streamlined $147 if squawk is wanted, otherwise a market-data API) covers everything in the lifecycle; Trade Ideas is only worth $89-254/month if you want its halt/gap scanners instead of writing your own.",
+          "Maintain a 'tainted issuer' blocklist seeded from SEC 12(k) suspensions (15 since Sept 2025), Nasdaq T12 halts, and the Bloomberg underwriter list; and expect the listed universe of sub-$15M-float names to shrink after the Jan 2026 float rule, the May 2026 $25M China rule, and the stayed $5M MVLS rule.",
+          "Backtest the long-side rules against the SmallCapLab-style base rates before trusting them: with ~70% of 50%+ gappers closing below the open and 73% gapping down next day, the detector's success metric should be time-to-alert relative to the 9:30-9:45 HOD window, not hit rate on 'runs'."
+        ],
+        "open_questions": [
+          "Should the detector include OTC/pink-sheet promotions at all? LULD and SSR do not apply there, data is thinner, and the 2021 Rule 15c2-11 changes shifted most promotion to listed microcaps; this research assumed listed names only.",
+          "Which real-time data vendor (Polygon, Databento, Alpaca, IBKR, etc.) and at what cost? Not researched here; the LULD band/halt feed and pre-market volume quality depend on it.",
+          "Is the X/Twitter API budget acceptable (paid tiers) or will social monitoring rely on StockTwits/Reddit plus ad-library scraping? The academic evidence for social noise as a leading signal is weak-to-moderate and promotion for ramp-and-dumps happens inside WhatsApp/Telegram groups that cannot be observed directly.",
+          "Exact current Dilution Tracker pricing differs across 2026 reviews ($60 vs $74 monthly; $468 vs $588 annual) and the vendor page could not be fetched; confirm before budgeting. Fintel tier prices ($14.95/$29.75/$95) are third-party and unverified.",
+          "Whether LULD close-period band doubling still applies as shown in the Nasdaq FAQ after LULD Plan Amendment 18 (one search summary says Amendment 18 removed doubling at both open and close); verify against the current LULD Plan text on luldplan.com before hard-coding the 3:35-4:00 pm bands.",
+          "The $5M MVLS accelerated-delisting rule is stayed as of July 29, 2026; if it survives Commission review it will remove 100-200 sub-$5M names from the listed universe, changing the pool of pump candidates.",
+          "The post-reverse-split abnormal-return figures (-19.1% / -38.6%) come from a search snippet of a graduate report that could not be fetched and should be treated as unverified.",
+          "The SmallCapLab and Dux statistics are trader/vendor-published and unaudited; the user may want to re-derive the HOD-timing and fade-rate numbers from their own bar data before relying on them for position rules.",
+          "Whether the user wants the detector to cover day-2+ 'multi-day runner' longs (minority outcome per the data) or strictly day-1 early-phase entries."
+        ]
+      },
+      {
+        "key": "detection",
+        "summary": "Yes, both layers can be built on the same feeds: the broad \"stock flips\" layer (gaps, breakouts, halts, reversals, squeezes, insider cluster buys) and this narrower small-cap runner/pump layer, which is a specialization of it with tighter universe filters (price $1-20, float <20M, market cap <$100-200M) and a dedicated \"dump\" rule set. Research on the narrow layer: the practitioner consensus for the LONG early phase is Ross Cameron's \"five pillars\" (RVOL >=5x vs 30-day average, already up >=10% on the day, a headline catalyst, price $1.00-$20.00, float under 20M shares; gaps scanned from 4%, 20%+ preferred; entry on the pre-market-high break or 1-minute opening-range breakout with the stop at that candle's low, only above VWAP, between roughly 7:00 and 11:00 ET). The AVOID/SHORT side is better quantified than the long side: Steven Dux's gap-up short needs the stock up >100%, float <50M, market cap <$100M, price >$3, and confirmation that price is below the open by ~10:00 with declining volume (holding above the open at 10:00 invalidates); first red day needs >=3 consecutive green days and ~300% range (or ~1,000% in 2 days) and is skipped if the red day already gave back >50% of the run; Investors Underground says never short the frontside (big candles, rising volume) and wait for the backside (fading volume, failed red-to-green recoveries, VWAP loss); multi-halt exhaustion shorts start after 4-5 up-halts; float rotation >5x pre-market means positioning is unknowable and >15x is a no-trade. Dilution/offering signals are the most mechanical dump predictor: S-3 shelf/ATM prospectus supplement, S-1 resale, 8-K securities purchase agreement with warrant coverage, 424B pricing, going-concern language, cash runway <2 quarters; EDGAR posts filings publicly ~40 seconds (median 36 s) after acceptance. Regulator data on promoted stocks: FINRA 22-25 ramp-and-dump IPOs raised <$25M, issued <20M shares, were valued <$100M, had 90%+ allocations to Hong Kong brokers, and ran on no news; FINRA/SEC 2025 alerts and the SEC Cross-Border Task Force (Sept 5 2025) focus on WhatsApp/Telegram group pumps of Nasdaq-listed China-linked small caps (some +2,000% to +32,000% then collapse). Academic baselines: spam-touted stocks earn +4.9% the day before/of touting and lose ~5.25% over the next two days; abnormal Twitter message volume on small caps precedes an event-day spike and a reversal within the following week; a crypto-derived anomaly detector flags a pump when volume is +300% and price +5% versus a trailing window (balanced) or +400%/+10% (strict). Data-wise, Alpaca Algo Trader Plus ($99/mo, SIP) covers pre-market trades/quotes, trading-status (halt) and LULD channels, a Benzinga news websocket, and SIP-based most-actives/movers screeners; Massive needs the $199/mo Advanced plan for real-time trades/quotes and LULD; none of Alpaca, Massive or Finnhub supplies float, so float must come from FMP/sec-api/dilution-tracker-type vendors or be derived from EDGAR cover pages. LULD does not operate pre-market, so pre-market \"halts\" are news halts (T1) only; Tier 2 bands are 10% above $3 and 20% between $0.75-$3, with a 15-second limit state and 5-minute pause.",
+        "signals": [
+          {
+            "name": "LONG: Gap-and-go / five-pillars composite (Ross Cameron, Warrior Trading)",
+            "definition": "Pre-market gap up (scanners start at 4%; 5%+ acceptable, 20%+ preferred); relative volume >= 5x the 30-day average volume (Class 3 course floor was 2x); already up >= 10% on the day; a news headline that justifies the move (or a former runner / daily-chart breakout); price $1.00-$20.00 (sweet spot $2-$10; small-account variant $5-$10); float under 20M preferred, under 10M ideal, 'under 20mil in hot market, under 10mil in cold market', rarely over 100M. Candidate must be 'Top 5 on Gap Scanner' with a positive catalyst.",
+            "data_needed": "Pre-market trades (SIP, 4:00-9:30 ET) for gap % and pre-market volume; 30-day average daily volume; float; real-time news headlines keyed by ticker; prior daily bars for 'former runner' flag.",
+            "timing": "pre-market (watchlist built 7:00-9:30 ET); confirmation at 9:30-9:45",
+            "reliability": "moderate",
+            "source": "Warrior Trading 2025 Small Account Tool Kit PDF (cdn.warriortrading.com/.../2025-Small-Account-Tool-Kit-1013.pdf) and Day Trading Course Class 3 Stock Selection PDF (media.warriortrading.com/2014/09/WarriorTrading-DayTradingCourse-Class3.pdf); warriortrading.com/gap-go/"
+          },
+          {
+            "name": "LONG: Pre-market-high break / 1-minute opening range breakout",
+            "definition": "Mark the pre-market high; buy the break of the pre-market high or the 1-minute opening-range breakout with the stop at the low of that candle; 'volume spiking at or around time of entry' is required; trade window 7:00-11:00 ET; exits on MACD cross, decreasing volume, or 'jackknife rejection'. Only applied to leading gappers / leading RVOL names, not to any stock.",
+            "data_needed": "1-minute bars including pre-market; per-bar volume; real-time trades to detect the break.",
+            "timing": "first 5 min (9:30-9:35) and the first hour",
+            "reliability": "moderate",
+            "source": "warriortrading.com/gap-go/ (search snippet), Warrior 2025 toolkit PDF"
+          },
+          {
+            "name": "LONG filter / SHORT invalidation: VWAP relationship",
+            "definition": "Above VWAP = strong, below VWAP = weak (Investors Underground). Longs only above VWAP. A gap-up that reclaims VWAP and holds is a gap-and-go, not a fade; the short thesis is invalidated on a VWAP reclaim. The '9:45 VWAP rejection' short waits for the gap to fade to VWAP, test it from below and fail, entered ~9:45 after the chaotic first 15 minutes.",
+            "data_needed": "Trades with size to compute session VWAP (decide whether to include pre-market volume); 1-minute bars.",
+            "timing": "9:45-10:30 ET",
+            "reliability": "moderate",
+            "source": "investorsunderground.com/short-selling-stocks/; curvedtrading.com 9:45 VWAP rejection article"
+          },
+          {
+            "name": "LONG momentum / SHORT caution: Float rotation",
+            "definition": "Float rotation = cumulative volume / float. 0.5x = interest building, 1x = full rotation, 2x+ very high volatility, 3x+ rare. >1x already pre-market = squeeze fuel (late shorts can't know who is trapped). Pre-market rotation of ~5x (ICCM: 15M shares vs 2.81M post-reverse-split float) = do not short; Dux reduces or avoids above ~15x. For late long entries above 2x, only buy clear pullbacks with tight stops.",
+            "data_needed": "Accurate float (refresh after offerings/reverse splits); cumulative volume including pre-market.",
+            "timing": "pre-market and continuously during",
+            "reliability": "moderate",
+            "source": "curvedtrading.com ICCM float-rotation article; tradezella.com/strategies/small-cap-short-strategy (Dux); TradingView Float Rotation Tracker; investorsunderground.com/short-selling-stocks/"
+          },
+          {
+            "name": "LONG momentum / SHORT exhaustion: LULD up-halt ladder",
+            "definition": "Tier 2 (most small caps): band 10% above $3, 20% for $0.75-$3, lesser of $0.15 or 75% under $0.75; bands doubled in the last 25 minutes for Tier 1 and Tier 2 under $3; 15-second limit state then 5-minute pause (extendable 5 more). Consecutive up-halts ('squeeze, halt, squeeze, halt') mark a live runner; Dux-style exhaustion shorts are only considered after 4-5 up-halts. LULD does not apply pre-market, so any pre-market halt is a news halt (T1), not volatility. Reliability is strong for detecting the halt itself but only moderate as a direction signal.",
+            "data_needed": "LULD band/halt/resume stream (Alpaca 'lulds' + 'statuses' channels; Massive LULD channel indicators 17 = halt, 18 = resume, Nasdaq-listed only) or Nasdaq trade-halts RSS (1-minute TTL).",
+            "timing": "during (9:30-16:00 only)",
+            "reliability": "moderate",
+            "source": "luldplan.com; massive.com/blog/luld-massive-websockets; docs.alpaca.markets real-time stock data; nasdaqtrader.com/rss.aspx?feed=tradehalts; Warrior Class 3 PDF; tradezella shorting-strategy page"
+          },
+          {
+            "name": "LONG: First green day / red-to-green (Sykes, Grittani)",
+            "definition": "After a multi-day run and sell-off, the first day the stock closes green with 'minimal selling, lots of buying, and shorts covering'; intraday red-to-green = price crossing above the prior day's close after opening below it (bearish mirror: green-to-red). Grittani-associated overnight pattern: buy the first green day bounce, sell the next-morning gap.",
+            "data_needed": "Daily bars, prior close, intraday price vs prior close.",
+            "timing": "during (R2G) or late day (first green close)",
+            "reliability": "weak",
+            "source": "timothysykes.com/blog/trading-patterns/ and /first-green-day-pattern/; bullishbears.com red-to-green; Grittani attribution via chatwithtraders/tradezella (secondary, unverified)"
+          },
+          {
+            "name": "LONG (reversal): Panic dip buy (Sykes)",
+            "definition": "At least a 20-30% drop in minutes on heavy selling in a former runner, bought as the flush ends; Dux's bounce-short mirror requires prior-day trapped volume >= 2:1 vs current buying.",
+            "data_needed": "1-minute bars with volume; prior-day volume-at-price for the trapped-volume ratio.",
+            "timing": "during",
+            "reliability": "weak",
+            "source": "timothysykes.com/blog/trading-patterns/; tradezella small-cap-short-strategy (Dux)"
+          },
+          {
+            "name": "LONG (swing): Short-squeeze structure",
+            "definition": "Short interest >= 25% of float (over 50% structurally fragile), days-to-cover >= 5 (7-15 high, 15+ extreme), low float, plus a catalyst; needs 3-4 of the 5 components, not one. FINRA short interest is only settlement-date 15th and month-end, published 7 business days later, so it is stale for same-day pumps; use daily Reg SHO short-volume files as a proxy. Moderate as a structural screen, weak for timing.",
+            "data_needed": "FINRA equity short interest (bi-monthly), FINRA Reg SHO daily short-sale volume files, float.",
+            "timing": "pre-market (static screen)",
+            "reliability": "moderate",
+            "source": "curvedtrading.com how-to-find-short-squeeze-stocks; finra.org equity short interest and short-sale-volume pages"
+          },
+          {
+            "name": "LONG/AVOID gate: News catalyst present",
+            "definition": "Breaking headline that 'justifies why the stock is moving' (earnings, FDA, contract, partnership; an offering is NOT a positive catalyst). Stocks up on no news 'carry more risk of a sudden drop'; FINRA's key ramp-and-dump indicator is a price increase 'that did not appear to be driven by news or material events'. Warrior uses Benzinga squawk; Tim Bohen's news filter uses ~5,000 shares pre-market / 1M shares late-day minimum volume.",
+            "data_needed": "Real-time ticker-tagged news stream (Alpaca v1beta1/news websocket from Benzinga; Massive/Finnhub news REST), EDGAR 8-K stream.",
+            "timing": "pre-market and continuous",
+            "reliability": "moderate",
+            "source": "Warrior 2025 toolkit PDF; FINRA Regulatory Notice 22-25; stockstotrade.com Bohen pages"
+          },
+          {
+            "name": "AVOID/SHORT: Gap-up short / 'gap and crap' (Steven Dux)",
+            "definition": "Universe: market cap under $100M (up to ~$200M for first red day), float below 50M (1-2M very low, 2-5M mid, 5-10M larger), price above $3, excluding biotech, energy and thin Chinese tickers. Setup: stock up more than 100%; average post-open push 30-35% for 1-2M floats and 20-25% for 5-10M floats, then first weakness 10:00-11:00 after ~1 hour consolidation. Confirmation: trading below the open price by ~10:00 with declining volume; holding above the open at 10:00 = weak setup. Smaller gaps (20-40%) avoided. Avoid if >50M shares traded pre-market or float rotated >15x. Average risk ~7%, fade ~24-26%, R:R ~1:3.5-1:4. Day volume estimated at 5-10x pre-market volume.",
+            "data_needed": "Pre-market volume, open price, 1-minute bars, float, market cap, sector.",
+            "timing": "first 5 min to 10:00-11:00 ET",
+            "reliability": "moderate",
+            "source": "tradezella.com/strategies/small-cap-short-strategy and /shorting-strategy (secondary summaries of Dux's course; numbers unverified against Dux directly)"
+          },
+          {
+            "name": "AVOID/SHORT: First red day (Sykes, Grittani, Dux)",
+            "definition": "Multi-day runner (200%-500%+ in a few days) closes below the prior close for the first time. Dux quantification: at least 3 consecutive green days and roughly 300% range (2-day exception needs ~1,000%); a red or flat day resets the count; skip if the red day already erased >50% of the run; enter on confirmation (break of prior close or failed retest of resistance), often the following day if it opens weak; high-volume red candle = high conviction, low-volume red = weak.",
+            "data_needed": "Daily bars (consecutive green count, cumulative range), prior close, intraday volume.",
+            "timing": "late (first red close) and next-day pre-market gap",
+            "reliability": "moderate",
+            "source": "timothysykes.com/blog/first-red-day-pattern-trading/; tradezella small-cap-short-strategy; tradezero.com first-red-day blog"
+          },
+          {
+            "name": "AVOID/SHORT: Frontside vs backside of a parabolic move (Nathan Michaud / Investors Underground)",
+            "definition": "Frontside = high volume, large candles, still making highs: do not short ('avoid like the plague'). Backside = volume fades, hype dies, stock makes a few failed recovery attempts (red-to-green attempts that fail) then fizzles back to the breakout point; short with defined risk against the last lower high. Checklist also includes crowded-short risk, float rotation, VWAP strength, borrow availability.",
+            "data_needed": "1/5-minute bars, volume trend, VWAP, lower-high detection.",
+            "timing": "during (after the peak) and the following days",
+            "reliability": "moderate",
+            "source": "investorsunderground.com/short-selling-stocks/ and learn-short-selling-day-trading-guide/"
+          },
+          {
+            "name": "AVOID/SHORT: Offering filed / dilution ability",
+            "definition": "Filings that predict the dump: S-3 shelf (baby-shelf rule: issuers with public float under $75M may sell at most one-third of float per 12 months), ATM prospectus supplement or 'equity distribution agreement', S-1 resale registration and its notice of effectiveness, 8-K securities purchase agreement (share count, price, warrant coverage), 424B pricing/reset/ratchet terms, 'substantial doubt ... going concern', 'we will need to raise additional capital'. Heuristics: cash runway < 2 quarters = likely issuer; shelf capacity vs market cap; reverse split + new registration. Offerings are typically priced at a discount into the spike, so a filing during or right after a runner is the single strongest 'bag holder' warning.",
+            "data_needed": "Real-time EDGAR stream filtered by CIK for forms S-1, S-3, 424B*, 8-K (items 1.01, 3.02, 8.01), 6-K for foreign issuers; latest 10-Q/10-K cash and burn; warrant tables.",
+            "timing": "pre-market or after close (filings accepted 6:00-22:00 ET; after 17:30 ET they carry the next business day's date)",
+            "reliability": "strong",
+            "source": "curvedtrading.com how-to-spot-dilution-sec-filings and ATM/S-3 guide; Chicago Booth 'Run EDGAR Run' latency study (40 s mean, 36 s median posting delay)"
+          },
+          {
+            "name": "AVOID: Promoted-stock / ramp-and-dump profile (FINRA, SEC)",
+            "definition": "Recent small-cap IPO that raised < $25M, issued < 20M shares, valued < $100M, with 90%+ of allocations to foreign (mostly Hong Kong) brokers; price rises sharply on IPO day or days after with no news, then falls to or below the offering price. 2024-25 variant: Nasdaq-listed China-linked small caps pumped in WhatsApp/Telegram groups recruited via social ads, some rising 2,000%-32,000% before collapsing; Nasdaq's Sept 3 2025 proposals require $15M minimum unrestricted public float for new listings and $25M proceeds for China-based issuers plus faster delisting below $5M market value; SEC Cross-Border Task Force formed Sept 5 2025.",
+            "data_needed": "IPO date and proceeds (S-1/424B4), shares offered, country of operations (from filings), social-chat mention counts if scraped, absence of news.",
+            "timing": "pre-market (static profile) with intraday no-news spike as trigger",
+            "reliability": "moderate",
+            "source": "FINRA Regulatory Notice 22-25; finra.org ramp-and-dump insights; Nasdaq rule proposals (Mayer Brown / Mondaq summaries, Sept 2025); SEC Cross-Border Task Force press coverage (Ropes & Gray, White & Case)"
+          },
+          {
+            "name": "AVOID: Social/spam tout anomaly",
+            "definition": "Abnormally high social message count about a small cap is associated with a large event-day price increase followed by a sharp reversal over the next trading week (Renault 2017). Email spam touts: buying the day before heavy touting and selling the morning after earned +4.9%; buying on the heaviest-tout day lost ~5.25% over the next two days (Frieder & Zittrain). Detection template from crypto (Kamps & Kleinberg): flag when volume > trailing-window average by 300% and price by 5% ('balanced', 12-hour window) or 400% and 10% ('strict', 24-hour window) - adapt the window to 1-5 minute equity bars.",
+            "data_needed": "Social mention counts (StockTwits/X/Reddit scrape), OTC Markets Promotion Data (OTC only), StockPromoters.com style promoter DB, 1-minute bars for the anomaly test.",
+            "timing": "pre-market (tout detection) and first 5 min (anomaly trigger)",
+            "reliability": "moderate",
+            "source": "Renault (2017) 'Market manipulation and suspicious stock recommendations on social media'; Frieder & Zittrain (2007) 'Spam Works'; Kamps & Kleinberg (2018) Crime Science; otcmarkets.com promotion data"
+          },
+          {
+            "name": "AVOID/SHORT context: SSR (Rule 201) trigger",
+            "definition": "A decline of 10% or more from the prior close triggers the alternative uptick rule for the rest of that day and the next day: short sales only above the national best bid. Routinely tripped by small-cap movers; marks that the dump has started and changes short execution. Mechanical, so strong as a detection; it is context, not a directional edge.",
+            "data_needed": "Prior close and real-time last price; many feeds expose an SSR flag in status messages.",
+            "timing": "during",
+            "reliability": "strong",
+            "source": "SEC Rule 201 press release 2010-26; curvedtrading.com SSR explainer"
+          },
+          {
+            "name": "AVOID (catastrophic): Regulatory halt codes T1/T2/T12/H10",
+            "definition": "T1 = news pending, no fixed duration; T2 = news released, typically ~1 hour; T12 = additional information requested by Nasdaq, can last days to weeks and often precedes delisting; H10 = SEC trading suspension up to 10 days; LUDP = 5-minute volatility pause. T12 and H10 on a runner mean the long cannot exit and the reopening is usually far lower.",
+            "data_needed": "Nasdaq trade-halts RSS (fields: symbol, halt time, reason code, resumption quote/trade time; TTL 1 minute) or Alpaca 'statuses' channel (sc/sm/rc/rm fields).",
+            "timing": "any time including pre-market",
+            "reliability": "strong",
+            "source": "nasdaqtrader.com/rss.aspx?feed=tradehalts (fetched); bullishbears.com / CFI halt-code explainers"
+          },
+          {
+            "name": "Secondary (broad layer only): Insider cluster buys",
+            "definition": "Multiple insiders filing Form 4 open-market purchases within a short window; not a small-cap runner signal and not covered by the pump-detection sources above - keep it in the broad 'flips' layer with its own EDGAR Form 4 filter. Weak for day-trading timing because Form 4s are filed up to 2 business days after the trade.",
+            "data_needed": "EDGAR Form 4 stream (transaction code P, non-derivative).",
+            "timing": "late (filed within 2 business days of trade)",
+            "reliability": "weak",
+            "source": "Not researched in this pass (marked unverified)"
+          }
+        ],
+        "facts": [
+          {
+            "claim": "Ross Cameron's five criteria, in his own 2025 toolkit: at least 5x relative volume (30-day average), already up at least 10% on the day, a catalyst/headline that justifies the move, price between $1.00 and $20.00 (min $1 because 'penny stocks are very risky'), and float under 20 million shares with lower better. He targets stocks that can gain 20-30% and cites 50-100%+ intraday moves from supply/demand imbalance.",
+            "source": "https://cdn.warriortrading.com/warriortrading.com/assets/2025-Small-Account-Tool-Kit-1013.pdf (text extracted locally)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Warrior Trading Class 3 stock-selection list: 1) float under 10M preferred, under 20M ideal, rarely over 100M; 2) relative volume at least 2x; 3) volume spiking at entry; 4) ideally a former runner; 5) ideally a news catalyst (daily-chart breakout acceptable); 6) strong daily chart with no nearby resistance. Scanners run in Trade-Ideas scanning for 4% gaps and earnings, built from 'HIGH Pre-Market Volume'; watchlist example '$GBSN 3.9mil share float, gapping up 7.5%'.",
+            "source": "https://media.warriortrading.com/2014/09/WarriorTrading-DayTradingCourse-Class3.pdf (text extracted locally)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Warrior small-cap momentum plan sheet: price $5-$10, time of day 7:00am-11:00am EST, float under 20M in a hot market / under 10M in a cold market, 'micro pullbacks and dips on front side of momentum', premarket requirement 'Top 5 on Gap Scanner, Positive Catalyst', exits on MACD cross / decreasing volume / jackknife rejection.",
+            "source": "Warrior 2025 Small Account Tool Kit PDF",
+            "confidence": "high"
+          },
+          {
+            "claim": "Tim Sykes first red day: find a multi-day runner up 200% to 500% over a few days, short near the retest of resistance, stop just above resistance, cover near support. Panic dip buy requires at least a 20-30% drop in minutes.",
+            "source": "https://www.timothysykes.com/blog/first-red-day-pattern-trading/ and https://www.timothysykes.com/blog/trading-patterns/",
+            "confidence": "high"
+          },
+          {
+            "claim": "Steven Dux filters (as summarized by TradeZella): market cap under $100M (first red day up to ~$200M), float below 50M, price above $3, exclude biotech/energy/thin Chinese tickers; gap-up short requires up >100%; avoid if >50M shares traded pre-market or float rotated >15x; first red day requires >=3 green days and ~300% range (or ~1,000% in 2 days), skip if >50% of run already erased; bounce short needs trapped-volume ratio >= 2:1; position caps ~10% of float and ~1% of volume; day volume ~5-10x pre-market volume; multi-halt short after 4-5 up-halts; institutional ownership preferred under ~40%.",
+            "source": "https://www.tradezella.com/strategies/small-cap-short-strategy and https://www.tradezella.com/strategies/shorting-strategy (secondary; not verified against Dux's own materials)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Investors Underground: 'The backside of the move will provide plenty of opportunities to short with set risk'; frontside is high volume and large candles; backside is fading volume and failed recovery attempts; above VWAP = strong, below = weak; float rotation refreshes shareholders and can extend rallies; verify borrow before the open.",
+            "source": "https://www.investorsunderground.com/short-selling-stocks/",
+            "confidence": "high"
+          },
+          {
+            "claim": "Tim Bohen / StocksToTrade looks for stocks up 10% or more pre-market with high pre-market volume, a press-release catalyst and low float (examples 1.3M and 3.4M share floats); news-filter volume minimum ~5,000 shares pre-market or 1M late day; Oracle scans ~15,000 stocks daily.",
+            "source": "https://stockstotrade.com/the-secrets-of-money-monday-low-float-runners/ and stockstotrade.com stock-scans pages",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Tim Grittani: only 'trade the ticker, not the company' and a first-green-day/first-red-day association were verifiable; no published numeric scanner rules found. Modern Rock (Bao) swing-low-float criteria: not found in any fetchable source. Kyle Williams: Sykes Trading Challenge student focused on OTC runners long and short, co-host of TWIST podcast, ~64% win rate per Sykes; his specific thresholds are not published. All three are marked unverifiable.",
+            "source": "chatwithtraders.com episode 010; benzinga.com day-trader profile; timothysykes.com/blog/case-study-kyle-williams/",
+            "confidence": "low"
+          },
+          {
+            "claim": "LULD: Tier 1 and Tier 2 below $3 use 5% (>$3), 20% ($0.75-$3), lesser of $0.15 or 75% (<$0.75); Tier 2 above $3 uses 10%; bands doubled in the last 25 minutes for Tier 1 and Tier 2 under $3; 15-second limit state then 5-minute pause extendable 5 minutes; no reopen if paused in the final 10 minutes; applies only 9:30-16:00 ET.",
+            "source": "https://www.luldplan.com",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq trade-halts RSS feed exposes symbol, halt date/time, reason code (LUDP, T1/T2/T3, T12, M, D, H11 observed), resumption quote time and resumption trade time, with TTL 1 minute.",
+            "source": "https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts (fetched 2026-10-06)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Alpaca: Free plan is IEX-only, 30 websocket symbols, 200 calls/min; Algo Trader Plus is $99/month with full SIP, unlimited websocket symbols, extended hours. Websocket channels: trades, quotes, bars, updatedBars, dailyBars, statuses (fields sc, sm, rc, rm, t, z), lulds (u, d, i, t, z), corrections, cancelErrors; feeds v2/sip, v2/iex, v2/delayed_sip. Screener endpoints /v1beta1/screener/stocks/most-actives (by volume or trades, top 1-100) and /v1beta1/screener/{market_type}/movers (top 1-50 gainers and losers) use real-time SIP data. News websocket wss://stream.data.alpaca.markets/v1beta1/news (Benzinga) supports '*' subscription.",
+            "source": "https://alpaca.markets/data; https://docs.alpaca.markets/docs/real-time-stock-pricing-data; docs.alpaca.markets/us/reference/mostactives-1 and movers-1",
+            "confidence": "high"
+          },
+          {
+            "claim": "Alpaca's free IEX feed covers only a limited extended-hours window (roughly 8:00-17:00 ET) per Alpaca forum staff replies, so most 4:00-8:00 ET pre-market prints are missing without SIP.",
+            "source": "forum.alpaca.markets extended-hours market data threads",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Massive (formerly Polygon.io, rebranded early 2026): LULD websocket channel requires Stocks Advanced or the LULD Expansion add-on; indicators 15-16 are band updates, 17 is halt/pause and 18 is resume (Nasdaq-listed tickers only). Ticker overview provides share_class_shares_outstanding, weighted_shares_outstanding and market_cap but no float field, on all plans.",
+            "source": "https://massive.com/blog/luld-massive-websockets; massive.com docs ticker overview",
+            "confidence": "high"
+          },
+          {
+            "claim": "Massive individual plan pricing: Basic $0 (EOD, 5 calls/min), Stocks Starter $29 (15-min delayed), Stocks Developer $79 (delayed + trades), Stocks Advanced $199 (real-time trades/quotes, 20+ years history).",
+            "source": "apicostcalc.com and apis.io pricing summaries (third-party, not massive.com directly)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Finnhub company profile returns shareOutstanding but no free-float field; short interest is a premium endpoint. Float sources that do exist: Financial Modeling Prep shares-float endpoints, sec-api.io outstanding-shares/public-float API (cover-page data), AskEdgar Dilution Risk Monitor (/v1/float-outstanding, /v1/dilution-rating with offering ability, cash runway, Reg SHO status), Dilutracker REST API (3,000+ tickers: warrants, converts, ATM capacity, runway). DilutionTracker.com (the tool small-cap traders actually use) has no documented public API.",
+            "source": "Finnhub JS client docs; sec-api.io docs; docs.askedgar.io dilution-risk-monitor; hunted.space Dilutracker listing; curvedtrading DilutionTracker review",
+            "confidence": "medium"
+          },
+          {
+            "claim": "EDGAR dissemination: mean 40 s / median 36 s from acceptance to public posting; paid tier-1 subscribers got filings ~10 s earlier and prices reacted ~30 s before public posting (2014-era data). Third-party streams (sec-api.io websocket, edgar.tools SSE, finfeedapi) advertise sub-2-minute latency for all 150+ form types; vendor latency claims are unverified.",
+            "source": "Chicago Booth 'Run EDGAR Run' briefing; sec-api.io stream docs; finfeedapi.com blog",
+            "confidence": "medium"
+          },
+          {
+            "claim": "FINRA short interest is reported for settlement dates of the 15th and month-end and published on the 7th business day after the settlement date; Reg SHO daily short-sale volume files are free and available via CSV download and query API.",
+            "source": "finra.org short-interest reporting pages; finra.org short-sale-volume-data",
+            "confidence": "high"
+          },
+          {
+            "claim": "FINRA Notice 22-25 ramp-and-dump IPOs: each raised less than $25M, issuers valued under $100M, fewer than 20M shares issued, foreign (mostly Hong Kong) brokers allocated as much as 90%+, price spikes 'did not appear to be driven by news or material events' then fell to or below the offering price; nominee-account red flags include shared IPs, similar account-opening timing and layered buy limit orders above the IPO price.",
+            "source": "https://www.finra.org/rules-guidance/notices/22-25",
+            "confidence": "high"
+          },
+          {
+            "claim": "2025 regulatory context: Nasdaq filed proposals on Sept 3 2025 for a $15M minimum market value of unrestricted publicly held shares for new listings, $25M minimum proceeds for China-based issuers, and accelerated delisting below $5M market value; the SEC announced a Cross-Border Task Force on Sept 5 2025 naming pump-and-dump and ramp-and-dump schemes; DOJ charged a Chinese company co-CEO on Sept 12 2025 for a social-media pump netting >$100M.",
+            "source": "Mayer Brown / Mondaq Nasdaq proposal summaries; Ropes & Gray and White & Case task-force alerts",
+            "confidence": "high"
+          },
+          {
+            "claim": "Press reports describe nearly 200 small Nasdaq Capital Market IPOs in 2024-25 with social-media pump-then-crash patterns and some China-linked debuts up 2,000%-32,000% before collapsing; magnitudes are journalistic, not from a regulator dataset.",
+            "source": "Inquirer May 2026 Bancroft Capital piece; Globe and Mail / Investing.com rally coverage; The Bear Cave",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Academic baselines: Leuz, Meyer, Muhn, Soltes & Hackethal studied 421 pump-and-dumps 2002-2015 with ~6% of active retail investors participating and an average -24% return for repeat participants; Frieder & Zittrain found +4.9% for buying the day before heavy spam touting and selling the next morning, and $1,000 invested on the heaviest tout day became $947.50 two days later; Renault (2017) found abnormal Twitter message counts on small caps coincide with a large event-day price increase and a sharp reversal over the next week; Kamps & Kleinberg (2018) detect pumps with volume/price thresholds of +300%/+5% over a 12-hour window (balanced) or +400%/+10% over 24 hours (strict); a 2021 crypto paper reports detection within 25 seconds at 94.5% F1.",
+            "source": "NBER w24083; Harvard DASH 'Spam Works'; EFMA 2017 Renault paper; Crime Science 2018 s40163-018-0093-5; arXiv 2105.00733",
+            "confidence": "high"
+          },
+          {
+            "claim": "SSR (Rule 201) is triggered by a 10%+ decline from the prior day's close and applies for the remainder of that day and the next day; short sales then must execute above the national best bid.",
+            "source": "SEC press release 2010-26; curvedtrading SSR explainer",
+            "confidence": "high"
+          },
+          {
+            "claim": "No practitioner source publishes a numeric 'first 5-minute volume' threshold; the closest quantified rules are Warrior's 'volume spiking at or around time of entry' and Dux's pre-market-to-full-day volume ratio of 1:5 to 1:10.",
+            "source": "Warrior Class 3 PDF; tradezella Dux summary",
+            "confidence": "medium"
+          }
+        ],
+        "recommendations": [
+          "Build the narrow layer as a filter chain on the broad layer: universe gate (price $1-$20, float <20M, market cap <$200M, not an ETF/SPAC), then the five-pillars rules pass (RVOL >=5x vs 30-day ADV computed on cumulative volume including pre-market, gap >=4% with 20%+ as 'A' grade, day change >=10%, catalyst headline present within 24h), then Claude classification only on survivors that also show a pre-market-high break or 1-min ORB above VWAP. Expect a handful of names per day, which keeps the Claude cost small.",
+          "Run a separate 'bag holder' scorer that can fire on the same ticker at any time: +3 if any S-1/S-3/424B/8-K item 3.02 or 'equity distribution agreement' filing by the issuer's CIK in the last 10 days or during the run; +2 if cash runway <2 quarters or going-concern language in the last 10-Q/10-K; +2 if float rotation >5x pre-market; +2 if price below the 9:30 open at 10:00 with falling 1-min volume (Dux gap-and-crap confirmation); +2 if VWAP lost and not reclaimed by 9:45-10:00; +2 if 4+ up-halts today; +3 if first red day after >=3 green days / ~300% run; +3 if IPO <12 months ago with proceeds <$25M, <20M shares offered, China/HK operations, or move on no news (FINRA profile); +1 if SSR triggered. Alert as 'DO NOT HOLD / short watch' above a threshold you calibrate on logged runners.",
+          "Data stack for a solo developer: Alpaca Algo Trader Plus ($99/mo) gives SIP pre-market trades and quotes from 4:00 ET, the statuses and lulds channels, the Benzinga news websocket and SIP-based most-actives/movers screeners in one subscription; use the free IEX tier only for prototyping because it misses most pre-market prints. Massive Advanced ($199/mo) is the alternative if you want its LULD channel and flat files, but note its halt indicators cover Nasdaq-listed tickers only. Poll the free Nasdaq trade-halts RSS every 60 s as a cross-check for T1/T2/T12/H10 codes, which the LULD channel does not label.",
+          "Source float separately and refresh it daily plus on any 8-K/424B/reverse-split event: FMP shares-float or sec-api outstanding-shares endpoints for the baseline, Massive/Finnhub shares outstanding as a sanity check, and a dilution vendor (AskEdgar Dilution Risk Monitor or Dilutracker) if you want warrants, ATM capacity and cash runway precomputed. Treat float as stale by default; a mismatch between shares outstanding and vendor float on a runner is itself a flag.",
+          "Subscribe to a push EDGAR stream (sec-api.io websocket or an SSE equivalent) filtered to the tickers currently on your runner list plus form types S-1, S-3, S-3ASR, 424B3/424B4/424B5, 8-K, 6-K, F-1, F-3, and route any hit on an active runner straight to the alert path without waiting for the rules pass; the 40-second EDGAR posting delay means a 'filing while halted' alert can still beat the reopen.",
+          "Calibrate the undocumented numbers empirically before trusting them: log every pre-market gapper meeting the universe gate for 30-60 days with pre-market volume at 8:00/9:00/9:25, first-5-minute volume, float rotation, halt count, VWAP status at 9:45 and 10:00, and the eventual high-of-day time and close-vs-open; then fit the first-5-minute volume threshold and the ORB success rate yourself rather than taking any vendor's figure. Keep the Dux and Warrior numbers as priors, not ground truth.",
+          "For promo/pump detection, do not try to scrape WhatsApp; instead combine (a) the FINRA structural profile from filings (small recent IPO, HK/China operations, tiny float), (b) a no-news spike test (price +10% and volume +300-400% vs trailing window with no Benzinga/EDGAR item in 24h), and (c) StockTwits/X mention-count anomalies if you already ingest them. Alert these as 'promoted - no long' regardless of the momentum score.",
+          "Add halt semantics to the classifier prompt: LUDP = momentum (count them), T1 pre-market = news pending (wait for the headline before any long), T12 or H10 = exit/no-trade and mark the ticker toxic for the session. Also tell Claude whether LULD is even active (it is not before 9:30), so it does not infer a 'halt' from a pre-market gap in prints."
+        ],
+        "open_questions": [
+          "Dux's thresholds here come from TradeZella's summary of his course, not from Dux directly; are the >100% gap, 50M pre-market share cap and 15x rotation limit still what he teaches in 2026?",
+          "No fetchable source gives Modern Rock's swing-low-float criteria or Kyle Williams' exact rules; both would need their paid rooms, DVDs or X posts, which could not be verified here.",
+          "Does the user want VWAP computed from 4:00 ET (including pre-market prints) or from 9:30? Practitioners disagree and the gap-and-crap confirmation changes depending on the choice.",
+          "Are Alpaca's screener endpoints (most-actives, movers) and the Benzinga news websocket available on the free plan or only on Algo Trader Plus? The pricing page does not list them.",
+          "Which float vendor the user will pay for: DilutionTracker.com has no documented API, and the API-bearing alternatives (AskEdgar, Dilutracker, FMP, sec-api) have not been audited here for accuracy on reverse-split and post-offering floats.",
+          "Were Nasdaq's Sept 2025 listing-standard proposals ($15M public float, $25M China proceeds, $5M accelerated delisting) approved by the SEC and in force as of Oct 2026? Sources confirm filing, not final approval.",
+          "What is the user's intended holding horizon for the long side: the Warrior/Dux numbers are intraday (7:00-11:00 ET), whereas the squeeze-structure and first-green-day signals are swing signals with stale (7-business-day) short-interest inputs.",
+          "First-5-minute volume thresholds and the 'promo email' signal for Nasdaq (not OTC) names have no published numeric rules; both need in-house calibration from logged data."
+        ]
+      },
+      {
+        "key": "evidence",
+        "summary": "Bottom line from the academic and regulatory record: once a small-cap pump is visible to a retail trader (social spike, pre-market gap, top-mover list, halt), the expected return of going long is negative on every horizon measured. Robinhood herding events (top 0.5% daily holder increase; +14% event-day return, +11% of it at the open) are followed by about -5% over the next month (-9% for extreme events; -3%/-6% over 5 days), and a sell-after-herding strategy was right 63% of the time (Barber, Huang, Odean, Schwarz). Social-media message-volume spikes on OTC names earn +6.9% on the event day (after +4.1% the day before) and then -3.1% over the next 5 days, -5.3% when known promoters drive the spike (Renault 2017). Buyers on the heaviest stock-spam day lose 5.25% in two days while the spammer who bought the day before makes 4.9% (Frieder & Zittrain). Pump-and-dump participants at a German bank lost 28-30% on average per scheme (buy-and-hold from first tout: -53% mean, -70% median), with ~6-8% of active investors participating and 11% repeating (Leuz et al.). Crypto analogues compress the same curve into seconds: +25% and 148x volume in the first 70 seconds, insiders +18%, anyone entering more than a minute late loses (Li, Shin, Wang); 355 Binance/Yobit pumps averaged +65% within minutes and were a negative-sum game for everyone but organizers (Dhawan & Putnins). Short-squeeze candidates are a negative-EV long as a class: high-fee/high-utilization stocks earn -2.67%/month abnormal returns even though utilization >=90% makes a squeeze ~every 11 days vs once per 40 years at 25% (Schultz, JFQA 2024); the vendor models (IHS Markit) only show +7 bps open-to-close and +44-103 bps/month inside an already-shorted universe, and Ortex/S3 publish no verifiable squeeze win rates. Buying the first gap is worse than buying later: high-retail-attention stocks open high and fade intraday, with an implicit cost that often exceeds the half-spread (Berkman et al.), and high-MAX (lottery-return) stocks underperform by >1%/month (Bali et al.). The only documented positive-EV positions are (a) being the promoter/insider, (b) the first ~20 seconds of a crypto pump, (c) fading the move after a herding/social spike, (d) predicting the target before the pump (crypto only, 60% over 2.5 months in Xu & Livshits, unproven in equities), and (e) the small, slow +10 bps/week edge of aggregate retail order imbalance in small stocks absent attention spikes (Boehmer et al.). Day-trading base rates are brutal: 97% of persistent Brazilian day traders lost money and 97% of Taiwanese day traders are predicted to lose. Regulators now describe the 2024-2026 variant precisely: WhatsApp/Telegram 'investment clubs' ramp a $4-6 foreign-issuer Nasdaq Capital Market IPO over weeks or months then dump; FBI complaints up >=300% in 2025; SEC suspended 14 such issuers between Sept 2025 and Feb 2026 (QMMM +~1000% in <3 weeks, TCGL $8 to $300+ in two days), roughly a quarter of 250+ Nasdaq Capital Market IPOs since 2023 followed the promote-then-crash/suspend pattern, and Nasdaq's 2025-2026 rules ($15M float from IPO proceeds, $25M for China-based, discretion to deny listings, delisting after SEC suspension, $5M MVLS floor with no cure period) have cut small-cap IPOs from 23 in Q4 2025 to 5 in Q1 2026. For detection, the strongest published signals are promoter/bot provenance of the mentions (71% of suspicious financial tweets were bots; inorganic-campaign classifiers reach F1 0.97), structural issuer risk (FINRA 22-25 profile: <20M shares, <$25M raised, <$100M valuation, foreign issuer, nominee accounts), and microstructure 'rush order' bursts (crypto detectors hit precision 93-98% within 5-25 seconds). No regulatory or academic source quantifies how often LULD-halted runners close below the open; that number must come from your own backtest.",
+        "signals": [
+          {
+            "name": "Social message-volume spike (Renault event definition)",
+            "definition": "Daily message count for a cashtag > trailing-year mean + 2 standard deviations, with at least 20 messages that day and market cap >= $1M; minimum 20-day gap between events on the same ticker. Associated returns: +4.10% abnormal the day before, +6.88% on the event day, -3.11% cumulative over days +1 to +5 (-5.34% when promoter accounts drive the spike).",
+            "data_needed": "Per-ticker daily (ideally hourly) counts from StockTwits/X/Reddit; trailing-365-day mean and SD per ticker; market cap.",
+            "timing": "During (fires on the event day; the day-before run-up of +4.1% means the first leg is often already gone).",
+            "reliability": "moderate",
+            "source": "Renault (2017), 'Market manipulation and suspicious stock recommendations on social media', EFMA WP / J. Banking & Finance; 7.2M tweets, 5,087 OTC firms, 635 events."
+          },
+          {
+            "name": "Promoter / pump-tracker provenance of mentions",
+            "definition": "Share of event-day messages authored by accounts whose profile or history contains promotional markers ('promote', 'tout', 'compensation', newsletter/promo-site links) or by accounts dedicated to tracking pumps (e.g., @ThePumpTracker, @PUMPSandDUMPS). Renault manually classified 156 promoter accounts; promoter-driven events reversed -5.34% over 5 days vs -3.11% for all events.",
+            "data_needed": "Author metadata (bio text, links, account age), a maintained promoter list, mention-level author IDs.",
+            "timing": "During (same day as the spike), can be pre-market when promo posts precede the open.",
+            "reliability": "moderate",
+            "source": "Renault (2017); SEC 2017 enforcement sweep on undisclosed paid articles (Lit. Rel. 23802) for the keyword list."
+          },
+          {
+            "name": "Inorganic / bot share of mentions and cashtag piggybacking",
+            "definition": "Fraction of authors flagged as bots by a spambot classifier; in the Cresci et al. sample 71% of authors of suspicious financial tweets were bots and 37% were later suspended. Piggybacking pattern: a low-cap cashtag co-posted with 3+ mega-cap cashtags in the same message. Tardelli et al. report F1 = 0.97 for detecting inorganic financial campaigns and R2 = 0.81 (MAE 4.9 pp) for estimating the bot share of a viral discussion; the more viral a stock, the larger the artificial share.",
+            "data_needed": "Author-level features (account age, posting cadence, follower ratios, repeated text), co-mention graph of cashtags, optional bot classifier.",
+            "timing": "Pre-market to during (campaigns typically start before price moves).",
+            "reliability": "moderate",
+            "source": "Cresci, Lillo, Regoli, Tardelli, Tesconi (2019) ACM TWEB 'Cashtag piggybacking'; Tardelli, Tesconi, Cresci (2022) 'Detecting inorganic financial campaigns on Twitter'."
+          },
+          {
+            "name": "Retail herding / top-mover attention event",
+            "definition": "Barber et al. definition: stock is in the top 0.5% of daily percentage increase in Robinhood holders (4,884 events, ~9/day) or 'extreme' = +1,000 holders and +50% vs prior day (900 events). Event-day abnormal return +14% (+42% extreme), mean opening return +11%; next-month abnormal return about -5% (-9%); 5-day -3% (-6%). Sell-after-event/rebuy-5-days-later BHAR +3.5% (+6.4%), positive 63% of the time. Effect concentrated in market caps < $1B. Practical proxy today: top-0.5% daily retail order imbalance (sub-penny BJZZ method) or membership on top-gainers lists.",
+            "data_needed": "Retail order imbalance from TAQ sub-penny prints (BJZZ), or holder-count data; daily top-mover lists; market cap.",
+            "timing": "During (event day); reversal plays out over 5-20 trading days.",
+            "reliability": "strong",
+            "source": "Barber, Huang, Odean, Schwarz (2022) 'Attention-Induced Trading and Returns: Evidence from Robinhood Users', Review of Finance; Boehmer, Jones, Zhang, Zhang (2021) JF for the imbalance proxy."
+          },
+          {
+            "name": "Attention-driven opening gap (overnight-return reversal)",
+            "definition": "Large positive overnight (close-to-open) return in a stock with high prior-day retail attention (abnormal volume, extreme return, news). Berkman et al.: positive overnight returns reversed intraday because the open prints high relative to intraday prices; concentrated in retail-attention, hard-to-value, costly-to-arbitrage stocks; the implicit cost of buying at the open frequently exceeds the effective half-spread. Aboody et al.: high-overnight-return stocks underperform over longer horizons.",
+            "data_needed": "Prior close, pre-market/open price, prior-day volume and return, news flag.",
+            "timing": "Pre-market / first 5 minutes.",
+            "reliability": "moderate",
+            "source": "Berkman, Koch, Tuttle, Zhang (2012) JFQA 'Paying Attention: Overnight Returns and the Hidden Cost of Buying at the Open'; Aboody, Even-Tov, Lehavy, Trueman (2018) JFQA."
+          },
+          {
+            "name": "MAX / lottery-return flag",
+            "definition": "Stock's maximum single-day return over the prior month is in the top decile of the cross-section. High-MAX decile underperforms low-MAX decile by more than 1% per month, raw and risk-adjusted (reported ~ -1.03% raw, -1.18% alpha in the original paper).",
+            "data_needed": "Daily returns for the universe; monthly decile ranks.",
+            "timing": "Late (monthly cross-sectional; useful as a bag-holder warning on any recent runner).",
+            "reliability": "moderate",
+            "source": "Bali, Cakici, Whitelaw (2011) JFE 'Maxing Out'."
+          },
+          {
+            "name": "Short-squeeze candidate (academic/vendor definitions)",
+            "definition": "Schultz: squeeze = shares available to lend fall below shares on loan (all-lender) or both decline equally on the same day via recalls (current-lender); occurs on 0.183% / 0.469% of stock-days; utilization is the single best predictor (utilization >=90% implies a squeeze about every 11 days vs once per 40 years at 25%). IHS Markit model: 3-SD price move vs prior 60 days over 1-3 days followed by a 5-consecutive-day decline in shares on loan; top-decile candidates had a 78% higher squeeze probability vs a 0.94% base rate, +7 bps open-to-close, +44/+103 bps 1-month vs universe/bottom decile. S3 Partners Squeeze Score: >70 'trouble', >=90 'significantly higher risk', 100 max. Ortex: three signal types from SI, utilization, cost-to-borrow, price and their rates of change (thresholds not published).",
+            "data_needed": "Daily securities-lending data (utilization, shares on loan, lendable supply, fee) from Ortex/S3/IHS (paid); FINRA bi-monthly short interest is too lagged.",
+            "timing": "During (the price spike is part of the definition, so identification is after the first move); utilization/fee give a pre-market structural score.",
+            "reliability": "weak",
+            "source": "Schultz (2024) JFQA 'Short Squeezes and Their Consequences'; IHS Markit 'US Short Squeeze Model' (May 2015); Allen, Haas, Pirovano, Tengulov (SFI 23-63): ~25% of unique stocks have a squeeze in a given year; S3/Ortex public pages."
+          },
+          {
+            "name": "Ramp-and-dump IPO structural profile (FINRA 22-25 / Nasdaq IM-5101-3)",
+            "definition": "Exchange-listed issuer with: IPO of fewer than 20M shares, less than $25M raised, valuation under $100M, $4-$6 offer price; Cayman/BVI shell with operations in China, Hong Kong, Singapore or SE Asia; microcap underwriter with prior volatile deals; concentrated/nominee holders; listed within the last ~12 months (FINRA 2025: the spike moved from IPO day in 2022-23 to 'weeks or months after' in 2024). Observed outcomes: ~1 in 4 of 250+ Nasdaq Capital Market IPOs since 2023 were WhatsApp-promoted then crashed or were SEC-suspended; one underwriter's 11 deals: 10 surged (one $4 to $100+ in a month), 9 now 54-98% below IPO price, >$2B lost from peaks.",
+            "data_needed": "EDGAR F-1/S-1 and 424B (shares, proceeds, underwriter, jurisdiction), float and insider ownership, listing date, OTC/Nasdaq tier.",
+            "timing": "Pre-market (static risk score computed nightly).",
+            "reliability": "strong",
+            "source": "FINRA Regulatory Notice 22-25 (Nov 2022); FINRA 2025 and 2026 Annual Regulatory Oversight Reports; Nasdaq IM-5101-3 (SEC-approved Dec 19, 2025); Bloomberg graphics (2026) and Philadelphia Inquirer (May 12, 2026) on Bancroft Capital IPOs."
+          },
+          {
+            "name": "Group-chat ramp signature (FINRA/FBI mechanics)",
+            "definition": "Multi-week or multi-month steady rise on rising volume in a low-priced, low-volume listed stock with no filings/news, accompanied by clustered retail buying at specific times/prices (victims are told which broker, what to buy, when and at what price). FBI PSA I-070325-PSA: >=300% increase in ramp-and-dump complaints in 2025 vs 2024. Collapse signature: 70-93% single-session drops (TEN: $100+ to ~$31 next day; OST: $9.40 to $0.55 intraday, -93%; QMMM +~1000% in <3 weeks then 10-day SEC suspension).",
+            "data_needed": "Daily OHLCV, news/8-K feed, retail imbalance by time-of-day, issuer domicile.",
+            "timing": "During (ramp phase lasts weeks, so it is detectable before the dump, but direction of the next day is not).",
+            "reliability": "moderate",
+            "source": "FINRA Investor Insight 'Investment Group Imposter Scams' (Dec 9, 2025); FBI IC3 PSA (Jul 3, 2025); CSA Investor Alert (Apr 16, 2026); SEC trading suspensions Sept 2025-Feb 2026 (securitieslawyer101 summary); investinglive OST postmortem (Aug 2025, trade press)."
+          },
+          {
+            "name": "Filer / capital-structure red flags",
+            "definition": "Any of: Form 15 deregistration or delinquent 10-K/20-F; registered direct offering or ATM priced far below market (OST: $5M RDO at $0.55 vs pumped price, 90%+ discount); multiple reverse splits; large warrant overhang; going-concern language; Nasdaq deficiency notices; recent increase in authorized shares. SEC DERA (White 2016): promoted OTC stocks and lower-disclosure tiers have the worst investor outcomes; OTC average/median annual returns about -27%/-37% (Eraker & Ready).",
+            "data_needed": "EDGAR full-text and form-type feed (8-K, 424B, S-3, Form 15), Nasdaq notices.",
+            "timing": "Pre-market (nightly batch).",
+            "reliability": "moderate",
+            "source": "SEC DERA, White (Dec 16, 2016) 'Outcomes of Investing in OTC Stocks'; investinglive OST postmortem; Massoud, Ullah, Scholnick (2016) J. Fin. Stability on secret promotion coinciding with insider selling."
+          },
+          {
+            "name": "Rush-order / aggressive-buy burst (crypto real-time detectors)",
+            "definition": "Within 25-second chunks over a 7-hour window: count and standard deviation of 'rush orders' (market buys filled immediately), trade count, volume and price change vs rolling baseline; random forest on these features detected Binance pumps with precision 93.1%, recall 91.4%, F1 92.0% (104 events) within 5 seconds, and later precision 98.2%, recall 91.2%, F1 94.5% at 25-second latency (~900 events). Pump magnitude for reference: +25% and 148x volume in first 70 s; 83.5% of targets traded under $1M/day.",
+            "data_needed": "Tick-level trades with aggressor side (from TAQ trade conditions or a consolidated feed), 1-25 second bars; equity transfer untested.",
+            "timing": "First seconds to first 5 minutes.",
+            "reliability": "moderate",
+            "source": "La Morgia, Mei, Sassi, Stefa (2020) ICCCN 'Pump and Dumps in the Bitcoin Era'; La Morgia et al. (2021/2023) 'The Doge of Wall Street'; Li, Shin, Wang (JFQA) for magnitudes."
+          },
+          {
+            "name": "Price/volume anomaly thresholds (Kamps & Kleinberg)",
+            "definition": "Over a 12-24 hour estimation window: volume increase threshold between 25% and 400% (configurable), price increase threshold 3-10%, and dump detection when price falls below rolling average plus 1 SD; pumps shortened to seconds-minutes to peak.",
+            "data_needed": "Minute OHLCV, rolling mean/SD per ticker.",
+            "timing": "During.",
+            "reliability": "weak",
+            "source": "Kamps & Kleinberg (2018) Crime Science 'To the moon: defining and detecting cryptocurrency pump-and-dumps'."
+          },
+          {
+            "name": "Forum-language pump classifier (penny-stock subreddits)",
+            "definition": "Posts on r/pennystocks and r/RobinHoodPennyStocks matched to a price/volume profile with a flat 5-day baseline followed by a spike; dumps typically within four days of the post. Best text model: accuracy 85%, F1 62% (posts+comments) to 67% (posts only).",
+            "data_needed": "Reddit posts/comments with timestamps, ticker extraction, daily OHLCV for a 9-day window.",
+            "timing": "During (post day), gives roughly a 1-4 day window before the dump.",
+            "reliability": "weak",
+            "source": "Nam & Skillicorn (2023) arXiv 2301.11403 'Detecting Pump&Dump Stock Market Manipulation from Online Forums'."
+          },
+          {
+            "name": "Finfluencer skill tier of the source",
+            "definition": "On StockTwits, 28% of finfluencers are skilled, 16% unskilled, 56% 'anti-skilled' (negative abnormal returns); anti-skilled accounts have more followers and ride return/sentiment momentum. WSB due-diligence posts predicted returns pre-GameStop (+1.1% 2-day, +2% 1-month, ~+5% 1-quarter) but have had no predictive power since Jan 2021.",
+            "data_needed": "Author-level historical calls and realized returns; post timestamps.",
+            "timing": "During (at post time).",
+            "reliability": "moderate",
+            "source": "Kakhbod, Kazempour, Livdan, Schuerhoff (2025) 'Finfluencers' (AEA 2025); Bradley, Hanousek, Jame, Xiao (2024) 'Place Your Bets?' Review of Finance."
+          },
+          {
+            "name": "Search-attention surge",
+            "definition": "Abnormal increase in Google Search Volume Index for the ticker predicts higher prices over the next 2 weeks and reversal within the year (Russell 3000, 2004-2008).",
+            "data_needed": "Google Trends weekly SVI per ticker.",
+            "timing": "Late (weekly data).",
+            "reliability": "weak",
+            "source": "Da, Engelberg, Gao (2011) JF 'In Search of Attention'."
+          },
+          {
+            "name": "LULD halt and resumption",
+            "definition": "Tier 2 stocks above $3 trade inside +/-10% bands (doubled to 20% in the first and last minutes of the day); $0.75-$3 bands are +/-20%; 5-minute pause when a limit state persists 15 seconds. SEC DERA: after a trading pause, prices typically revert to within the prior bands, i.e., many pauses are liquidity gaps rather than fundamental moves. Hautsch & Horvath: pauses improve price discovery during the break but raise post-pause volatility and worsen liquidity. No published statistic on the share of halted small-cap runners closing below the open (unverified).",
+            "data_needed": "SIP halt/resume messages with reason codes, LULD band data, intraday prices.",
+            "timing": "During (resumption).",
+            "reliability": "weak",
+            "source": "SEC DERA, Moise & Flaherty (Mar 2017) 'Limit Up-Limit Down Pilot Plan and Associated Events'; Hautsch & Horvath (2019) JFE 'How effective are trading pauses?'; LULD Plan parameters."
+          }
+        ],
+        "facts": [
+          {
+            "claim": "In a sample of 110,000+ German retail investors and 421-470 pump-and-dump touts (2006-2014), about 6% (NBER version) to 8% (published Management Science version) of active investors bought into at least one scheme; the average return per tout investment was -28% to -30%, the average investment was EUR 6,972 (11.4% of portfolio), buy-and-hold 120-day returns from the first tout date averaged -53% (median -70%), 11% of participants repeated and still lost 24% on average, and >35% of participants were penny-stock day traders or similar active speculators.",
+            "source": "Leuz, Meyer, Muhn, Soltes, Hackethal, NBER WP 24083 (full text extracted) and Management Science abstract",
+            "confidence": "high"
+          },
+          {
+            "claim": "On OTC names, a Twitter message-volume spike (mean + 2 SD, >=20 tweets) coincides with +6.88% abnormal return on the event day after +4.10% the prior day, followed by -3.11% over days +1 to +5; events driven by 156 identified promoter accounts reverse -5.34% in 5 days. Sample: 7.2M tweets, 248,748 users, 5,087 OTC firms, 635 events.",
+            "source": "Renault (2017) EFMA working paper / readkong copy",
+            "confidence": "high"
+          },
+          {
+            "claim": "Stock spam: 75,000+ touts (2004-2005). Buying the day before heavy touting and selling the next morning returned +4.9% (about +6% for the heaviest touts); buying on the heaviest-tout day and holding two days returned -5.25% (-7% for the most heavily touted).",
+            "source": "Frieder & Zittrain (2007) 'Spam Works', Berkman Klein Center / Hastings Comm & Ent LJ",
+            "confidence": "high"
+          },
+          {
+            "claim": "Stock spam e-mails move returns, intraday volatility and volume with no lasting price effect; liquidity determines success and spamming on successive days extends the window in which spammers can liquidate.",
+            "source": "Hanke & Hauser (2008) Journal of Financial Markets, as summarized in Siering (2021) and search results",
+            "confidence": "medium"
+          },
+          {
+            "claim": "SEC DERA analysis of 1.8M OTC trades by 200,000+ individuals: the typical OTC investment return is severely negative and worse for stocks that experience a promotional campaign or sit in lower-disclosure tiers; cited literature puts average/median annual OTC returns at -27%/-37% (2001-2010).",
+            "source": "White, J.T. (Dec 16, 2016) 'Outcomes of Investing in OTC Stocks', SEC DERA white paper (full text extracted)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Secretly paid stock promotion raises price and volume at promotion start, coincides with insider selling, and reverses when regulators act; a secondary source attributes +11.94% 5-day CAR during promotion and -32.94% over five days upon disclosure to this paper (numbers not verified against the original).",
+            "source": "Massoud, Ullah, Scholnick (2016) Journal of Financial Stability 26:45-61; stockwirex.com summary for the percentages",
+            "confidence": "medium"
+          },
+          {
+            "claim": "YouTube-promoted stocks reportedly return ~+7.9% on release day and ~+11.8% over five days, fully reverting by day 30 (figures only available via a secondary trade source; original not retrieved).",
+            "source": "Leite et al. (2025) 'Pay to Pump', Applied Economics Letters, via stockwirex.com",
+            "confidence": "low"
+          },
+          {
+            "claim": "SEC-prosecuted manipulation cases show prices rising through the manipulation period and falling afterward; manipulators are typically informed parties; prices and liquidity are higher when manipulators sell than when they buy.",
+            "source": "Aggarwal & Wu (2006) Journal of Business 79(4)",
+            "confidence": "high"
+          },
+          {
+            "claim": "On StockTwits, 28% of finfluencers are skilled, 16% unskilled and 56% anti-skilled; anti-skilled finfluencers have more followers and ride return and sentiment momentum.",
+            "source": "Kakhbod, Kazempour, Livdan, Schuerhoff, 'Finfluencers', AEA 2025 program",
+            "confidence": "high"
+          },
+          {
+            "claim": "WallStreetBets due-diligence 'buy' posts earned +1.1% over two days, +2% over a month and ~5% over a quarter with no reversal before the January 2021 GameStop episode; afterward their predictive power vanished as posts shifted to price-pressure and attention-grabbing stocks.",
+            "source": "Bradley, Hanousek, Jame, Xiao, 'Place Your Bets? The Value of Investment Research on Reddit's Wallstreetbets', Review of Finance",
+            "confidence": "high"
+          },
+          {
+            "claim": "Crypto pumps (about 500 hand-collected Telegram events): price +25%, volume 148x and 10-second absolute returns of 15% in the first 70 seconds; a ~5% run-up begins five minutes before the announcement; insiders earn ~18%; outsiders entering more than a minute after the start lose >1% on average (about 2% when trading against insiders); most effects disappear within an hour.",
+            "source": "Li, Shin, Wang, 'Cryptocurrency Pump-and-Dump Schemes', JFQA; CLS Blue Sky summary",
+            "confidence": "high"
+          },
+          {
+            "claim": "355 announced pumps on Binance and Yobit over seven months produced average price distortions of 65% within minutes that reverted shortly after; the schemes are a negative-sum game for everyone except the organizers, and participation is explained by overconfidence and gambling preferences.",
+            "source": "Dhawan & Putnins (2023) 'A New Wolf in Town?', Review of Finance 27(3)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nearly 5,000 crypto pumps on Discord/Telegram: the coin's obscurity (low rank/volume) is the most important determinant of pump profitability.",
+            "source": "Hamrick, Rouhi, Mukherjee, Feder, Gandal, Moore, Vasek, CEPR DP13404 / Information Processing & Management (2021)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "A model predicting which coin will be pumped before 412 Telegram pumps (2018-2019) reportedly yielded up to 60% return on small retail positions over 2.5 months; this is crypto-specific and the equity analogue is unproven.",
+            "source": "Xu & Livshits (2019) USENIX Security, arXiv 1811.10109",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Real-time crypto pump detectors using 25-second chunks and 'rush order' features reach precision 93.1%/recall 91.4% (104 Binance events, detection within 5 s) and later precision 98.2%/recall 91.2%/F1 94.5% at 25-second latency (~900 events); 83.5% of targets traded under $1M/day and VIP members received signals 0.5-10 s earlier than others.",
+            "source": "La Morgia et al. (2020) ICCCN arXiv 2005.06610; La Morgia et al. (2021/2023) arXiv 2105.00733",
+            "confidence": "high"
+          },
+          {
+            "claim": "Kamps & Kleinberg's anomaly criteria: 12-24 hour estimation window, volume-increase thresholds of 25%-400%, price-increase thresholds of 3-10%, dump flagged when price falls below rolling average + 1 SD; pumps now peak within seconds to minutes.",
+            "source": "Kamps & Kleinberg (2018) Crime Science 7:18, via search summary (article page blocked)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "FINRA Regulatory Notice 22-25 (Nov 17, 2022) flagged 'ramp and dump' in small-cap IPOs, mostly China/HK-linked, with risk factors: fewer than 20M shares issued, less than $25M raised, valuation under $100M, foreign issuers/broker-dealers, concentrated holdings, nominee and omnibus accounts at U.S. firms.",
+            "source": "FINRA Regulatory Notice 22-25; Olshan summary",
+            "confidence": "high"
+          },
+          {
+            "claim": "FINRA's 2025 oversight report says that by 2024 the unusual price increases shifted from IPO day to weeks or months after IPO, with nominee accounts accumulating then liquidating into retail buying generated by social-media 'investment club' grooming scams; the 2026 report (Dec 9, 2025) again lists manipulative trading in small-cap exchange-listed equities as a priority.",
+            "source": "FINRA 2025 Annual Regulatory Oversight Report (Manipulative Trading section); FINRA 2026 report press release",
+            "confidence": "high"
+          },
+          {
+            "claim": "FINRA Investor Insight (Dec 9, 2025): scammers first recommend a well-known stock, then move victims into a low-priced low-volume listed stock, tell them which broker-dealer to use and what, when and at what price to buy, until victims cannot sell and the price crashes; the FBI's July 3, 2025 PSA reported at least a 300% increase in ramp-and-dump complaints in 2025 vs 2024.",
+            "source": "finra.org/investors/insights/investment-group-imposter-scams; FBI IC3 PSA I-070325-PSA",
+            "confidence": "high"
+          },
+          {
+            "claim": "Canadian regulators issued a ramp-and-dump investor alert on April 16, 2026 describing the same WhatsApp/Discord/Telegram investment-group pattern.",
+            "source": "CSA Investor Alert (NSSC PDF dated 2026-04-16); investright.org",
+            "confidence": "high"
+          },
+          {
+            "claim": "The SEC formed a Cross-Border Task Force on Sept 5, 2025 targeting pump-and-dump schemes in foreign-based issuers and the gatekeepers (auditors, underwriters) that bring them to U.S. markets.",
+            "source": "Mayer Brown and Akin Gump client alerts, Sept 2025",
+            "confidence": "high"
+          },
+          {
+            "claim": "Between late Sept 2025 and early Feb 2026 the SEC issued 14 ten-day trading suspensions, all foreign issuers on Nasdaq/NYSE, citing potential social-media manipulation by unknown persons; examples: QMMM ($4 IPO, +~1000% in under three weeks to $300+ intraday), TCGL ($8 to $300+ in two days), MCTA ($4 to $29), SDM (collapsed 86-88%); most remained halted or moved to OTC afterward.",
+            "source": "securitieslawyer101.com (Feb 3, 2026); Bloomberg Law; mdf-law.com on MCTA",
+            "confidence": "high"
+          },
+          {
+            "claim": "Nasdaq listing-rule timeline: Apr 11, 2025 effective - MVUPHS must come solely from IPO proceeds ($5M under net-income standard, $15M otherwise); Dec 18, 2025 approved / Jan 17, 2026 effective - $15M minimum public float under the net-income standard; Dec 19, 2025 - IM-5101-3 discretion to deny listings based on manipulation-susceptibility factors (jurisdiction, advisor/underwriter history of volatile deals, float/allocation, management familiarity); May 14, 2026 - $25M minimum IPO proceeds for China/HK/Macau-based companies; Jun 3, 2026 - IM-5101-4 authority to delist after an SEC trading suspension; Jul 22, 2026 - $5M MVLS continued-listing floor with immediate suspension after 30 consecutive business days and no cure period.",
+            "source": "K&L Gates, Greenberg Traurig, Dechert, Morgan Lewis, Duane Morris, Dorsey client alerts; securities-law-blog.com; Nasdaq press release Sept 3, 2025",
+            "confidence": "high"
+          },
+          {
+            "claim": "Small-cap IPO counts fell from 23 in Q4 2025 to 5 in Q1 2026 after IM-5101-3; foreign microcap IPOs 'dried up' by mid-2026.",
+            "source": "securities-law-blog.com (Dec 23, 2025 and Q2 2026 wrap); The Star / Bloomberg (Jul 25, 2026)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Bloomberg's 2026 analysis found that about a quarter of the 250+ companies that listed on Nasdaq's smallest tier since 2023 were promoted in WhatsApp group chats and then crashed or were SEC-suspended; almost 100 Asia-based microcaps debuted on U.S. exchanges in 2025.",
+            "source": "Bloomberg graphics '2026 Wall Street apparent pump-and-dump investor scam' (via search summary; article paywalled)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "One microcap underwriter's 11 completed IPOs ($4-$6 offer prices, ~$100M raised, 10 based in Singapore/Hong Kong): 10 surged (one from $4 to $100+ within a month), 9 traded 54-98% below IPO price as of May 1, 2026, with more than $2B of peak market value erased; TEN Holdings went from a $6 IPO to $100+ on Feb 13, 2025, ~$31 the next day, $18 four days later and under $1.50 later.",
+            "source": "Philadelphia Inquirer (May 12, 2026)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Ostin Technology (OST): promoted via WhatsApp/Telegram by impersonated U.S. advisers with AI-generated celebrity videos and a fake OLED-acquisition rumor; the company had deregistered from SEC reporting and announced a $5M direct offering at $0.55 on Apr 15, 2025; on Jun 26, 2025 it fell ~93% intraday from a $9.40 peak to close at $0.55 and reached ~$0.08 by early July; the FBI issued a bulletin on Jul 17, 2025.",
+            "source": "investinglive.com postmortem (Aug 6, 2025) - trade press, partially unverified",
+            "confidence": "medium"
+          },
+          {
+            "claim": "Robinhood herding events (top 0.5% daily holder increase; 4,884 events; extreme = +1,000 users and +50%; 900 events): event-day abnormal return +14% (+42%) with mean opening return +11%; subsequent month about -5% (-9%); 5-day -3% (-6%); selling after the event and rebuying five days later produced BHAR +3.5% (+6.4%) and was positive 63% of the time; negative post-event returns concentrated in stocks under $1B market cap; about one-third of herding events were large losers because the Top Movers list ranks by absolute return.",
+            "source": "Barber, Huang, Odean, Schwarz, 'Attention-Induced Trading and Returns: Evidence from Robinhood Users' (SSRN 3715077 full text extracted; Review of Finance 2022)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Individual investors are net buyers of attention-grabbing stocks (news, abnormal volume, extreme one-day returns, both positive and negative); attention-driven buying does not generate superior returns and the stocks individuals buy subsequently underperform the ones they sell.",
+            "source": "Barber & Odean (2008) 'All That Glitters', Review of Financial Studies 21(2) (full text extracted; magnitude tables not quoted)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Positive overnight returns are reversed intraday because the open is high relative to intraday prices; the pattern is concentrated in stocks with recent retail attention, hard-to-value and costly-to-arbitrage stocks, and high-sentiment periods; the implicit cost of buying high-attention stocks at the open frequently exceeds the effective half-spread.",
+            "source": "Berkman, Koch, Tuttle, Zhang (2012) JFQA 47(4):715-741",
+            "confidence": "high"
+          },
+          {
+            "claim": "Stocks with high overnight returns underperform over longer horizons (sentiment proxy); momentum and reversal strategy profits accrue overnight, with individuals favoring overnight trading and institutions intraday.",
+            "source": "Aboody, Even-Tov, Lehavy, Trueman (2018) JFQA; Lou, Polk, Skouras (2019) JFE",
+            "confidence": "medium"
+          },
+          {
+            "claim": "An increase in Google search volume for a ticker predicts higher prices over the next two weeks and an eventual reversal within the year (Russell 3000, 2004-2008).",
+            "source": "Da, Engelberg, Gao (2011) Journal of Finance",
+            "confidence": "high"
+          },
+          {
+            "claim": "The highest-MAX decile (largest single-day return in the prior month) underperforms the lowest by more than 1% per month, raw and risk-adjusted.",
+            "source": "Bali, Cakici, Whitelaw (2011) JFE 'Maxing Out'",
+            "confidence": "high"
+          },
+          {
+            "claim": "Marketable retail order imbalance (sub-penny method) predicts about +10 bps over the following week (~5% annualized), stronger in small, low-priced stocks and persisting up to 12 weeks; this is the opposite sign to the attention-herding result, which is specific to extreme concentrated buying episodes.",
+            "source": "Boehmer, Jones, Zhang, Zhang (2021) Journal of Finance 'Tracking Retail Investor Activity'",
+            "confidence": "high"
+          },
+          {
+            "claim": "Day trading base rates: of Brazilians who began day trading equity futures in 2013-2015 and persisted more than 300 days, 97% lost money, 1.1% earned more than minimum wage and 0.5% more than a bank teller's starting salary, with no evidence of learning; in Taiwan (1992-2006) about 97% of day traders are predicted to lose going forward, 74% of day-trading volume comes from traders with a history of losses, and more than 75% quit within two years.",
+            "source": "Chague, De-Losso, Giovannetti (2020) 'Day Trading for a Living?'; Barber, Lee, Liu, Odean 'Learning Fast or Slow' (RAPS 2020) and 'The Cross-Section of Speculator Skill' (2014)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Short squeezes (IHS Markit 2006-2019): all-lender squeezes occur on 0.183% of stock-days and current-lender squeezes on 0.469%; utilization is the single best predictor (>=90% utilization implies a squeeze about every 11 days vs once per 40 years at 25%); high-fee/high-utilization stocks earn abnormal returns of -2.67% per month versus +0.56% for low-fee/low-utilization stocks, so buying squeeze candidates is unprofitable on average.",
+            "source": "Schultz (2024) JFQA 'Short Squeezes and Their Consequences', via Evidence Investor summary",
+            "confidence": "high"
+          },
+          {
+            "claim": "About 25% of unique U.S. and EU stocks experience a short squeeze in a given year; events are rare and short-lived with a recent U.S. uptick; EU short-position disclosure rules did not increase squeeze frequency.",
+            "source": "Allen, Haas, Pirovano, Tengulov, SFI Research Paper 23-63 / Harvard Law corpgov summary",
+            "confidence": "medium"
+          },
+          {
+            "claim": "A long-low-fee/short-high-fee decile portfolio earns 1.45%/month gross (1.55% four-factor alpha; 0.92% net of borrow cost); anomalies essentially do not exist among the 80% of stocks with the lowest fees; short-side anomaly returns are concentrated in 'special' hard-to-borrow stocks with the lowest lendable supply.",
+            "source": "Drechsler & Drechsler (2014) NBER WP 20282; Beneish, Lee, Nichols (2015) 'In Short Supply'",
+            "confidence": "high"
+          },
+          {
+            "claim": "IHS Markit's US Short Squeeze Model defines a squeeze as a 3-SD price move vs the prior 60 days over 1-3 days followed by a 5-consecutive-day decline in shares on loan; top-decile candidates had a 78% higher squeeze likelihood than the 0.94% base rate and earned +7 bps open-to-close (+12 bps vs bottom decile), +19/+30 bps over two weeks and +44/+103 bps over one month.",
+            "source": "IHS Markit Research Signals, 'US Short Squeeze Model' (May 2015, full text extracted)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Ortex's short-squeeze signals combine short interest, utilization, cost-to-borrow, price and their rates of change in three signal types; the public performance page gives aggregate signal returns (e.g., EPS signals) but no squeeze-specific win rate, and warns any signal can trigger for the wrong reasons. S3 Partners' Squeeze Score flags >70 as trouble and >=90 as significantly higher risk while stating a high score does not guarantee a squeeze.",
+            "source": "public.ortex.com/trading-signals; BNN Bloomberg / Benzinga coverage of S3 Squeeze Score",
+            "confidence": "medium"
+          },
+          {
+            "claim": "SEC DERA's LULD study (2013-2015 data) finds that after a trading pause prices revert to within the price bands in effect before the pause, indicating many pauses are liquidity gaps rather than fundamental moves; Tier 2 stocks above $3 have +/-10% bands (doubled at open/close), and Tier 2 generated over two million straddle states in under four months.",
+            "source": "Moise & Flaherty (Mar 2017), SEC DERA white paper (full text extracted)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Single-stock trading pauses improve price discovery during the break but have adverse effects on price stability and liquidity afterward; they do not cool markets but cause extra volatility.",
+            "source": "Hautsch & Horvath (2019) JFE 'How effective are trading pauses?' (abstract)",
+            "confidence": "high"
+          },
+          {
+            "claim": "No academic, SEC, FINRA or exchange source was found that reports the fraction of LULD-halted small-cap runners that close below the open or below the halt price; trader-blog statements ('plenty continue, plenty reverse violently') are unquantified. This item is unverifiable from public sources.",
+            "source": "Searches of sec.gov DERA, Nasdaq 'All about LULDs', tapeboard.com halt logs, trade-ideas.com",
+            "confidence": "high"
+          },
+          {
+            "claim": "Reddit penny-stock pump detection: posts matched to a flat 5-day price/volume baseline followed by a spike; dumps typically occur within four days; best text classifier reaches 85% accuracy and 62-67% F1.",
+            "source": "Nam & Skillicorn (2023) arXiv 2301.11403 (full text extracted)",
+            "confidence": "high"
+          },
+          {
+            "claim": "On Twitter, 71% of authors of suspicious financial tweets were classified as bots and 37% were later suspended; bots promote low-value stocks by piggybacking on high-value cashtags; detectors of inorganic financial campaigns achieve F1 = 0.97, and the more viral a stock the larger its bot-driven share.",
+            "source": "Cresci, Lillo, Regoli, Tardelli, Tesconi (2019) ACM TWEB; Tardelli, Tesconi, Cresci (2022)",
+            "confidence": "high"
+          },
+          {
+            "claim": "Historical SEC trading suspensions are associated with substantial, largely permanent devaluation and prolonged negative abnormal returns after resumption, with only a small second-day rebound.",
+            "source": "Ferris, Kumar, Wolfe (1992) Financial Review; Howe & Schlarbaum (1986) JFQA; Kabir (1994)",
+            "confidence": "medium"
+          },
+          {
+            "claim": "A FINRA Foundation survey (Apr 2026) reportedly found 61% of investors aged 18-34 have made an investment decision based on a social-media personality's recommendation (26% overall, ~6% for 55+).",
+            "source": "stockwirex.com citing FINRA Foundation (not verified against the FINRA release)",
+            "confidence": "low"
+          }
+        ],
+        "recommendations": [
+          "Set the detector's default posture to 'warn/fade', not 'buy': every measured post-signal long horizon is negative (5-day -3% to -6% and 1-month -5% to -9% after retail herding; -3.1% to -5.3% over 5 days after social spikes; -5.25% over 2 days for tout-day buyers; -28% per pump for participants; -2.67%/month for squeeze candidates; >1%/month for high-MAX names). Treat any alert as a bag-holder warning first and a long candidate only if it passes an explicit early-phase gate.",
+          "Define the early-phase gate numerically and time-box it: the equity analogue of the crypto window (profits only in the first ~20 s, losses after 60 s) is the first few minutes after a fresh social/volume anomaly with no prior-day run-up (Renault's +4.1% day-before means most alerts are already late). Require: no prior-day run-up above ~5%, mention volume just crossed mean + 2 SD, promoter/bot share below a threshold you calibrate (start at 30%), and exit by a hard time stop (minutes to one session). Never hold overnight into the attention open: the open is where high-attention stocks print their highs (mean opening return +11% in herding events, then fade).",
+          "Do not buy the first gap. Berkman et al. show buying attention stocks at the open costs more than the half-spread and the overnight gain reverses intraday; if a long is taken at all, wait for the intraday reversal to exhaust (the 'dip') rather than the open, and only in names that are not on the ramp-and-dump structural list.",
+          "Run a nightly structural risk score and use it to gate real-time alerts: foreign (Cayman/BVI/China/HK/Singapore) issuer, Nasdaq Capital Market or NYSE American, IPO within 12-18 months at $4-$6 with <20M shares / <$25M raised / <$100M valuation, microcap underwriter with prior volatile deals, deregistered/delinquent filer, recent reverse splits or discounted direct offerings, tiny float with concentrated holders. Any real-time spike in a name scoring high here should emit a 'likely ramp-and-dump' phone alert that explicitly says do not buy; a quarter of Nasdaq Capital Market IPOs since 2023 ended in a crash or SEC suspension.",
+          "Make source provenance a first-class feature in the rules pass and the Claude pass: fraction of mentions from known promoter accounts (Renault's 'promote/tout/compensation/newsletter' profile keywords), bot-likeness (account age, cadence, cashtag piggybacking with mega-caps), WhatsApp/Telegram 'investment club' invitations, impersonated advisers or deepfake videos, acquisition rumors with no 8-K, and finfluencer track record (56% of StockTwits finfluencers are anti-skilled and have the most followers). Have Claude label each survivor as organic-news / paid-promotion / coordinated-ramp / unknown and route only organic-news to any long consideration.",
+          "Use published thresholds as starting rules, then calibrate on your own log: message volume > trailing-year mean + 2 SD with >=20 messages; minute-bar volume +25% to +400% over a 12-24h baseline with price +3-10%; top-0.5% daily retail order imbalance change; MAX-decile membership; utilization >=90% or fee spikes for squeeze risk; a 3-SD price move vs the prior 60 days. Expect high false-positive rates from the raw price/volume rules; the social-provenance and structural layers are what reduce them.",
+          "Treat short-squeeze screens as risk flags, not longs: utilization >=90% makes a squeeze likely (about one per 11 days) but the same stocks lose 2.67%/month on average and vendor squeeze models only show single-digit-bps intraday edges inside heavily shorted universes. If you keep a squeeze module, require paid daily lending data (utilization, shares on loan, fee) rather than FINRA bi-monthly short interest, and backtest Ortex/S3-style claims yourself because neither publishes a squeeze win rate.",
+          "Build the LULD statistic you could not find: log every Tier 2 halt (reason code, direction, price at halt, resume price, open, close, next-day close) for stocks under ~$20 and compute the share that close below the open and below the halt price, by number of halts that day. SEC DERA and Hautsch-Horvath imply resumptions revert toward prior bands and add volatility, so default to treating a second or third up-halt in a session as a sell/avoid signal until your own data says otherwise.",
+          "Instrument outcome tracking from day one: for every alert store entry time, signal type, structural score, and realized returns at +5 min, +30 min, close, +1 day, +5 days, +20 days. The literature's hit rates (63% for fading herding events, 0.9% base rate for squeezes, ~1-in-4 crash rate for recent microcap IPOs) give you priors to test against; publish your own precision/recall before trusting any long signal with real money.",
+          "Account for the 2026 regime shift when weighting data: Nasdaq's rules (float from IPO proceeds, $15M float, $25M for China-based issuers, discretion to deny listings, delisting after SEC suspension, $5M MVLS floor) have shrunk new small-cap IPOs from 23 to 5 per quarter, so FINRA already reports the ramp moving to names listed months earlier and the next migration is likely to older sub-$5M microcaps and OTC names. Keep the structural model keyed on issuer characteristics, not just listing age.",
+          "Keep the day-trading base rates in the UI: 97% of persistent day traders lose, and participants in pump schemes who sold early still averaged -28%. Size any early-phase long as a lottery ticket (small, capped daily count, hard stops) and never average down into a collapse; the dump leg has been 70-93% in a single session in 2025 cases.",
+          "Consider a reporting path rather than a trading path for clear coordinated-ramp detections (SEC TCR / FINRA), since trading along with a manipulation you have identified carries legal risk and, per the evidence, little expected profit for late entrants."
+        ],
+        "open_questions": [
+          "What fraction of LULD-halted small-cap runners close below the open or below the first halt price? No academic, SEC, FINRA, Nasdaq or vendor source quantifies this; it has to come from your own tick data.",
+          "Do the crypto 'rush order' detectors (precision 93-98% within 5-25 seconds) transfer to U.S. equities, where announced pumps are rare, LULD bands interrupt the move, and aggressor-side flags must be inferred from trade conditions rather than exchange data?",
+          "Are the Massoud et al. (+11.94% / -32.94%) and Leite et al. 'Pay to Pump' (+7.9% / +11.8% / flat by day 30) figures accurate? Both were only available through a secondary trade source; originals were not retrieved.",
+          "Which investor types in Leuz et al. avoid losses? The paper says some types (penny-stock day traders who sell early) 'should not be viewed as falling prey', but the type-level return table was not extracted; the published Management Science version also reports 8% participation and 470 schemes vs 6% and 421 in the NBER draft.",
+          "What predicts squeezes in Allen, Haas, Pirovano, Tengulov (SFI 23-63) beyond the 25%-of-firms-per-year prevalence figure, and what are post-squeeze returns in their sample? Only the abstract was accessible.",
+          "What is the magnitude (not just sign) of the post-attention underperformance in Barber & Odean (2008)? The full text was extracted but the return tables were not quoted here.",
+          "How many SEC social-media-manipulation suspensions have occurred since February 2026, and how have Nasdaq's new IM-5101-4 delistings changed post-suspension price paths (the 2021-era literature on suspensions predates both)?",
+          "Has the ramp-and-dump pattern migrated after the 2026 Nasdaq rules to older listed microcaps or OTC names, as FINRA's 2025 report already hinted, and does the structural score need re-weighting away from listing age?",
+          "Is there any equity-market analogue of pre-pump target prediction (Xu & Livshits' 60% in crypto)? No equity study with out-of-sample returns was found.",
+          "What are the actual, out-of-sample win rates of Ortex and S3 squeeze signals? Neither vendor publishes squeeze-specific performance on its public pages."
+        ]
+      }
+    ],
+    "verify": null
+  },
+  "workflowProgress": [
+    {
+      "type": "workflow_phase",
+      "index": 1,
+      "title": "Research"
+    },
+    {
+      "type": "workflow_phase",
+      "index": 2,
+      "title": "Verify"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 1,
+      "label": "research:mechanics",
+      "phaseIndex": 1,
+      "phaseTitle": "Research",
+      "agentId": "a9a07fca1c80fc4d7",
+      "agentType": "general-purpose",
+      "model": "claude-fable-5-1",
+      "state": "done",
+      "startedAt": 1791312728917,
+      "queuedAt": 1791312728906,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Scope note: the user's broad \"stock flips\" definition (gaps…",
+      "promptPreview": "Today is 2026-10-06. Use WebSearch and WebFetch; prefer primary sources (SEC, FINRA, academic papers, vendor docs, the traders' own posts/videos). Be numeric and concrete. Mark unverifiable items. Context: a solo retail developer is adding a real-time detector for fast small-cap pump moves (low-float runners, squeezes, promoted stocks) to a Python + Claude monitoring service, to (a) catch the earl…",
+      "promptFramed": true,
+      "lastProgressAt": 1791313534919,
+      "tokens": 189538,
+      "toolCalls": 95,
+      "durationMs": 806000,
+      "resultPreview": "{\"summary\":\"Scope note: the user's broad \\\"stock flips\\\" definition (gaps, breakouts, momentum bursts, reversals, halts, squeezes, insider cluster buys) and the narrower \\\"fast small-cap pump\\\" focus are compatible; this research covers the pump anatomy in depth and supplies numeric signal definitions that also serve the broader detector (insider cluster buys and squeeze inputs included). \\n\\nAnat…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 2,
+      "label": "research:detection",
+      "phaseIndex": 1,
+      "phaseTitle": "Research",
+      "agentId": "aa71d25d80620f015",
+      "agentType": "general-purpose",
+      "model": "claude-fable-5-1",
+      "state": "done",
+      "startedAt": 1791312728918,
+      "queuedAt": 1791312728906,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Yes, both layers can be built on the same feeds: the broad …",
+      "promptPreview": "Today is 2026-10-06. Use WebSearch and WebFetch; prefer primary sources (SEC, FINRA, academic papers, vendor docs, the traders' own posts/videos). Be numeric and concrete. Mark unverifiable items. Context: a solo retail developer is adding a real-time detector for fast small-cap pump moves (low-float runners, squeezes, promoted stocks) to a Python + Claude monitoring service, to (a) catch the earl…",
+      "promptFramed": true,
+      "lastProgressAt": 1791313471885,
+      "tokens": 190146,
+      "toolCalls": 88,
+      "durationMs": 742072,
+      "resultPreview": "{\"summary\":\"Yes, both layers can be built on the same feeds: the broad \\\"stock flips\\\" layer (gaps, breakouts, halts, reversals, squeezes, insider cluster buys) and this narrower small-cap runner/pump layer, which is a specialization of it with tighter universe filters (price $1-20, float <20M, market cap <$100-200M) and a dedicated \\\"dump\\\" rule set. Research on the narrow layer: the practitioner…"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 3,
+      "label": "research:evidence",
+      "phaseIndex": 1,
+      "phaseTitle": "Research",
+      "agentId": "a73658e8fc88c7546",
+      "agentType": "general-purpose",
+      "model": "claude-fable-5-1",
+      "state": "done",
+      "startedAt": 1791312728919,
+      "queuedAt": 1791312728906,
+      "attempt": 1,
+      "lastToolName": "StructuredOutput",
+      "lastToolSummary": "Bottom line from the academic and regulatory record: once a…",
+      "promptPreview": "Today is 2026-10-06. Use WebSearch and WebFetch; prefer primary sources (SEC, FINRA, academic papers, vendor docs, the traders' own posts/videos). Be numeric and concrete. Mark unverifiable items. Context: a solo retail developer is adding a real-time detector for fast small-cap pump moves (low-float runners, squeezes, promoted stocks) to a Python + Claude monitoring service, to (a) catch the earl…",
+      "promptFramed": true,
+      "lastProgressAt": 1791313705756,
+      "tokens": 213466,
+      "toolCalls": 95,
+      "durationMs": 975942,
+      "resultPreview": "{\"summary\":\"Bottom line from the academic and regulatory record: once a small-cap pump is visible to a retail trader (social spike, pre-market gap, top-mover list, halt), the expected return of going long is negative on every horizon measured. Robinhood herding events (top 0.5% daily holder increase; +14% event-day return, +11% of it at the open) are followed by about -5% over the next month (-9% …"
+    },
+    {
+      "type": "workflow_agent",
+      "index": 4,
+      "label": "verify:claims (retry 2)",
+      "phaseIndex": 2,
+      "phaseTitle": "Verify",
+      "agentId": "ab49610e66e804abd",
+      "agentType": "general-purpose",
+      "model": "claude-fable-5-1",
+      "state": "error",
+      "startedAt": 1791313707772,
+      "queuedAt": 1791313707755,
+      "attempt": 3,
+      "lastAttemptReason": "stalled",
+      "lastToolName": "Bash",
+      "lastToolSummary": "cd /private/tmp/claude-501/-Users-personal-Desktop/28251b21…",
+      "promptPreview": "Today is 2026-10-06. Use WebSearch and WebFetch; prefer primary sources (SEC, FINRA, academic papers, vendor docs, the traders' own posts/videos). Be numeric and concrete. Mark unverifiable items. Context: a solo retail developer is adding a real-time detector for fast small-cap pump moves (low-float runners, squeezes, promoted stocks) to a Python + Claude monitoring service, to (a) catch the earl…",
+      "promptFramed": true,
+      "lastProgressAt": 1791320506762,
+      "error": "You've hit your monthly spend limit · raise it at claude.ai/settings/usage?from=cc_cli_limit_message · your session limit resets 6pm (America/New_York)",
+      "tokens": 433963,
+      "toolCalls": 82,
+      "durationMs": 6798989
+    }
+  ],
+  "totalTokens": 1027113,
+  "totalToolCalls": 360
+}

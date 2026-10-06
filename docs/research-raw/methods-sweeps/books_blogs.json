@@ -1,0 +1,462 @@
+{
+ "summary": "Work-up of the canonical written swing-trading methods and how practitioners run them as of Oct 2026, built from primary sources where reachable (qullamaggie.com, stockbee.blogspot.com, thepatternsite.com, alvarezquanttrading.com, adamhgrimes.com, stageanalysis.net, Business Wire/press mirrors for the US Investing Championship) plus third-party reproductions (TradingView/ProRealCode screeners, Substack note-takers, LuxAlgo library, backtrex backtests, Motley Fool boards quoting IBD and Minervini). Two families dominate current practice: (1) momentum/breakout 'leader' trading descended from O'Neil \u2192 Weinstein \u2192 Minervini \u2192 Stockbee \u2192 Qullamaggie/Kell (trend templates, VCP/flag bases, Episodic Pivots on earnings gaps, opening-range entries, low-of-day stops, 10/20-day MA trailing, 0.25-1% risk per trade, progressive exposure), and (2) short-term mean reversion descended from Connors/Alvarez/Raschke (RSI-2, Double-7s, Turtle Soup, Holy Grail pullbacks), which practitioners now report as a thin but still-positive edge on indexes and better on baskets of stocks. Bulkowski supplies the reference statistics (cup-with-handle avg rise 54%, 5% failure; throwbacks hurt performance 97% of the time), Van Tharp supplies the R-multiple/percent-risk sizing vocabulary everyone uses, and Shannon's Anchored VWAP has become the default 'where is the average holder' tool layered on top of all of the above. Modern context that practitioners are actively discussing: the April 2025 tariff crash and V-recovery, the Q4-2025 momentum-factor reversal, a 2026 AI/semiconductor-led bull market with a mid-2026 semi correction and dot-com comparisons, the SEC's April 14 2026 approval abolishing the $25k Pattern Day Trader rule (effective June 4 2026), and exchanges' 24/5 trading launches targeted for late 2026. Reddit could not be fetched from any mirror; X and YouTube content was captured only through written copies and summaries, and items that rest on a single search snippet are flagged low confidence.",
+ "methods": [
+  {
+   "name": "CAN SLIM / IBD rules (William O'Neil)",
+   "description": "Seven screening criteria as written in How to Make Money in Stocks (per Wikipedia summary): C = current quarterly EPS up >=25% vs same quarter prior year; A = annual EPS growth >=25% over last 3 years and ROE >=17%; N = something new (product, management, price high); S = supply/demand read from volume on up-moves; L = leader in a leading industry (12-month relative strength vs market); I = rising institutional sponsorship (accumulation/distribution rating); M = market direction ('confirmed uptrend', 'uptrend under pressure', 'correction' - '3 of 4 stocks follow the general market'). Base/buy: cup-with-handle of at least 7 weeks on a weekly chart; buy point = breakout through the handle high. Sell rules as IBD states them (IBD article quoted on Motley Fool board Jan 22 2025): 'cut your losses at 7% to 8%' below the buy point, no exceptions; 'take your profits at 20% to 25%'; 8-week hold rule - if a stock gains >=20% within 3 weeks of a proper breakout, 'sit on your hands for the first eight weeks' through pullbacks to the 10-week MA unless a clear sell signal. Market timing as encoded by practitioners (TradingView 'Distribution/Follow-Through Day Marker'): follow-through day = day 4-10 of a rally attempt with index gain >= ~1.2% on volume above the prior day; distribution day = index down >=0.2% on higher volume; clustering of distribution days flags 'uptrend under pressure'. Published stats: AAII reported CAN SLIM as its top-performing stock screen 1998-2009 (Wikipedia), while O'Neil's own mutual funds 'struggled'. Modern users (Minervini, Kell, Stockbee, Qullamaggie) all cite O'Neil as the root of their methods.",
+   "proponents": [
+    "William O'Neil (book / Investor's Business Daily)",
+    "IBD Live / investors.com (IBD staff)",
+    "Motley Fool 'Trading IBD Stocks' and 'IBD 8-week Hold Rule' boards (community)"
+   ],
+   "sources": [
+    "https://en.wikipedia.org/wiki/CAN_SLIM",
+    "https://discussion.fool.com/t/ibd-8-week-hold-rule/112549",
+    "https://discussion.fool.com/t/trading-ibd-stocks/104584?page=23",
+    "https://www.tradingview.com/script/mrsKTQdQ-Distribution-Follow-Through-Day-Marker",
+    "https://www.shortform.com/summary/how-to-make-money-in-stocks-summary-william-j-oneil"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Minervini SEPA: Trend Template + Volatility Contraction Pattern (VCP)",
+   "description": "Trend Template (8 criteria, all must pass, from Trade Like a Stock Market Wizard as reproduced by ProRealCode/TradingView screeners): (1) price above the 150-day and 200-day MA; (2) 150-day above 200-day; (3) 200-day rising for at least 1 month, preferably 4-5+; (4) 50-day above 150- and 200-day; (5) price above 50-day; (6) price at least 30% above its 52-week low; (7) price within 25% of its 52-week high; (8) book text says IBD RS rating >=70 - several screener reproductions substitute 'price not more than 10% below the 50-day' (discrepancy noted). VCP (third-party chapter-10 summary, finermarketpoints.com): 2-4 contractions, each roughly half the prior (e.g. 20-25% -> 10-15% -> 3-8%), volume drying up into the final tightest contraction, base typically 4-12 weeks; buy at the pivot (high of the final contraction) with a buy-stop ~1-2% above; stop just below the low of the final contraction, typically 5-8% risk, hard max 7-8%; breakout volume 40-50%+ above average is the confirmation. Exposure rules in his own words (IBD Live Aug 28 2024, quoted on Motley Fool Sep 3 2024): 'progressive exposure leads you to trading the largest when you are doing your best and the smallest when you are doing your worst'; no revenge trades - 'starts coming back in very slowly'; 'when he sees the right sides of the base tighten up and if they start breaking out... I start bumping up exposure'. Published performance: 1997 U.S. Investing Championship +155%; 2021 USIC $1M+ stock division +334.8% (Business Wire Jan 24 2022; prior record 119.1%, 338 competitors). A reconstruction of his 2021 trades (wallstreettrader.substack.com Jan 28 2022) shows entries above the prior day's high with 2.7-6.2% risk and 'cheat' entries near the 21-EMA/50-SMA, but notes 'no additional info regarding the exact entry, exits, or position sizes'. In 2026 he describes a rotation-driven bull market where 'fresh distribution' in indexes raises odds of consolidation (tradersunion.com quoting his posts; page blocked, medium confidence).",
+   "proponents": [
+    "Mark Minervini (minervini.com; Minervini Private Access; MTP workshops 2025/2026)",
+    "Laurentiu Chisca (wallstreettrader.substack.com)",
+    "ProRealCode / TradingView screener authors reproducing the Trend Template"
+   ],
+   "sources": [
+    "https://prorealcode.com/prorealtime-market-screeners/trend-template-mark-minervini",
+    "https://www.tradingview.com/scripts/trend-template/",
+    "https://www.finermarketpoints.com/post/trade-like-stock-market-wizard-vcp-chapter",
+    "https://www.businesswire.com/news/home/20220124005241/en/2021-United-States-Investing-Championship-Winners-%E2%80%94-Minervini-Smashes-Record",
+    "https://wallstreettrader.substack.com/p/how-mark-minervini-won-us-investing",
+    "https://discussion.fool.com/t/mark-minervini-market-wisdom/108510",
+    "https://tradersunion.com/news/market-voices/show/2549155-bull-market-rotation-2026/",
+    "https://www.minervini.com/"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Stockbee 'Momentum Burst' (4% breakout) and Anticipation setups",
+   "description": "Pradeep Bonde's 'How to identify good momentum burst and make millions' (stockbee.blogspot.com, Jan 4 2014) lists the identification rules verbatim: 'The day prior to range expansion day will be narrow range day or negative day'; 'The stock will have 3 to 20 days consolidation prior to range expansion day'; 'series of narrow range days prior to breakout'; 'On breakout day volume is higher than previous day'; 'On breakout day stock closes at or near its high for the day (preferred)'; stock not extended - 'first or second breakout at start of an up trend is preferred'; 'linear and orderly move'; avoid 'drunken man walk' volatile stocks; 'Low float below 25 million is good. Below 10 million float leads to explosive moves'; sub-$5 stocks 'tend to make very explosive moves of 40% kind'. Scan: >=4% move on the day on higher volume (also 'dollar breakout' and '8%+ or $5+ in 5 days' scans). Expectations stated across his posts (2014-2021): 'Stocks move in momentum bursts of 3 to 5 days' of '8 to 40% magnitude depending on price' ('5 to 50 dollars' for high-priced stocks); 'In most cases the momentum dies down in 3 to 5 days' and holding longer often means the 'stock ends up giving up all'; capture '5 to 8% average per trade'; requires '200 to 1000 or more trades in a year' and 'extremely good ability to ruthlessly cut losses if a trade does not work immediately'; 500-1000 setups/yr, 5,000-10,000 3-5 day setups to study. Exit per Tikam Singh Alma's Stockbee notes (Aug 26 2024): 3-5 days or loss >~8%; his own risk 0.25%/trade, zero leverage. Anticipation variant: buy before the breakout after 3-10 narrow-range days, orderly pullback without 4%+ breakdowns, not up 3 days in a row; scans such as 'Double Trouble' c/minl252>=1.8 and minv3.1>=100000, and 'TI65' avgc7/avgc65>1.05. Third-party research (Tikam Singh Alma, Jun 18 2025): 1,227 S&P 500 / NIFTY750 4% breakouts 2020-Jun 2025; breakout-day volume ~1.93x 5-day average; claims '82.31% achieved at least a 10% gain within 3-5 days' but also 'average gain 0.88-0.94% per trade' - internally inconsistent, treat as low confidence. A LuxAlgo/TradingView 'Stockbee Screener - Momentum Burst & Episodic Pivot Scanner' (Jan 26 2026) shows the rules are still being encoded by practitioners. Stockbee's Nov 2026 bootcamp (announced Sep 17 2026) lists 'Start of Swing based on momentum burst' as a module.",
+   "proponents": [
+    "Pradeep Bonde / Stockbee (stockbee.blogspot.com; members site; 2024 TraderLion Conference)",
+    "Tikam Singh Alma (tikamalma.substack.com)",
+    "LuxAlgo library / TradingView script authors",
+    "tradermonty 'stockbee-momentum-burst-screener' (GitHub/tessl.io skill)"
+   ],
+   "sources": [
+    "https://stockbee.blogspot.com/2014/01/how-to-identify-good-momentum-burst-and.html",
+    "https://stockbee.blogspot.com/2014/01/swing-trading-using-momentum-bursts.html",
+    "https://stockbee.blogspot.com/2016/07/profiting-from-momentum-bursts.html",
+    "https://stockbee.blogspot.com/2021/02/one-idea-which-can-make-you-millions.html",
+    "https://stockbee.blogspot.com/",
+    "https://tikamalma.substack.com/p/systems-setups-and-process-of-swing",
+    "https://tikamalma.substack.com/p/4-momentum-burst-detailed-research",
+    "https://www.luxalgo.com/library/indicator/aUbyMkHj-stockbee-screener-momentum-burst-episodic-pivot-scanner/",
+    "https://tessl.io/registry/skills/github/tradermonty/claude-trading-skills/stockbee-momentum-burst-screener"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Episodic Pivot (EP) - Stockbee origin, Qullamaggie's written rules",
+   "description": "Stockbee (origin): mechanical daily scans - gain >=20% with volume >10k and price >=$5; >=30%; $5+ absolute gain; >=10%; or bullish close with volume >5x the 50-day average - 'together the scans give you less than 20 to 25 candidates to work with daily'. High-probability catalysts: earnings/sales acceleration, new contracts/orders, product launches, biotech approvals/partnerships, raised guidance, insider buying >$1M, IBD 100 additions, sector momentum; low-probability: media mentions (Cramer/Barron's/WSJ), analyst upgrades. Entry is discretionary: '1-2 with clear catalyst and where the move is just starting'; EPs are rare per stock but produce '100% plus moves in a year'. 2024 TraderLion Conference (Sep 19 2024, notes at retailtradersrepository.substack.com) framework 'MAGNA53': Massive Acceleration (double/triple-digit growth, massive beats), Gap up on surprise, Neglect (ignored for months/years, minimal analyst/fund coverage), Acceleration in sales; optional '5' = short interest >=5 days-to-cover, '3' = 3+ analysts raising targets; 'Cap10*10IPO' (small cap, IPO within 10 years) for the most explosive; stop 2.5% standard, up to 10% for anticipated triple-digit moves; re-enters on stop-outs if conviction remains; expects ~70% win rate and 10-12 classic setups/yr in strong markets, 3-4 in weak. Qullamaggie (qullamaggie.com, 'How to master a setup: Episodic Pivots' Nov 2 2021, and 'My 3 timeless setups'): 'Gap up 10%+'; 'massive volume near the open, ideally the stock should trade the average daily volume the first 15-20 minutes'; 'Big growth numbers, preferably mid/high or even triple digit EPS and revenue growth and a significant beat'; 'best if the stock has not rallied over the past 3-6 months'; 'Enter opening range highs. ORH can be the highs of the first 1-, 5-, or 60-minute candle'; 'The stop is at the lows of the day' and 'no more than 1x, or maximum 1.5x the average daily range'; trail with 10/20-day MA once past initial stop, later 20/50-day; positions 10-20% of account, risk 0.25-1%; 'failure rate is high, but they all provide excellent risk rewards'; 'It will take you 3-4 earnings seasons to get good at trading EP'; built an Evernote database of thousands of examples. Third-party summaries (Financial Wisdom TV) add a market filter of QQQ 10-EMA above 20-EMA.",
+   "proponents": [
+    "Pradeep Bonde / Stockbee (stockbee.blogspot.com; TraderLion Conference 2024)",
+    "Kristjan Kullamagi / Qullamaggie (qullamaggie.com; twitch.com/qullamaggie; youtube.com/qullamaggie; twitter.com/qullamaggie)",
+    "Retail Traders Repository (retailtradersrepository.substack.com)",
+    "Financial Wisdom TV (financialwisdomtv.com / YouTube)"
+   ],
+   "sources": [
+    "https://qullamaggie.com/how-to-master-a-setup-episodic-pivots/",
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/",
+    "https://stockbee.blogspot.com/search?q=episodic+pivot",
+    "https://retailtradersrepository.substack.com/p/pradeep-bonde-episodic-pivots",
+    "https://www.financialwisdomtv.com/post/the-episodic-pivot-strategy-qullamaggie-s-high-momentum-setup-explained",
+    "https://tikamalma.substack.com/p/systems-setups-and-process-of-swing"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Qullamaggie Breakout (flags / high-tight flags off the 10-20 day MAs)",
+   "description": "From 'My 3 timeless setups that have made me tens of millions' (qullamaggie.com): a stock with 'a big move higher sometime in the past 1-3 months... anywhere from 30-100%+' that then forms an orderly flag with higher lows, 'surfing' the 10/20-day MAs with volume drying up; candidates are among the top 1-2% gainers over 1, 3 and 6 months. Scan reproduced by Tikam Singh Alma (Apr 5 2024): ADR >5%, dollar volume >$3M, +25% vs 22 days ago, +50% vs 67 days, +150% vs 126 days, listed stocks only. Entry: 'Enter on the opening range highs' (1-, 5- or 60-minute candle); do not buy once the stock is already up more than its ATR on the day. Stop: 'always lows of the day and stop should not be wider than the ATR or ADR of the stock'. Exit: 'sell 1/3 to 1/2 of the position after 3-5 days, and then move the stop to break even'; 'the rest... trailed with the 10- or the 20-day moving average. You wait for the first CLOSE below the 10-day'; stream notes (Oct 2019): 1/3 on first 10-day close-below, 1/3 on 20-day, remainder on 50-day; hold through MA breaks if higher lows persist. Sizing: 'Most of my positions are 10-20% of account size'; 'My risk on most trades is usually 0.25-1%'; never more than 30% of the account overnight in one stock. Stated expectancy: 'You can be wildly profitable with having just a 25-30% winrate'; 'In a bullish market it is very common to get moves that are 10-20x+ your initial risk'. Market view (Jul 1 2020 post): in V-recoveries like 1998/2009/2020 the Nasdaq rode the 10/20 SMA with pullbacks limited to 5-8% - manage leaders on the 10/20 SMA rather than macro opinion.",
+   "proponents": [
+    "Kristjan Kullamagi / Qullamaggie (qullamaggie.com; Twitch/YouTube/X: qullamaggie)",
+    "Tikam Singh Alma (tikamalma.substack.com)",
+    "Retail Traders Repository (stream notes)"
+   ],
+   "sources": [
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/",
+    "https://qullamaggie.com/",
+    "https://qullamaggie.com/nasdaq-comparison-late-90s-vs-today/",
+    "https://tikamalma.substack.com/p/qullamaggie-swing-trading-setups",
+    "https://retailtradersrepository.substack.com/p/kristjan-kullamagi-qullamaggie-stream-092"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Qullamaggie Parabolic Short",
+   "description": "Also from the 'timeless setups' page: 'A stock up 50-100%+ in a few days or weeks (if larger cap) or 300-1000%+ (if smaller cap)' and 'up 3-5+ days in a row'. Entry: 'Short on the opening range lows (1-minute, 5-minute candles). You can wait for the first red 5-minute candle' or wait for the first crack, a bounce into VWAP, and short the VWAP failure. Stop: 'highs of the day or if VWAP fail, a reclaim of the VWAP'. Target: 'the 10- and 20-day moving averages, that's where these stocks usually bounce'. Expectancy: 'more like 5-10x risk reward' versus 30-50x for breakouts/EPs; higher win rate if you wait for perfect setups.",
+   "proponents": [
+    "Kristjan Kullamagi / Qullamaggie (qullamaggie.com)"
+   ],
+   "sources": [
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Anchored VWAP (Brian Shannon, 'Maximum Trading Gains with Anchored VWAP', 2023)",
+   "description": "Shannon's book (not directly fetchable; rules reconstructed from Trade-Ideas' AVWAP page, a dreambooks product summary, the LuxAlgo 'VWAP pinch' concept page and his site): anchor VWAP to 'events that matter' - a major swing high/low, the breakout candle, an earnings gap, IPO day, and calendar resets (year/quarter/month start); 'The AVWAP represents the absolute truth of the relationship between a stock's supply and demand, and is 100% objective'. Uses: 'make better entries and exits, time breakouts and breakdowns, and set stop losses', covering IPOs, support/resistance, market direction, short squeezes, news gaps; 'managing risk is Job One'. Practitioner reconstruction of his rules: bias long when price is above a rising long anchor (e.g. year-to-date VWAP); wait for a pullback to a rising weekly/monthly AVWAP rather than buying weakness blindly ('buying the dip with institutional backup'); the slope of the 20-day MA matters more than whether price is above or below it; align multiple timeframes (his earlier book, Technical Analysis Using Multiple Timeframes); use the most recent anchor as the 'point of ruin' - a decisive close through it invalidates the thesis. 'AVWAP pinch' (LuxAlgo, attributing the concept to Shannon): two AVWAPs - one from a significant high, one from a significant low - converge with price between them; neither cohort has a cushion; when price breaks and holds beyond one line the other side is underwater, often fueling range expansion. Motto 'Only Price Pays'. No published performance statistics. Still active: alphatrends.net announces its next educational seminar for Sep 30 2026; 2026 market-recap videos cover equities, energy and Bitcoin (search snippet).",
+   "proponents": [
+    "Brian Shannon, CMT (alphatrends.net; TradingView/X: alphatrends)",
+    "Trade-Ideas (TI AVWAP feature co-developed with Shannon)",
+    "LuxAlgo library (VWAP pinch write-up)",
+    "TraderLion podcast (Apr 15 2023 episode)"
+   ],
+   "sources": [
+    "https://www.trade-ideas.com/features/ti-avwap/",
+    "https://shop.dreambooksco.com/products/maximum-trading-gains-with-anchored-vwap-the-perfect-combination-of-price-time-volume",
+    "https://www.luxalgo.com/library/concept/vwap-pinch/",
+    "https://alphatrends.net/",
+    "https://alphatrends.net/archives/podcast/the-avwap-trading-indicator-secrets-and-setups-brian-shannon-traderlion-041523/",
+    "https://www.smbtraining.com/blog/brian-shannon-alphatrends-guest-lectures-at-smb-capital-on-technical-analysis-vwap",
+    "https://trendspider.com/blog/the-trading-pit-live-edition-with-brian-shannon/"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Connors / Alvarez short-term mean reversion: RSI-2, Double 7s, Cumulative RSI",
+   "description": "Rules from Short Term Trading Strategies That Work (Connors & Alvarez, 2008) as reproduced by LuxAlgo/backtrex: trade long only when close > 200-day SMA; buy when RSI(2) closes below 10 (stricter variant <5); exit when close > 5-day SMA (or RSI(2) recovers / closes above 70). Double 7s: SPY above 200-day; buy a 7-day closing low; sell a 7-day closing high - book result quoted by x-trader.net: SPY since 1993, 153 trades, average +0.85%, 80.4% correct, in the market <25% of the time. Cumulative RSI: sum of the last two RSI(2) readings <35 (LuxAlgo). Modern out-of-sample results: backtrex (Oct 3 2016 - Oct 1 2026, S&P 500, RSI2<5 & >200SMA, exit >5SMA or <200SMA): 73 trades, 71.2% win, profit factor 1.43, +18.1% total vs +255.4% buy-and-hold, max DD -21.5% vs -35%; verdict 'the edge exists but it is thin' (1.7%/yr vs 13.5%/yr). Nasdaq-100 same window: 65 trades, 75% win, PF 1.55, +26.9% over ten years. EUR/USD: 54.7% win, PF 0.78, -4.5%. Cesar Alvarez (alvarezquanttrading.com, Jan 24 2024, 'Mean Reversion vs Trend Following Through the Years'): RSI(2)<20 / RSI(4) oversold tests on the S&P 500 1957-Nov 2023 show rolling 5-year excess returns with 'little change from the mid-2000s which were a great time to be trading mean reversion', but 'these results on the index do not necessarily translate to stocks'; his live long and short MR strategies 'performed well in 2023'. Alvarez's other recent notes: 'Bad Month for Your Strategy? Should You Change It?' (May 6 2026) - worst drawdown of one strategy in 2026; proposed fixes were curve-fit to two trades, so he parks changes 2-3 months; 'The Power of Strategy Diversification' (Aug 19 2026) - combining Market Surfer (SPY/TLT), Rocket Rail (mean reversion) and Tech Comets (momentum) gave ~24% annual return with 23% max DD versus 54% DD for one strategy alone.",
+   "proponents": [
+    "Larry Connors (Connors Research / TradingMarkets)",
+    "Cesar Alvarez (alvarezquanttrading.com)",
+    "backtrex.com (independent backtests)",
+    "LuxAlgo library"
+   ],
+   "sources": [
+    "https://backtrex.com/en/backtests/connors-rsi-2-sp-500",
+    "https://backtrex.com/en/backtests/connors-rsi-2-nasdaq-100",
+    "https://backtrex.com/en/backtests/connors-rsi-2-eur-usd",
+    "https://www.luxalgo.com/library/concept/rsi-2/",
+    "https://www.x-trader.net/tag/larry-connors",
+    "https://alvarezquanttrading.com/blog/mean-reversion-vs-trend-following-through-the-years/",
+    "https://alvarezquanttrading.com/blog/bad-month-for-your-strategy-should-you-change-it/",
+    "https://alvarezquanttrading.com/blog/the-power-of-strategy-diversification/",
+    "https://c.mql5.com/forextsd/forum/56/sttstw_chap10.pdf"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Raschke 'Holy Grail' ADX pullback (Street Smarts, 1995) and Raschke's general rules",
+   "description": "Holy Grail rules as published by Raschke & Connors and restated by investingLive (Mar 29 2021): indicators = 14-period ADX and 20-period EMA; buy setup when 'ADX rises above 30, following the growth of the price', then price pulls back and touches the 20 EMA; entry = buy stop above the high of the bar that touched the EMA; stop below that bar's low (or the swing low); target = retest of the prior swing high; ADX 'must not fall below 30' for validity; sells mirror. Raschke's current rules of thumb (antoinebuteau.com 'Lessons from Linda Bradford Raschke', Jun 5 2026): the 80-20 rule - 'if a market opens in the bottom 20% of its range and closes in the top 80%, there is a high probability of follow-through the next morning'; never average losses; exit winners that give back 20% from peak; keep losses small so average wins cover several mistakes; trail stops with market rhythm; 'Price is your only indicator today; everything else is a derivative that lags'; never trade without a written game plan. Her book Trading Sardines ('Lessons from 44 years of spirited trading') is the current reference on lindaraschke.net. No published win-rate statistics retrieved.",
+   "proponents": [
+    "Linda Bradford Raschke (lindaraschke.net; LBRGroup)",
+    "Laurence Connors (co-author)",
+    "Antoine Buteau (antoinebuteau.com notes)",
+    "Dmitriy Gurkovskiy / investingLive (rules write-up)"
+   ],
+   "sources": [
+    "https://investinglive.com/Education/!/how-to-trade-by-holy-grail-strategy-20210329",
+    "https://www.antoinebuteau.com/lessons-from-linda-bradford-raschke/",
+    "https://lindaraschke.net/",
+    "https://www.tradingview.com/script/hawl3ybg-Holy-Grail-Setup-with-Confidence-Opacity"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Turtle Soup / Turtle Soup Plus One (Raschke & Connors)",
+   "description": "Failed-breakout reversal from Street Smarts (1995), named against the Turtles' 20-day channel breakouts. Buy rules: today prints a new 20-day low while the previous 20-day low is at least four sessions old; place a buy stop 5-10 ticks (5-10 cents) above that prior 20-day low so the trade only fills if the breakout is already failing; initial stop below today's new low; take partial profits in 2-6 bars and trail. Turtle Soup Plus One: the prior 20-day low must be at least three days earlier, today's close is at or below the prior 20-day low, and the buy stop is placed the next day at the earlier 20-day low. Sells mirror with 20-day highs. LuxAlgo's 2026-era write-up cautions that edges 'that specific decay' after decades in public, that performance is 'regime-dependent: better in rotational markets, poor in persistent trends', and that the 1995 parameters need re-validation.",
+   "proponents": [
+    "Linda Raschke and Laurence Connors (Street Smarts)",
+    "LuxAlgo library",
+    "TradingView 'Turtle Soup Indicator' script authors"
+   ],
+   "sources": [
+    "https://www.luxalgo.com/library/concept/turtle-soup/",
+    "https://www.tradingview.com/script/28gN99Tw-Turtle-Soup-Indicator",
+    "https://technical.traders.com/tradersonline/display.asp?art=2414"
+   ],
+   "popularity": "niche",
+   "confidence": "high"
+  },
+  {
+   "name": "Adam Grimes: pullbacks, Anti, failure test, breakout (The Art and Science of Technical Analysis, 2012)",
+   "description": "Four setup families from the book and his free course: pullback (simple and complex), Anti (a counter-trend momentum shift that becomes the first pullback of a new trend), failure test (a failed breakout that 'aggressively reverses back into the range within the same price bar' - Wyckoff's springs/upthrusts), and breakout. Momentum is read with the 3/10 modified MACD: want new momentum highs after upswings, no divergence; 'upswings should be more significant than downswings in an uptrend, both in duration and magnitude'; avoid pullbacks that go flat and lose conviction; favor alignment of trading and higher timeframes; 'all trading edges derive from imbalance of buying and selling pressure', so 'if you are buying in front of support... you must have an edge beyond just having a much larger profit target than stop loss' (Topstep summary Mar 20 2026). The book statistically debunks Fibonacci retracements. Recent work (adamhgrimes.com): 'Volatility Shocks and What Follows' (Oct 5 2026) - on ES 2010-Sep 2026, after a day with true range >2.5x ATR20 (79 cases) the next five sessions average 1.71x ATR20 but only 0.6x the shock bar; 70/79 calmed down yet stayed elevated; 'avoid chasing volatility extremes' and 'compression doesn't reliably predict big moves'; 'Volatility Has a Memory' (Sep 24 2026); 'When to Trade (And When to Stay Out)' (Aug 13 2025); 'Building the Rvol Relative Volume Measure' (Aug 21 2025). Market call Feb 25 2025 (MoneyLife podcast): market 'just doesn't look right or feel right', expect 'chop and flop', cut aggressiveness, buy declines.",
+   "proponents": [
+    "Adam H. Grimes (adamhgrimes.com; MarketLife; Trader's Workshop podcast)",
+    "Topstep blog (summary)",
+    "MoneyLife Show (podcast appearance)"
+   ],
+   "sources": [
+    "https://topstep.com/blog/going-deep-on-adam-grimes-approach",
+    "https://adamhgrimes.com/",
+    "https://adamhgrimes.com/volatility-shocks-and-what-follows/",
+    "https://moneylifeshow.libsyn.com/marketlifes-grimes-technicals-do-not-look-right-for-the-rally-to-roll-on",
+    "https://www.goodreads.com/book/show/13838135"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Andrew Aziz / Brian Pezim 'How to Swing Trade' (Bear Bull Traders)",
+   "description": "Beginner-oriented text (How to Swing Trade, Aziz & Pezim, 2019; companion A Beginner's Guide to Investing and Trading, Aaziznia & Aziz, Oct 14 2020). Summaries available online state it covers trend-following, counter-trend and breakout swing strategies; setting stop-loss and take-profit; position sizing, diversification and adapting to regime; a step-by-step backtesting procedure; swing patterns named include cup-and-handle, head-and-shoulders, ABCD and RSI-based entries. No exact numeric rules or published performance were retrievable (Blinkist blocked; Goodreads/Wikipedia give only topic lists). Community note: gummysearch's r/swingtrading profile lists Pezim among the three most-reviewed book authors (with Minervini and Anna Coulling).",
+   "proponents": [
+    "Andrew Aziz (Bear Bull Traders; Wikipedia)",
+    "Brian Pezim (co-author)",
+    "r/swingtrading book reviews (via gummysearch)"
+   ],
+   "sources": [
+    "https://en.wikipedia.org/wiki/Andrew_Aziz",
+    "https://www.blinkist.com/en/books/how-to-swing-trade-en",
+    "https://www.goodreads.com/book/show/55746728",
+    "https://gummysearch.com/r/swingtrading"
+   ],
+   "popularity": "common",
+   "confidence": "low"
+  },
+  {
+   "name": "Nick Radge 'Weekend Trend Trader'",
+   "description": "Rule set (book published Sep 11 2013; rules reproduced in the useThinkScript thread): weekly, long-only system reviewed after Friday's close and executed Monday open. Entry requires all of: stock making a 20-week high; rate of change >=30% (forum testers found ROC 10-20% gave more signals); market index (SPX/NDX/RUT) close above its 10-week MA. Position size 5% of equity per position (about 20 positions). Exit: trailing stop 40% below the highest weekly close while the index is above its 10-week MA, tightened to 10% below the highest weekly close when the index closes below it; 'the trailing stop is never moved down, always moved up'; stops are reviewed weekly, not left as live orders. The book's publisher page lists five components: trend alignment with the broad market, entry confirmation, trailing-stop management, market-reversal defense, position sizing. Performance: the book's own backtest numbers were not retrievable; forum re-tests: S&P 100 from 1992 at 5%/trade produced 16.61% annualized ($25,000 -> $1,789,306, dividends excluded); 'zachc' 35-year test on 20 random S&P 100 stocks at ROC=10: 78 trades, 70.5% win, extended drawdown 2001-2007; one tester reported it 'did not make money' with the 40%/10% stops but did with a 20-week ATR(3) trail; a Russell-1000 'top 10 by profit factor' variant is quoted at 25.3% CAGR / 14.3% DD (QuantConnect-style report; low confidence). Radge's The Chartist site was blocked (403).",
+   "proponents": [
+    "Nick Radge (The Chartist, thechartist.com.au)",
+    "useThinkScript forum backtesters (zachc and others)"
+   ],
+   "sources": [
+    "https://usethinkscript.com/threads/weekend-trend-trader-by-nick-radge-strategy-for-thinkorswim.669/",
+    "https://books.apple.com/us/book/weekend-trend-trader/id711140317",
+    "https://www.thechartist.com.au/?p=16809"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Alan Farley 'The Master Swing Trader' - the 7 Bells",
+   "description": "Book (McGraw-Hill, 2000) Part II '7-Bells: Tools to Locate Outstanding Opportunities' with chapters Dip Trip, Coiled Spring, Finger Finder, Hole-in-the-Wall, Power Spike, Bear Hug and 3rd Watch, followed by 'Thirty Rules for the Master Swing Trader' (table of contents verified via McGraw-Hill/Goodreads listings). The publisher describes the method as using technical analysis, charting and sentiment to hold through fluctuations 'with wider stops'. Standard readings of each bell (from the book; descriptions could not be verified online this session - treat as low confidence): Dip Trip = buy a pullback into support in a strong uptrend; Coiled Spring = NR7/inside-bar constriction before range expansion; Finger Finder = long-wick exhaustion reversal bar; Hole-in-the-Wall = a gap down through support after a rally (short setup); Power Spike = climactic volume spike; Bear Hug = short a failing rally into resistance; 3rd Watch = breakout on the third test of a high. Chat With Traders EP 081 (Jul 21 2016) is his main recorded interview on breakouts and 'the dynamics that generate price movement'. His site hardrightedge.com could not be loaded (redirect loop).",
+   "proponents": [
+    "Alan S. Farley (hardrightedge.com; book)",
+    "Chat With Traders podcast (EP 081)"
+   ],
+   "sources": [
+    "https://www.mheducation.com/highered/mhp/product/master-swing-trader-tools-techniques-profit-outstanding-short-term-trading-opportunities.html",
+    "https://www.goodreads.com/book/show/5017866",
+    "https://chatwithtraders.com/video/swing-trading-breakouts-and-dynamics-of-price-movement-alan-farley-interview"
+   ],
+   "popularity": "niche",
+   "confidence": "low"
+  },
+  {
+   "name": "Thomas Bulkowski chart-pattern statistics (thepatternsite.com / Encyclopedia of Chart Patterns 3rd ed.)",
+   "description": "Reference statistics practitioners cite. Cup-with-handle (page updated 10/05/2026; 300 patterns from 1990 to March 2024 reviewed, 10 examples added Jul 25 2025): performance rank 3 of 39, average bull-market rise 54% measured as 'perfect trades' from breakout to ultimate high (913 trades), break-even failure rate 5%, throwback 62%, measure-rule target hit 61%; cup 7-65 weeks, handle >=1 week in the upper half; stop at the handle low; 'short handles (under 22 days median)' do better. High and tight flag (updated 8/26/2020): rank 30 of 39, average rise 39%, failure 15%, throwback 67%, 1,028 trades; requires price to rise >=90% in <=2 months; 'only buy when price closes above the highest peak in the chart pattern'. Performance ranking of bull-market upward breakouts (8/24/2020): 1 bump-and-run reversal bottom, 2 rounding top, 3 cup with handle, 4 rectangle top, 5 double bottom Eve&Eve, 6 three rising valleys, 7 rounding bottom (best failure rate), ... 30 high-tight flag. Short-horizon study (9/20/21, 30,000+ samples, 1/2/3/6-month post-breakout moves): HTF best at 22%/21%/21%, Eve&Eve double bottom 9/12/13%, cup-with-handle excluded from that top 10 - the site itself flags these as 'outdated'. 'Study of studies' (9/17/2020): patterns with throwbacks perform worse 97% of the time (pullbacks 91%); breakout-day gaps help 68% (up) / 85% (down); tall patterns outperform 89% (up) / 100% (down); wide patterns 91%/85%; heavy breakout volume helps 79% (up) / 67% (down); busted patterns outperform 97%/94%; 55% of upward breakouts move 20%+.",
+   "proponents": [
+    "Thomas Bulkowski (thepatternsite.com; Encyclopedia of Chart Patterns, Wiley)"
+   ],
+   "sources": [
+    "https://thepatternsite.com/cup.html",
+    "https://thepatternsite.com/htf.html",
+    "https://thepatternsite.com/id75.html",
+    "https://www.thepatternsite.com/BestPatterns.html",
+    "https://www.thepatternsite.com/studystudy.html",
+    "https://www.thepatternsite.com/rank.html"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "DeMark TD Sequential / TD Combo (Tom DeMark; Jason Perl, 'DeMark Indicators', 2008)",
+   "description": "TD Setup: nine consecutive closes each higher (sell setup) or lower (buy setup) than the close four bars earlier; a setup is 'perfected' when the high of bar 8 or 9 exceeds the highs of bars 6 and 7 (mirror for buys); TDST = the extreme of the setup, used as the trend-change level. TD Countdown: beginning with/after setup bar 9, count closes >= the high two bars earlier (sell) or <= the low two bars earlier (buy) until thirteen - counts need not be consecutive, interrupted bars are simply not counted; buy countdown bar 13's low must be <= the close of countdown bar 8. Practitioners use completed 9s as short-term exhaustion/pullback signals and 13s as higher-conviction reversal zones, with TDST breaks as invalidation; MQL5/NexusFi/OxfordStrat reproductions encode these exact comparisons. No peer-reviewed performance statistics located; DeMark indicators are distributed via Bloomberg/DeMark Analytics.",
+   "proponents": [
+    "Tom DeMark (DeMark Analytics)",
+    "Jason Perl (DeMark Indicators, Bloomberg Press)",
+    "MQL5 blog posts 'TOM DEMARK - TD SEQUENTIAL - TD COMBO'",
+    "NexusFi indicator write-up",
+    "oxfordstrat.com"
+   ],
+   "sources": [
+    "https://www.mql5.com/en/blogs/post/748846",
+    "https://www.mql5.com/en/blogs/post/746570",
+    "https://nexusfi.com/a/indicators/td-sequential-demark-indicators",
+    "https://oxfordstrat.com/?p=9037",
+    "https://www.perlego.com/book/1007299/demark-indicators-pdf"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Van Tharp position sizing: R-multiples, expectancy, percent-risk model, SQN",
+   "description": "Vocabulary used by nearly every swing trader above. 1R = initial risk per trade (entry minus stop, times shares); every result is expressed as an R-multiple; expectancy = average R per trade and 'can only be calculated by taking into account both winning percentage and R-multiple'; the percent-risk ('CPR') model from Trade Your Way to Financial Freedom: decide the cash at risk as a fixed % of equity (commonly ~1%), then position size = cash at risk / risk per share; System Quality Number (SQN) = (mean R / standard deviation of R) scaled by the square root of trade count - 'the better the SQN, the easier it is to use various position sizing strategies to meet one's objectives' (The Definitive Guide to Position Sizing Strategies). Tharp's thesis: position sizing, not entries, determines whether you meet objectives. Van Tharp died in 2022; the Van Tharp Institute still publishes the free excerpt 'The Importance of Position Sizing Strategies'. Detailed formula pages were not retrievable this session; concepts confirmed via search summaries and NexusFi discussion.",
+   "proponents": [
+    "Van K. Tharp / Van Tharp Institute (vantharpinstitute.com)",
+    "NexusFi 'trading metrics, journals, record keeping' thread",
+    "TradingView 'SQN' script authors"
+   ],
+   "sources": [
+    "https://www.vantharpinstitute.com/",
+    "https://nexusfi.com/psychology-money-management/4884-trading-metrics-journals-record-keeping-2.html",
+    "https://www.tradingview.com/script/vTaMXYEn-SQN"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Stan Weinstein Stage Analysis (Secrets for Profiting in Bull and Bear Markets, 1988)",
+   "description": "Four stages on weekly charts with a 30-week MA: Stage 1 basing, Stage 2 advancing (buy zone), Stage 3 topping, Stage 4 declining. Stage 2 entry (TraderLion guide; MQL5 implementation): weekly close above the Stage 1 resistance on volume 'at least twice the recent average' (some encode >=1.5x the 20-week median), 30-week MA flattening then rising (one implementation uses a normalized slope >+0.35%/week), relative strength vs the market turning up; pullbacks to the rising 30-week MA are buys; the trend is intact as long as price does not close materially below the 30-week MA on heavy volume; exit/short on Stage 3->4 transitions. stageanalysis.net 'Breakout Quality Checklist' (Oct 1 2019) - weekly: price above a rising 30-week MA, 10-week MA rising, above the last significant swing high, volatility contraction in the base, breakout-week volume 'at least two times the four week average', relative performance above its 52-week zero line; daily: 50-day MA above 150-day and rising, strong close near the high, 'at least three times the daily average volume on the breakout day'; monthly: above the 30-month MA and at new 12-month highs. MQL5 'Automating Classic Market Methods Part 3' (Jul 6 2026, Tola Moses Hector) codes a 150-day MA slope test, 1.8x volume, RSI>=50, 1% risk and 3R targets, expecting '35 to 45 percent' win rate. stageanalysis.net still publishes weekend videos (e.g. Mar 15 2026) counting Stage 2 breakout and Stage 4 breakdown attempts across sectors.",
+   "proponents": [
+    "Stan Weinstein (book; Global Trend Alert)",
+    "stageanalysis.net (weekend videos, checklist)",
+    "TraderLion 'Complete Guide to Stage Analysis'",
+    "Tola Moses Hector (MQL5 article)"
+   ],
+   "sources": [
+    "https://traderlion.com/trading-strategies/stage-analysis/",
+    "https://stageanalysis.net/blog/4372/stage-analysis-breakout-quality-checklist",
+    "https://www.mql5.com/en/articles/22746",
+    "https://www.stageanalysis.net/blog/1373123/stage-analysis-weekend-video-15-march-2026"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Jesse Stine 'Insider Buy Superstocks' (2013)",
+   "description": "Fundamental screen: 'simple and impressive blockbuster earnings release headlines', sequential revenue and earnings improvement, easy comparisons, sustainable earnings with annualized P/E below 10, high operating leverage/rising margins, low float, a 'super theme' (sector), insider buying, low debt; price typically under $15. Technical traits (8 listed, at least 5 required, per @bigjsbach thread summarizing the book): breakout from a strong extended base; strong breakout above the 30-week WMA ('90% of stocks oscillated around' it); volume expansion; 'high angle of attack' (>=45 degrees); low price with room for multi-hundred-percent moves; clean orderly chart without news-driven volatility; prior momentum history; respect for the 'Magic Line' - the 10-week MA, which 'often acts as a support line where you can add to your position'. Sell when price moves far above/away from the 30-week MA or on climactic volume; 'let your winners run'; uses only weekly/monthly charts. Claim: turned $46,000 into $6.8 million in 28 months (~147x), unaudited (Financial Wisdom TV page updated Dec 7 2025). TradingView 'Superstock 10/30 WMA Band' scripts encode the magic-line/30-WMA structure. Stine's own site did not resolve and no 2025-26 commentary from him was retrievable.",
+   "proponents": [
+    "Jesse C. Stine (author)",
+    "@bigjsbach (X thread via threadreaderapp)",
+    "Financial Wisdom TV (YouTube/blog summary)",
+    "TradingView 'Superstock 10-30 WMA Band' script"
+   ],
+   "sources": [
+    "https://threadreaderapp.com/thread/1028428610275819520.html",
+    "https://www.financialwisdomtv.com/post/insider-buy-superstocks-by-jesse-stine",
+    "https://www.tradingview.com/chart/AOI/Wl6SZ9WZ-Is-Alliance-One-a-Jesse-C-Stine-SuperStock",
+    "https://www.tradingview.com/script/u0adR7NU-Superstock-10-30-WMA-Band-script"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Dave Landry pullbacks: Trend Qualifiers, Bow Tie, Trend Knockout, 2-for-1",
+   "description": "From Dave Landry on Swing Trading (2000) and 10 Best Swing Trading Patterns & Strategies (2003), as implemented in the StockCharts ACP 'Trading Simplified by Dave Landry' plug-in: Landry Light - 'an uptrend is in effect when the low for a price bar is above the specified moving average' (downtrend when highs are below it); Proper Order - uptrend when 10-SMA > 20-EMA > 30-EMA, downtrend when reversed, yellow = chop; Bow Tie - the 10-SMA crossing through both the 20-EMA and 30-EMA (shape of a bow tie) signals a trend change, go long when 10-SMA is on top and 30-EMA on bottom; pullback setup = trend in force, correction of at least 2 bars making lower lows, then buy when price trades above the prior bar's high (TradingView 'Pullbacks Completo' reproduction adds a 21-EMA/MACD-histogram filter and a 'stretched' filter to avoid buying exhausted 'elephant bars'); Trend Knockout (TKO, StockCharts TV Nov 6 2019) - a sharp one-bar sell-off in an uptrend that 'knocks out' weak longs, then buy above that bar's high. Money management '2-for-1' as taught in his books: take half the position off when open profit equals the initial risk, move the stop to breakeven, trail the remainder (book rule; not verifiable online this session). Earlier published system: the 2/20 EMA breakout (Technical Analysis of Stocks & Commodities, Dec 1996). Still active: davelandry.com 'Market in a Minute' dated 10/06/26 ('A Good Day, But Let's Not Start Kissing Each Other Just Yet') and a Fall 2026 MetaStock conference talk 'Two Simple Setups For Trading Success'.",
+   "proponents": [
+    "Dave Landry (davelandry.com; StockCharts TV 'Trading Simplified')",
+    "StockCharts ACP plug-in documentation",
+    "TradingView 'Pullbacks Completo' and 'Bowtie' script authors"
+   ],
+   "sources": [
+    "https://help.stockcharts.com/charts-and-tools/stockchartsacp/stockchartsacp-plug-ins/trading-simplified-by-dave-landry",
+    "https://articles.stockcharts.com/article/articles-landry-2019-11-trading-the-trend-knockout-582",
+    "https://www.davelandry.com/",
+    "https://in.tradingview.com/script/bgcb3IIb-Pullbacks-Completo",
+    "https://www.traders.com/Documentation/FEEDbk_docs/1996/12/1296tradetips.html"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Oliver Kell 'Cycle of Price Action' (2020 US Investing Champion, +941%)",
+   "description": "Modern CANSLIM/Minervini descendant taught via TraderLion. Cycle stages: Reversal Extension -> Wedge Pop ('the money pattern': first push through a declining trendline as the 10/20-day EMAs turn, signals a bottom) -> EMA Crossback -> Base n' Break (sideways base then break through resistance with volume) -> Exhaustion Extension (price far above the 10-day EMA; 'blowoff') -> Wedge Drop -> downside Base n' Break into declining MAs, then a Reversal Extension restarts the cycle. Tools: 10- and 20-day EMA (primary), 50- and 200-day SMA, and 10/20-week EMAs on weekly charts; 'a few moving averages, price, and volume'. Entries: base-and-break with volume, 10-EMA crossing above 20-EMA, cup-and-handle completions; exits: heavy selling volume away from the EMAs, extension from the 10-EMA on daily and weekly ('potential exhaustion signals'), closes below both 10- and 20-day EMAs. Sizing (Financial Wisdom TV summary, updated Nov 17 2025): 8-12 positions pyramided - two best ideas 35% each, next two 20%, next four 12%, remaining four 8% (~190% exposure, i.e. ~2:1 margin). Principles from Richard Moglen's interview (Oct 15 2021): 'Volume = price, cause = effect' - heavy volume on breakouts is institutional interest, heavy volume late in a run is distribution; admit mistakes 'ASAP'.",
+   "proponents": [
+    "Oliver Kell (TraderLion 'Price Cycle Mastery'; USIC 2020)",
+    "Richard Moglen (TraderLion podcast; tradingengineered.substack.com)",
+    "Financial Wisdom TV (YouTube/blog summary)"
+   ],
+   "sources": [
+    "https://tradingengineered.substack.com/p/5-key-concepts-from-my-interview",
+    "https://www.financialwisdomtv.com/post/oliver-kell-us-investing-champion",
+    "https://traderlion.com/technical-analysis/chart-patterns/cycle-of-price-action-by-oliver-kell/",
+    "https://traderlion.com/technical-analysis/chart-patterns/wedge-pop-the-money-pattern/"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  }
+ ],
+ "things_to_recognize": [
+  "Breakout-day anatomy (Stockbee, Jan 4 2014): prior day narrow-range or down; 3-20 days of tight consolidation; breakout volume above the previous day; close at/near the high; stock not already up 3 days in a row; first or second breakout of a new uptrend is best - https://stockbee.blogspot.com/2014/01/how-to-identify-good-momentum-burst-and.html",
+  "Momentum bursts die in 3-5 days; holding beyond that usually gives the move back (Stockbee) - https://stockbee.blogspot.com/2016/07/profiting-from-momentum-bursts.html",
+  "Episodic Pivot signature (Qullamaggie, Nov 2 2021): gap >=10% on a real catalyst with the full average daily volume traded in the first 15-20 minutes; triple-digit (or at least mid/high double-digit) YoY EPS and sales growth; the stock has NOT rallied in the prior 3-6 months (neglect) - https://qullamaggie.com/how-to-master-a-setup-episodic-pivots/",
+  "Stockbee's EP 'MAGNA' test: Massive acceleration, Gap, Neglect, Acceleration in sales; plus short interest >=5 days and 3+ analyst target raises as conviction adds (TraderLion Conference Sep 19 2024) - https://retailtradersrepository.substack.com/p/pradeep-bonde-episodic-pivots",
+  "Stop discipline for gap/breakout entries: stop = low of day and never wider than 1x-1.5x ADR/ATR; if the setup needs a wider stop it is not a setup (Qullamaggie) - https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/",
+  "Flag quality: higher lows, price 'surfing' the rising 10/20-day MAs, volume drying up, first move 30-100%+ in 1-3 months; the 'strength of the first leg' predicts follow-through (Qullamaggie stream notes Oct 2019; Tikam Singh Alma Apr 5 2024) - https://tikamalma.substack.com/p/qullamaggie-swing-trading-setups",
+  "Minervini Trend Template: above rising 50/150/200-day MAs in proper order, >=30% off the 52-week low, within 25% of the 52-week high - all 8 must pass before a stock is even considered - https://prorealcode.com/prorealtime-market-screeners/trend-template-mark-minervini",
+  "VCP: each contraction roughly half the prior one (25% -> 12% -> 6% -> 3%), volume drying up into the last contraction, then a 40-50%+ volume expansion through the pivot; stop below the final contraction low (5-8%) - https://www.finermarketpoints.com/post/trade-like-stock-market-wizard-vcp-chapter",
+  "Stage 2 breakout checklist (stageanalysis.net, Oct 1 2019): breakout week volume >=2x the 4-week average and breakout day >=3x daily average; 30-week MA rising; 50-day above 150-day; relative strength above its 52-week zero line; new 12-month high - https://stageanalysis.net/blog/4372/stage-analysis-breakout-quality-checklist",
+  "Market-timing signals IBD traders watch: follow-through day on day 4-10 of a rally attempt (index +~1.2% or more on higher volume); distribution day = index -0.2% or worse on higher volume; a cluster of 5-6 in ~25 sessions puts the uptrend 'under pressure' - https://www.tradingview.com/script/mrsKTQdQ-Distribution-Follow-Through-Day-Marker",
+  "IBD 8-week hold: a 20% gain within 3 weeks of a proper breakout marks a potential big winner - hold 8 weeks through 10-week-MA pullbacks (IBD, quoted Jan 22 2025) - https://discussion.fool.com/t/ibd-8-week-hold-rule/112549",
+  "Progressive exposure: add size only as recent trades work; 'trade the largest when you are doing your best and the smallest when you are doing your worst'; scale up when right sides of bases tighten and break out (Minervini, IBD Live Aug 28 2024) - https://discussion.fool.com/t/mark-minervini-market-wisdom/108510",
+  "Bulkowski study-of-studies: patterns whose breakouts throw back perform worse 97% of the time; heavy breakout volume helps 79% of upward breakouts; tall (89%) and wide (91%) patterns outperform; busted patterns outperform 97% - https://www.thepatternsite.com/studystudy.html",
+  "Cup-with-handle reference stats: avg rise 54%, 5% failure rate, 62% throwback rate, short handles (<22 days) do best; high-tight flag requires a 90%+ rise in <=2 months and should only be bought on a close above the pattern high (Bulkowski) - https://thepatternsite.com/cup.html and https://thepatternsite.com/htf.html",
+  "Holy Grail trigger: ADX(14) above 30 and rising, first pullback that touches the 20-EMA, buy stop over that bar's high (Raschke/Connors) - https://investinglive.com/Education/!/how-to-trade-by-holy-grail-strategy-20210329",
+  "Turtle Soup trigger: a new 20-day low where the previous 20-day low is >=4 days old, then price reclaims that prior low - the failed breakout is the signal, not the breakout (Street Smarts) - https://www.luxalgo.com/library/concept/turtle-soup/",
+  "Raschke 80-20: open in the bottom 20% of the range and close in the top 80% implies next-morning follow-through; never average a loser; exit a winner that gives back 20% from its peak (Jun 5 2026 summary) - https://www.antoinebuteau.com/lessons-from-linda-bradford-raschke/",
+  "Mean-reversion entry: RSI(2) < 5-10 with price above the 200-day SMA, exit on a close above the 5-day SMA - still ~71-75% win rate on SPX/NDX 2016-2026 but only +18-27% total vs +255% buy-and-hold, i.e. a thin edge (backtrex) - https://backtrex.com/en/backtests/connors-rsi-2-sp-500",
+  "Anchored VWAP 'pinch': AVWAPs from a major high and a major low converging with price trapped between them - expect expansion in the direction that breaks and holds (Shannon concept via LuxAlgo) - https://www.luxalgo.com/library/concept/vwap-pinch/",
+  "AVWAP regime read: price above a rising year-to-date/major-low AVWAP = buy pullbacks to rising weekly/monthly anchors; a decisive close below the most recent anchor is the 'point of ruin' (Shannon framework as reconstructed) - https://www.trade-ideas.com/features/ti-avwap/",
+  "Extension from the 10-day EMA on both daily and weekly charts is Kell's exhaustion tell; heavy volume late in a run is distribution, heavy volume on a breakout is accumulation (Oct 15 2021 interview) - https://tradingengineered.substack.com/p/5-key-concepts-from-my-interview",
+  "Superstock tells (Stine): breakout above the 30-week MA on massive volume, 'high angle of attack' (>=45 degrees), clean orderly chart, price respecting the 10-week 'magic line' where adds are made - https://threadreaderapp.com/thread/1028428610275819520.html",
+  "Landry trend qualifier: 10-SMA > 20-EMA > 30-EMA ('proper order'); a Bow Tie crossover of all three marks a trend change; buy pullbacks only when the stock trades back above the prior bar's high - https://help.stockcharts.com/charts-and-tools/stockchartsacp/stockchartsacp-plug-ins/trading-simplified-by-dave-landry",
+  "Weekly trend-following filter (Radge): only buy 20-week highs with ROC >=30% while the index is above its 10-week MA; tighten trailing stops from 40% to 10% when the index drops below it - https://usethinkscript.com/threads/weekend-trend-trader-by-nick-radge-strategy-for-thinkorswim.669/",
+  "TD Sequential counts: a completed 9-bar setup = short-term exhaustion/pullback risk; a completed 13-bar countdown = higher-conviction reversal zone; TDST level = invalidation - https://nexusfi.com/a/indicators/td-sequential-demark-indicators",
+  "Volatility-shock behavior (Grimes, Oct 5 2026, ES 2010-Sep 2026): after a day with true range >2.5x ATR20, the next five sessions average 1.71x ATR20 but only 0.6x the shock bar - calmer but still elevated; down-closes add range to the next day - https://adamhgrimes.com/volatility-shocks-and-what-follows/",
+  "Alvarez '30% selloff' signal: when the S&P first closes below its 200-day MA after 6+ months above it and a large share of stocks are 30%+ off highs, forward 3/6/12-month returns have averaged ~7.5%/9.2%/15.8% (Russell 3000, 17 cases since 1991; small sample) - https://alvarezquanttrading.com/blog/the-30-selloff-signal-what-history-tells-us-about-market-recoveries/",
+  "V-recovery regime tell (Kullamagi, Jul 1 2020): after a crash, when the Nasdaq rides the 10/20 SMA with pullbacks limited to 5-8%, manage leaders on those MAs rather than on macro opinion - https://qullamaggie.com/nasdaq-comparison-late-90s-vs-today/",
+  "Breadth filter practitioners use for EPs/breakouts: QQQ 10-EMA above 20-EMA, and Stockbee's Market Monitor requiring breadth (Wilshire 5000 universe) to expand, not just price - https://www.financialwisdomtv.com/post/the-episodic-pivot-strategy-qullamaggie-s-high-momentum-setup-explained"
+ ],
+ "modern_context": [
+  "Apr 2 2025 'Liberation Day' tariffs: S&P 500 fell >10% within days, reciprocal tariffs were paused ~Apr 9 producing the largest one-day gain since 2008, and a new rally from Apr 22 recovered most losses 'led by retail investors who seemed to embrace the buy the dip mentality' (Empower April 2025 recap; ETF.com) - https://www.empower.com/node/12876",
+  "Mar 17 2025 - Cesar Alvarez published 'The 30% Selloff Signal' arguing that episodes where a large share of stocks are 30%+ below highs have historically preceded above-average 3-12 month returns - https://alvarezquanttrading.com/blog/the-30-selloff-signal-what-history-tells-us-about-market-recoveries/",
+  "Feb 25 2025 - Adam Grimes on MoneyLife: the market 'just doesn't look right or feel right', expect a range-bound 'chop and flop' year, cut back on aggressive trading, buy declines - https://moneylifeshow.libsyn.com/marketlifes-grimes-technicals-do-not-look-right-for-the-rally-to-roll-on",
+  "Apr 28 2025 - 'Dad The Trader' (theswingtrader.substack.com, Week 17): tech +8.09% and consumer discretionary +6.58% on the week, QQQ +6.4%, SPY +4.6%, IWM +4.1%; swing ideas IAS, EXE, ASPN, FLNC, SMG into MSFT/META/AMZN/AAPL earnings - https://theswingtrader.substack.com/p/your-weekly-guide-to-swing-trading-b5e",
+  "May 31 2025 - TrendSpider market update (Mike Toney-Hoffman): SPY 589.39, QQQ 519.11, IWM 205.07 still below its 200-day; cup-and-handle breakouts (PLTR +9% on the week) and earnings momentum working; 'bearish MACD curl and a lower high suggest momentum is fading'; headline-driven tariff volatility - https://trendspider.com/blog/market-update-into-june-2nd-2025/",
+  "Jun 18 2025 - Tikam Singh Alma published a 1,227-sample study of Stockbee 4% momentum bursts (S&P 500 + NIFTY750, 2020-Jun 2025): breakout-day volume ~1.93x, best preceded by inside bars/dojis, Three White Soldiers and Dragonfly Doji highest follow-through - https://tikamalma.substack.com/p/4-momentum-burst-detailed-research",
+  "Jul 30 2025 - 2025 US Investing Championship first-half results (567 competitors): J Law +184.3% ($1M+ stocks), Bob Doviak +1,110.1% (sub-$1M enhanced growth, 'in the process of setting a new record'), Y. Chiu +299.7% (sub-$1M stocks) - https://www.webull.com/news/13249512026235904",
+  "Momentum factor reversal late 2025: after leading in 2024 and early 2025 (hyperscalers -> memory chip makers), momentum returned just 0.77% in Q4 2025 vs value +8.34%; value was the top global factor for 2025 (+32.58%) as leadership broadened (TMX, Mar 12 2026); J.P. Morgan AM flagged momentum-factor volatility at six-year highs and an elevated 'momentum fragility' crash risk; a Mar 2025 example was NVDA -15% on DeepSeek concerns - https://money.tmx.com/content-hub/value-momentum-content-hub/why-value-outpaced-momentum-2025-top-factor/ and https://am.jpmorgan.com/nl/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/factor/",
+  "Dec 15-16 2025 - Nasdaq filed with the SEC for 23-hour, 5-day trading (day session 4am-8pm ET, overnight 9pm-4am, Sunday 9pm to Friday 8pm) targeting a late-2026 launch; NYSE filed for 22-hour weekday trading and Cboe for 24/5; DTCC 24/5 clearing planned for late 2026; banks warn of thin overnight liquidity - https://www.itiger.com/news/1193183844 and https://www.business-standard.com/amp/world-news/nasdaq-joins-exchanges-seeking-to-offer-24-hour-equities-trading-125030701173_1.html",
+  "Jan 26 2026 - a 'Stockbee Screener - Momentum Burst & Episodic Pivot Scanner' was published on TradingView/LuxAlgo, one of several 2025-26 scripts (Trend Template, IBD Market School, AVWAP pinch handoff) showing the classic rule sets being codified - https://www.luxalgo.com/library/indicator/aUbyMkHj-stockbee-screener-momentum-burst-episodic-pivot-scanner/",
+  "Feb 26 2026 - 2025 US Investing Championship final (579 competitors): Law Wai-Sum ('J Law', Hong Kong) won the $1M+ stock division for the second year at +252.3% after +353.9% in 2024, a two-year record of +1,499% vs ~47% for the S&P 500; he credits 'reducing trade frequency to minimize mistakes and costs' and adapting tactics as 'a strategy that performs in one environment may underperform in another'; Christian Flanders +167.5% and Clement Ang +140.4% placed 2nd/3rd (per search summary) - https://www.bolsamania.com/nota-de-prensa/mercados/j-law-sets-two-year-record-with-1499-return-in-us-investing-championship--21854364.html",
+  "Low confidence (single search snippet, press release blocked): Tito Adhikary reportedly set a USIC record of +1,573.5% in nine months - https://www.businesswire.com/news/home/20260202090143/en/",
+  "Mar 15 2026 - stageanalysis.net weekend video continues weekly counts of Stage 2 breakout vs Stage 4 breakdown attempts and sector bell curves for US indexes (members content) - https://www.stageanalysis.net/blog/1373123/stage-analysis-weekend-video-15-march-2026",
+  "Apr 14 2026 - SEC approved FINRA's rule change abolishing the Pattern Day Trader designation and the $25,000 minimum; effective Jun 4 2026 with firms allowed until Oct 20 2027 to implement; margin accounts above $2,000 get broker-set intraday margin buying power; repeated intraday margin shortfalls can trigger 90-day freezes; cash accounts unaffected (SoFi Apr 29 2026; r/Daytrading thread Apr 9 2026 anticipating it) - https://www.sofi.com/learn/content/pattern-day-trading-rules/ and https://reddit.sentinel-team.org/posts/1sevbzc/snapshots/2026-04-09T15%3A01%3A31.80847Z",
+  "May 6 2026 - Alvarez: one of his strategies had its worst drawdown in 2026; proposed 'fixes' improved results only by avoiding two trades (curve-fitting), so he shelves changes for 2-3 months before deciding - https://alvarezquanttrading.com/blog/bad-month-for-your-strategy-should-you-change-it/",
+  "May 12 2026 - Alvarez 'The 100% Club: 2000 Tech vs 2026 AI': 20% of Nasdaq-100 stocks had doubled over the prior year vs 53% in March 2000; market is 'over-valued by various metrics' and concentrated, yet price action is far less extreme than 2000 - 'We still have a lot more room to the upside... $SPX 10,000?' - https://alvarezquanttrading.com/blog/the-100-club-2000-tech-vs-2026-ai/",
+  "2026 bull market character per Minervini (tradersunion.com summaries of his posts; page blocked): 'rotation defines bull market in 2026 as stock pickers gain'; frequent leadership shifts reduce index volatility but make selection critical; 'fresh distribution' in major indexes raises odds of near-term pressure/consolidation - https://tradersunion.com/news/market-voices/show/2549155-bull-market-rotation-2026/",
+  "Jul 6 2026 - MQL5 published an automated Weinstein Stage Analysis EA (150-day MA slope, 1.8x volume, RSI>=50, 1% risk, 3R), part of a 2026 'Automating Classic Market Methods' series - https://www.mql5.com/en/articles/22746",
+  "Aug 5 2026 - Continuum Economics: semiconductor stocks suffered 'a major correction' after a sharp rally in the first five months of 2026; hyperscalers mixed; S&P 500 year-end forecast kept at 7,500 with 'further intermittent corrections' expected as AI valuations stretch (Anthropic run-rate cited rising from $9B Dec 2025 to $47B May 2026) - https://continuumeconomics.com/a/0a0d0277/ai-equities-correctionconsolidation",
+  "Aug 19 2026 - Alvarez 'The Power of Strategy Diversification': three low-correlation systems (SPY/TLT timing, mean reversion, momentum) combined to ~24% annual return with 23% max drawdown vs 54% for the worst single system - https://alvarezquanttrading.com/blog/the-power-of-strategy-diversification/",
+  "Late Aug/Sep 2026 - commentary warned of September seasonality (S&P down in 56% of Septembers since 1928) with the index up ~40% from the April 2025 tariff low, valuations 'approaching their highest since the dot-com bubble' and record concentration in AI leaders; some strategists called for a 20% second-half correction (search summary; medium confidence) - https://seekingalpha.com/article/4917855-sp500-bubble-burst-is-in-progress",
+  "Sep 17 2026 - Stockbee announced a November 2026 bootcamp covering Episodic Pivots, 'EP9 million (catalyst-, story- and liquidity-based)', and 'Start of Swing based on momentum burst' - https://stockbee.blogspot.com/",
+  "Sep 24 and Oct 5 2026 - Grimes posted 'Volatility Has a Memory' and 'Volatility Shocks and What Follows' (ES data through Sep 2026): after extreme-range days volatility stays elevated but shrinks; do not chase extremes - https://adamhgrimes.com/",
+  "Sep 30 2026 - alphatrends.net scheduled its next educational seminar; Brian Shannon continues weekly free market-recap videos (equities, energy, Bitcoin) under 'Only Price Pays' - https://alphatrends.net/",
+  "Oct 6 2026 - Dave Landry 'Market In A Minute': 'A Good Day, But Let's Not Start Kissing Each Other Just Yet' (title only; content not fetched) - https://www.davelandry.com/",
+  "Community scale: r/swingtrading has ~182,000 members, +45,000 (+32.8%) over the past year; most-discussed books are Minervini, Pezim and Anna Coulling; 'Struggling With' is the largest discussion cluster (gummysearch profile, 2026) - https://gummysearch.com/r/swingtrading",
+  "No verified 2025-2026 statements from Kullamagi himself were retrievable (his site is undated, copyright 2026; he streams on Twitch and states 'I am NOT running any paid service'); Qullamaggie strategy content in 2025-26 comes from third parties (Financial Wisdom TV, TradingView study posts 'June 24 Qullamaggie Breakout and Episodic Pivot') - https://qullamaggie.com/"
+ ],
+ "warnings": [
+  "FURU / paid-group scams: 'A FURU, or fake guru, is someone touting the next great stock investment, while selling subscribers an alert service'; tell-tale signs are paid text/Discord/Telegram alert services and hot tips (valuethemarkets.com). r/investing's pinned AutoModerator 'Investing and Trading Scam Reminder' (approx. Apr 2025, snapshot Jan 9 2026) warns that 'offers to DM should be viewed as suspicious', that 'legitimate investment advisors do not use WhatsApp, Telegram, Discord' (SEC Rule 17a-4 / FINRA 3110), that scammers impersonate Discord moderators, and to check posting histories for sudden single-stock focus; one commenter reported losing $49,000 in a pump-and-dump - https://www.valuethemarkets.com/analysis/what-is-a-furu and https://reddit.sentinel-team.org/posts/1q13q10/snapshots/2026-01-09T15%3A51%3A08.367904Z",
+  "Impersonation of well-known traders: Kullamagi's site states 'I am NOT running any paid service' and 'I don't sell anything' - any paid 'Qullamaggie' room/signal service is not him - https://qullamaggie.com/",
+  "Kullamagi's own cautions: avoid ultra-thin stocks pumped in chat rooms ('volume unreliable'); large-cap overnight gaps of 30-40% 'typically cannot be held'; EP 'failure rate is high' and mastery takes 3-4 earnings seasons; never more than 30% of the account overnight in one name - https://retailtradersrepository.substack.com/p/kristjan-kullamagi-qullamaggie-stream-092",
+  "Stockbee's momentum-burst approach demands 200-1000+ trades per year and the 'ability to ruthlessly cut losses if a trade does not work immediately'; holding past 3-5 days typically gives back the gain - newcomers underestimate the workload and slippage - https://stockbee.blogspot.com/2016/07/profiting-from-momentum-bursts.html",
+  "Third-party 'research' can be internally inconsistent: the June 2025 momentum-burst study claims 82.31% of breakouts gained >=10% in 3-5 days yet reports an average gain under 1% per trade; the finermarketpoints VCP summary's '40% higher initial success rates' line is unsupported marketing - treat such numbers as low confidence - https://tikamalma.substack.com/p/4-momentum-burst-detailed-research",
+  "Mean reversion edges are thin and decaying on indexes: RSI-2 on SPX 2016-2026 returned 1.7%/yr vs 13.5%/yr for buy-and-hold and lost money on EUR/USD; Turtle Soup is 'regime-dependent... poor in persistent trends'; Alvarez warns index results 'do not necessarily translate to stocks' - https://backtrex.com/en/backtests/connors-rsi-2-sp-500 and https://www.luxalgo.com/library/concept/turtle-soup/",
+  "Do not rewrite a system after one bad month: Alvarez found his 2026 'fixes' were driven by 'emotions that come with losing money' and amounted to curve-fitting two trades; he shelves changes for 2-3 months - https://alvarezquanttrading.com/blog/bad-month-for-your-strategy-should-you-change-it/",
+  "Bulkowski's statistics measure 'perfect trades' (breakout to ultimate high), many tables are explicitly flagged 'outdated' (2020-2021), and rankings change with methodology (cup-with-handle ranks 3 of 39 on one measure but is excluded from the 1-3 month top-10 on another) - https://www.thepatternsite.com/BestPatterns.html",
+  "Weekend Trend Trader re-tests show long flat periods (2001-2007 drawdown) and one tester 'did not make money' with the published 40%/10% stops; the 25.3% CAGR figure for a Russell-1000 variant is unverified - https://usethinkscript.com/threads/weekend-trend-trader-by-nick-radge-strategy-for-thinkorswim.669/",
+  "Championship returns are not a template: USIC accounts are small, concentrated and often leveraged (Kell's pyramid runs ~190% exposure; enhanced-growth divisions allow futures/options); Minervini's own site publishes no returns, and the 2021 trade reconstruction admits 'no additional info regarding the exact entry, exits, or position sizes' - https://www.financialwisdomtv.com/post/oliver-kell-us-investing-champion and https://wallstreettrader.substack.com/p/how-mark-minervini-won-us-investing",
+  "Momentum crash risk: factor volatility hit six-year highs in 2025 with an elevated 'momentum fragility' reading (J.P. Morgan AM) and momentum reversed sharply in Q4 2025; breakout traders should expect clustered failures at leadership turns (e.g. NVDA -15% on DeepSeek, Mar 2025) - https://am.jpmorgan.com/nl/en/asset-management/institutional/insights/portfolio-insights/asset-class-views/factor/",
+  "PDT abolition is not free leverage: brokers set intraday margin, repeated intraday shortfalls can trigger 90-day freezes, losses can exceed deposits, and the change applies only to margin accounts (SoFi, Apr 29 2026) - https://www.sofi.com/learn/content/pattern-day-trading-rules/",
+  "24-hour trading (late 2026) brings thin overnight liquidity and wider spreads; major banks flagged 'reduced liquidity, increased volatility' - overnight stops and gap risk will change for swing holders - https://www.business-standard.com/amp/world-news/nasdaq-joins-exchanges-seeking-to-offer-24-hour-equities-trading-125030701173_1.html",
+  "Superstock-style low-float, sub-$15 names (Stine) and sub-$5 / <10M-float bursts (Stockbee) are the same universe that pump-and-dump promoters use; the $46k-to-$6.8M claim is unaudited - https://www.financialwisdomtv.com/post/insider-buy-superstocks-by-jesse-stine",
+  "Grimes: 'compression doesn't reliably predict big moves' and chasing volatility extremes after shock days is a losing expectation; Raschke: never average losses, never trade without a written plan - https://adamhgrimes.com/volatility-shocks-and-what-follows/ and https://www.antoinebuteau.com/lessons-from-linda-bradford-raschke/",
+  "Source-access caveat for this report: Reddit (www, old, api, redlib, safereddit, sentinel listing) blocked every fetch, Business Wire and several trader sites returned 403, and the web-search budget was exhausted mid-task, so X/YouTube evidence rests on written copies (threadreader, Substack notes, Financial Wisdom TV) rather than the original posts/videos."
+ ]
+}

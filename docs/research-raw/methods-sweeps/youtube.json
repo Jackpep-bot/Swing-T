@@ -1,0 +1,347 @@
+{
+ "summary": "YouTube-sourced workup (as of 2026-10-06) on the swing-trading educators who dominate reach and respect. By raw reach the retail giants are Rayner Teo (~2.2M subs), The Trading Channel (~2.9M, forex-oriented), Humbled Trader (~1.2M, mostly day-trading), Adam Khoo (~1.1M) and SMB Capital (~766K, prop/day-trading). The practitioner-respected swing cohort is smaller but denser: TraderLion (~170K; hosts Minervini, Kell, Soreide, Petralia, Camillo, Brandt), Qullamaggie (~94K; free stream archive), Stockbee/Pradeep Bonde (@Stockbeevideos), Brian Shannon/Alphatrends (@alphatrends), IBD (~184K; SwingTrader), Lance Breitstein (@TheOneLanceB, now explicitly teaching swing strategies as of Oct 2026) and Chat With Traders (episodes through #333, Sep 30 2026). All were verified active in 2025-2026 except Jesse Stine (book-based, no active channel) and Matt Caruso (Substack/podcast, not a YouTube channel). Methods cluster into: momentum breakouts from tight consolidations (Qullamaggie, Minervini VCP, Kell Wedge Pop/Base n' Break, Soreide High Tight Flag, Stockbee Momentum Burst), catalyst gaps (Episodic Pivot), AVWAP/multi-timeframe trend alignment (Shannon), short-hold CAN SLIM swings (IBD), EMA pullback trend-following (Rayner, Khoo), insider-buy superstocks (Stine), and mean-reversion/continuation (Breitstein). Modern context: April 2025 tariff crash and Zweig breadth thrust, Minervini's May 8 2025 index buy signal with narrow-breadth caveat, the Jan-Mar 2026 ~10% correction (Iran strikes, oil >$100, Mag7 -17%) and a May 2026 breadth thrust that one analyst flagged as a replica of the Jan 2026 pre-correction setup. Reach figures are from SponsorRadar/vidIQ snapshots; counts for Alphatrends, Stockbee, Breitstein and Minervini could not be fetched and are marked unverified.",
+ "methods": [
+  {
+   "name": "Qullamaggie Breakout (momentum consolidation breakout)",
+   "description": "Scan: stocks up the most over 1-, 3- and 6-month windows with adequate dollar volume (avoid thin names). Pattern: (1) 30-100%+ advance in 1-3 months, (2) orderly pullback with higher lows and range tightening for 2 weeks to 2 months, price 'surfing' rising 10- and 20-day MAs, (3) range-expansion breakout. Entry: buy the break of the opening-range high (1-, 5- or 60-minute candle) on the breakout day; or simply buy the daily breakout. Stop: low of day, never wider than the stock's ADR (e.g., 5% ADR means stop no wider than 5%). Exits: sell 1/3 to 1/2 after 3-5 days, move stop to breakeven, trail the rest on the 10-day MA (beginners) or 20-day MA (experienced), exit on first close below. Sizing: risk 0.25-1% of account per trade (he risked 0.5-1.5% when the account was under $1-2M), position 10-20% of account, never more than 30% in one stock overnight. He trades little or nothing in pullbacks/bear phases.",
+   "proponents": [
+    "Kristjan Kullam\u00e4gi (Qullamaggie) - YouTube @Qullamaggie (~94.3K subs per SponsorRadar), Twitch, X @qullamaggie",
+    "Trading Resource Hub (Substack) - stream notes 2023-2024",
+    "A Retail Trader's Repository (Substack) - stream reviews"
+   ],
+   "sources": [
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/",
+    "https://sponsorradar.com/channels/qullamaggie",
+    "https://tradingresourcehub.substack.com/t/qullamaggie-stream-notes",
+    "https://retailtradersrepository.substack.com/p/qullamaggie-stream-66-70-review"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Episodic Pivot (EP) - catalyst gap continuation",
+   "description": "Qullamaggie version: unexpected positive catalyst (earnings/guidance beat with mid/high double- or triple-digit EPS and revenue growth, approvals, trial data). Requirements: gap up at least 10%, big volume (ideally the stock's average daily volume in the first 15-30 minutes), and ideally the stock has NOT rallied in the prior 3-6 months (a true surprise). Entry: opening-range high (1/5/60-min). Stop: low of day, then trail on 10- or 20-day MA; for multi-month holds trail on 20- or 50-day. Sizing identical to breakouts (0.25-1% risk, 10-20% position). Examples he cites: NVDA 2016-17, FSLR 2007. Stockbee (Pradeep Bonde) teaches EP as one of his two core setups ('Catalyst-Based Setups or Episodic Pivots') with its own entry/stop/size/exit module in his bootcamp.",
+   "proponents": [
+    "Kristjan Kullam\u00e4gi (Qullamaggie) - YouTube/Twitch",
+    "Pradeep Bonde (Stockbee) - YouTube @Stockbeevideos, stockbee.blogspot.com",
+    "TradingView community studies (Jun 2024 EP/breakout study)"
+   ],
+   "sources": [
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/",
+    "https://stockbee.blogspot.com/",
+    "https://br.tradingview.com/chart/EBS/gr5vb5Ds-EBS-June-24-Qullamaggie-Breakout-and-Episodic-Pivot"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Parabolic Short (and rare Parabolic Long)",
+   "description": "Setup: stock up 50-100%+ in days/weeks (large cap) or 300-1000%+ (small cap), 3-5+ consecutive up days, 'stretched like a rubber band'. Entry: short the opening-range low, or wait for the first red 1-/5-minute candle and a failed bounce into VWAP. Stop: high of day or VWAP reclaim, tight. Target: 10- and 20-day MAs where these stocks usually bounce. Expected R-multiple 5-10x (vs 30-50x on breakouts/EPs) but higher win rate. Key rule: 'Don't be too early... let the amateur shorts get run over.' Parabolic Long: after a 50-60%+ collapse in days, buy opening-range high or first green 5-minute candle for a 50-100% bounce. Same 0.25-1% risk sizing.",
+   "proponents": [
+    "Kristjan Kullam\u00e4gi (Qullamaggie) - YouTube/Twitch"
+   ],
+   "sources": [
+    "https://qullamaggie.com/my-3-timeless-setups-that-have-made-me-tens-of-millions/"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Stockbee Momentum Burst (4% breakout, 3-5 day hold)",
+   "description": "Premise: stocks move in momentum bursts of 3-5 days gaining 8-40%; profit comes from catching the range-expansion day at the start, not chasing. Scan (from Stockbee blog, dated posts 2014-2021): a range-expansion day 'up bigger than last 5 to 10 days bars', 4%+ gain on the day, volume higher than the prior day (community rule of thumb: ~2x 5-day average), close at or near the high, preceded by 3-20 days of consolidation/contraction; low float below 25M is good, below 10M 'leads to explosive moves'. Entry: anticipation ('1 minute and 1 cent before the breakout') or on the first breakout day as it starts. Stops: 'very tight', move to breakeven quickly. Exit: in 3-5 days while still in the explosive phase, do not wait for the reversal; realistic 5-8% per trade. Frequency: 200-1,000+ trades per year, profitable 'even if 50% of your trades work'. Market timing: uses his Market Monitor breadth counts; bursts are bigger in bull markets, smaller in bear markets. Independent 2025 research (Tikam Singh Alma, 1,227 breakouts) found ~46.8% 5-day win rate and 12.8% of trades reaching 10%+.",
+   "proponents": [
+    "Pradeep Bonde (Stockbee) - YouTube @Stockbeevideos, stockbee.blogspot.com (blog active Sep 2026, Nov 2026 Las Vegas bootcamp)",
+    "Tikam Singh Alma (Substack) - Jun 18 2025 research",
+    "TraderLion Conference 2024 presentation"
+   ],
+   "sources": [
+    "https://stockbee.blogspot.com/search?q=momentum+burst",
+    "https://stockbee.blogspot.com/",
+    "https://tikamalma.substack.com/p/4-momentum-burst-detailed-research",
+    "https://retailtradersrepository.substack.com/p/pradeep-bonde-stock-examples"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Minervini VCP / SEPA",
+   "description": "Volatility Contraction Pattern: successive contractions from left to right, volume drying up in the final contraction, a visible supply/resistance line, base depth and length appropriate to the prior trend; buy the pivot as price clears the contraction on volume. Minervini: 'it's not the chart formation that works; supply and demand creates it.' Stop: always a hard stop, 'get out at single digits'. Stock must be in a confirmed uptrend (his Trend Template, above a rising 200-day), show relative strength vs the market, and fit his 'leadership profile'. Market timing: his SPY Timing Model (he issued an S&P 500 buy signal on May 8 2025 and 'went 100% into' the index) plus the percentage of stocks above their 200-day MA; a new-high index with weak participation has never, in his 40 years, escaped without at least a correction. Progressive exposure: scale up only as trades work. Position sizing not specified in the mid-2025 interview.",
+   "proponents": [
+    "Mark Minervini - X @markminervini, minervini.com (2025 and 2026 workshops), interviews on TraderLion YouTube",
+    "Michael Sincere / MarketWatch interview (mid-2025)",
+    "TraderLion YouTube (multiple 2024-2025 interviews summarized by LilysAI)"
+   ],
+   "sources": [
+    "https://michaelsincere.com/articles/my-marketwatch-interview-with-stock-market-wizard-mark-minervini",
+    "https://www.minervini.com/",
+    "https://lilys.ai/notes/it/notebooklm-20251211/perfect-vcp-trading-setup-mark-minervini"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Oliver Kell Cycle of Price Action (Wedge Pop, EMA Crossback, Base n' Break, Exhaustion Extension, Wedge Drop)",
+   "description": "Framework uses 5/10/20 EMAs and 20/50/200 SMAs. Reversal Extension: a capitulation extension below the MAs marking a bottom (a mindset signal more than a buy). Wedge Pop ('the money pattern'): first time price trades back up through the moving averages after a downside extension; signals the start of a new uptrend. EMA Crossback: pullback to and reclaim of the rising EMAs. Base n' Break: another pullback into the MAs after the crossback, then a brief pause and breakout to new highs. Exhaustion Extension: price stretched far above the MAs - sell into strength. Wedge Drop: first trade down through the MAs after an upside extension - exit/short signal. Philosophy: 'only price pays; let the price action dictate your decisions.' Kell won the 2020 USIC with +941%. Specific stop/size rules are inside TraderLion's paid Price Cycle Mastery course; public articles describe the phases but not exact stops.",
+   "proponents": [
+    "Oliver Kell - via TraderLion YouTube/courses (no large personal channel verified)",
+    "TraderLion (Richard Moglen) - 5 Key Concepts interview",
+    "chardogg74 - open-source TradingView 'Oliver Kell Master System'"
+   ],
+   "sources": [
+    "https://traderlion.com/technical-analysis/chart-patterns/wedge-pop-the-money-pattern/",
+    "https://traderlion.com/technical-analysis/chart-patterns/cycle-of-price-action-by-oliver-kell/",
+    "https://tradingengineered.substack.com/p/5-key-concepts-from-my-interview",
+    "https://id.tradingview.com/script/SmNMRIra-Oliver-Kell-Master-System/"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "High Tight Flag (Leif Soreide masterclass)",
+   "description": "Pole: ~90% minimum (100-120%+ ideal) advance in 4-8 weeks on heavy volume (O'Neil's classic: 100%+ in 8 weeks or less). Flag: shallow 10-25% pullback lasting 1-3 weeks (max ~5), holding above the 50-day MA with volume drying up. Breakout: above flag high (plus ~$0.10) on 50%+ above-average volume; acceptance back inside the flag or a deeper flag voids it. Soreide's 2025 TraderLion presentation adds: look for a rising relative-strength line into the buy point, tightening visible as declining ATR on the right side, never buy below the 200-day, use the 'spirit of the pattern' rather than textbook perfection, buy market leaders not just patterns ('pattern buying alone can lead to average performance'). Stop: hard stop immediately after buying, typically ~5% below entry or under support/flag low. Sells: take partials at 2R+ into strength, do not hold through earnings unless it is a post-earnings pullback. He grades HTF setups to decide position size. Podcast version released May 31 2026.",
+   "proponents": [
+    "Leif Soreide (2019 USIC champion, Champion Team Trading) - TraderLion YouTube 2025 conference masterclass",
+    "TraderLion Podcast",
+    "LuxAlgo library (pattern reference)"
+   ],
+   "sources": [
+    "https://sozai.app/transcript/powerful-swing-trading-setup-high-tight-flag/",
+    "https://www.luxalgo.com/library/concept/high-tight-flag.md",
+    "https://pod.wave.co/podcast/the-traderlion-podcast-8e50b654-7b23-4b2d-aca4-50a775c117e3",
+    "https://www.benzinga.com/news/earnings/22/05/27209037/exclusive-if-trading-conditions-are-unfavourable-dont-waste-time-capital-trying-to-make-something-f"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Anchored VWAP + multiple-timeframe trend alignment (Brian Shannon)",
+   "description": "Anchor VWAP to key pivots (major highs/lows, earnings gaps, news, IPO) to measure objectively 'whether buyers or sellers have the upper hand from any key pivot'. Trade only when timeframes align (longer-term trend up, intermediate pullback resolving, short-term turning up); AVWAP from the recent swing low acts as dynamic support for longs and from the swing high as resistance; stops below the AVWAP/pivot structure. His March 27 2025 MoneyShow episode is titled 'STOP Buying the Dip' and argues dip-buying is 'often a losing strategy for swing traders' - wait for the short-term trend to turn up through the AVWAP rather than catching falling prices; also covers simple vs exponential MAs and trading high-volatility environments. Member trade ideas carry explicit entry, stop and target levels, split into lower-volatility 'official ideas' and more volatile 'watch list ideas'. Books: Technical Analysis Using Multiple Timeframes (2008), Maximum Trading Gains with Anchored VWAP (2023). Alphatrends homepage shows an educational seminar scheduled Sep 30 2026 (active).",
+   "proponents": [
+    "Brian Shannon, CMT (Alphatrends) - YouTube @alphatrends (sub count not verifiable in this session), alphatrends.net, X",
+    "MoneyShow MoneyMasters Podcast (Mar 27 2025)",
+    "Bear Bull Traders (Andrew Aziz) webinar host"
+   ],
+   "sources": [
+    "https://masteremail.podbean.com/e/stop-buying-the-dip-start-doing-this-instead-w-brian-shannon",
+    "https://alphatrends.net/",
+    "https://members.alphatrends.net/new-users/",
+    "https://en.wikipedia.org/wiki/Brian_Shannon"
+   ],
+   "popularity": "very common",
+   "confidence": "medium"
+  },
+  {
+   "name": "IBD SwingTrader (CAN SLIM applied to 5-10 day swings)",
+   "description": "Applies CAN SLIM stock selection (leaders with strong EPS/sales growth, high RS, institutional sponsorship) to short holds: trades last ~2-6 days, sometimes up to 2 weeks (IBD targets 5-10 days). Buy at the pivot/buy point from a proper base or pullback to the 21-day line; profit target ~10%; stop ~3% max loss (versus 7-8% for position trades). Mike Webster ('Webby') heads the service and posts a weekly 'Swing Trader Status Update' video; market exposure is throttled by IBD's follow-through-day / distribution-day market read. IBD's YouTube channel ran a SwingTrader sponsorship as recently as Dec 9 2025.",
+   "proponents": [
+    "Investor's Business Daily - YouTube (184K subs, 14.3K avg views, Sep 29 2026), IBD Live, Mike Webster",
+    "ValueWalk review of SwingTrader"
+   ],
+   "sources": [
+    "https://sponsorradar.com/channels/investorsbusinessdaily",
+    "https://discussion.fool.com/t/ibd-swing-trading/109412",
+    "https://www.valuewalk.com/investors-business-daily-swingtrader/",
+    "https://discussion.fool.com/t/ibd-technical-talk-with-mike-webster/104454"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Rayner Teo trend-following pullback (20/50 EMA zone)",
+   "description": "Identify trending charts where price has 'respected the EMA zone (20 and 50 EMA) at least twice'; enter on the third pullback into the zone. Stop: 2x ATR at entry (typically 5-6% risk on the stock). Exit: trail until price closes beyond the 50 EMA - no fixed targets. Sizing: risk no more than 1% of capital per trade. Timeframes: daily or 4-hour. Philosophy: 'buy high, sell higher', diversify across markets so some trends are always running. Also publishes 'first pullback' and general pullback videos. Channel: ~2.2M subs, 26.7K avg views (SponsorRadar Jun 23 2026); an aggregator figure of 18.3M is wrong.",
+   "proponents": [
+    "Rayner Teo (TradingwithRayner) - YouTube @tradingwithrayner",
+    "Financial Wisdom TV (Dec 7 2024 review of his course)"
+   ],
+   "sources": [
+    "https://www.financialwisdomtv.com/post/make-your-money-work-for-you-trend-following-by-rayner-teo",
+    "https://sponsorradar.com/channels/tradingwithrayner",
+    "https://socialcounts.org/youtube-live-subscriber-count/UCFSn-h8wTnhpKJMteN76Abg"
+   ],
+   "popularity": "very common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Adam Khoo Trend Retracement System (buy-the-dip in uptrends)",
+   "description": "Khoo's 'signature swing trading strategy' in Piranha Profits Level 1 (Profit Snapper): rules-based entries on retracements within an established uptrend with 'optimal points to buy the dip', entry/exit signals and scaling into positions; curriculum emphasizes trend identification, support/resistance, price patterns, volume, risk management and 'disciplined process'. Exact MA/stop parameters are inside the paid course and were not verifiable from public pages. Channel ~1.1M subs, 58.7K avg views (SponsorRadar Sep 14 2026); 34,000+ students across 160 countries.",
+   "proponents": [
+    "Adam Khoo (Piranha Profits) - YouTube @AdamKhoo",
+    "QuantamentalTrader (Substack) - Jul 19 2025 course review"
+   ],
+   "sources": [
+    "https://quantamentaltrader.substack.com/p/adam-khoos-piranha-profits-course",
+    "https://sponsorradar.com/channels/adamkhoo",
+    "https://en.wikipedia.org/wiki/Adam_Khoo"
+   ],
+   "popularity": "common",
+   "confidence": "low"
+  },
+  {
+   "name": "Jesse Stine Insider-Buy Superstocks",
+   "description": "Weekly-chart method: price under ~$15, a long multi-week base, breakout above the 30-week MA on volume far above prior weeks; after breakout the 10-week MA often acts as support for adds; 'staircase' consolidations where volume dries up are the low-risk add points. Fundamentals: insider buying on Form 4s during the advance, accelerating earnings, low PE (he cites ~10), low debt, small share count. Stop: just below the prior week's close. Exit: when price gets 'way too far' above the 30-week MA; tune out media ('when you hear a trend on CNBC it's time to sell'). Turned $46K into $6.8M in 28 months (2003-2005). No active YouTube channel found; method circulates through the book and summary channels (Financial Wisdom TV summary updated Dec 7 2025).",
+   "proponents": [
+    "Jesse Stine (author, Insider Buy Superstocks)",
+    "Financial Wisdom TV (YouTube/blog summary)",
+    "MicroCapClub book review"
+   ],
+   "sources": [
+    "https://www.financialwisdomtv.com/post/insider-buy-superstocks-by-jesse-stine",
+    "https://microcapclub.com/book-review-insider-buy-superstocks-by-jesse-stine/"
+   ],
+   "popularity": "niche",
+   "confidence": "medium"
+  },
+  {
+   "name": "Lance Breitstein swing strategies: Mean Reversion + Continuation",
+   "description": "On Oct 6 2026 Breitstein published 'The 2 Swing Trading Strategies That Made me Millions', naming them 'My Mean Reversion Strategy' and 'My Continuation Strategy' and saying he moved from intensive intraday trading to swing trading to cut screen time while still capturing outsized opportunities (he cites single trades over $10M). Broader framework from his site/course: build a 'playbook' of repeatable setups ('Ace Ace' hands), grade each trade, daily report cards/journaling, strict risk, and 'skill creates opportunity and capital just amplifies it' (Oct 4 2026 episode). Companion Sep 27 2026 episode gives his 4 options-selling rules. Exact entry/stop parameters are not in public descriptions.",
+   "proponents": [
+    "Lance Breitstein - YouTube @TheOneLanceB, X @TheOneLanceB, TheOneLanceB Trading Podcast (profiled in Market Wizards: The Next Generation, Schwager & Coyle)",
+    "SMB Capital (mentors there)"
+   ],
+   "sources": [
+    "https://castbox.fm/channel/TheOneLanceB-Trading-Podcast-id7145293",
+    "https://theonelanceb.com/",
+    "https://www.smbtraining.com/blog/the-formula-for-how-to-become-a-7-figure-trader-chat-with-traders-podcast"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Volatility contraction + earnings gap + mean reversion (Matt Petralia via TraderLion)",
+   "description": "TraderLion 'Lessons From a Veteran Swing Trader' (Oct 10 2022, still widely recommended): setups are volatility contractions and earnings gaps, plus selective mean-reversion trades; multiple-timeframe analysis; progressive exposure (scale in as trades work), 'know your exit' before entry, explicit selling rules; Moglen singles out the risk-management section. TraderLion's free 'Swing Trading School' series is the on-ramp recommended by community curators.",
+   "proponents": [
+    "Matt Petralia - TraderLion YouTube interview",
+    "Richard Moglen / TraderLion (Trading Engineered Substack)"
+   ],
+   "sources": [
+    "https://tradingengineered.substack.com/p/lessons-from-a-veteran-swing-trader",
+    "https://kj-gets-better.notion.site/Videos-Interviews-0f25743976ad43b8a0f4e2a567617a61"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Growth swing trading with fundamentals + group rotation (Matt Caruso)",
+   "description": "Combines fundamentals and the macro 'big picture' with short-term technical tactics and proprietary indicators (sold as a TrendSpider 'Caruso Insights' collection). In his 2022 TraderLion interview he traded cyclical leaders (oil/gas, fertilizers, miners - BRCC, MOS, ARCH) while tech lagged, i.e., follow group strength. 346% in the 2020 USIC; now publishes Caruso Insights (Substack) and co-hosts Markets Unscripted with Jason Shapiro; a Dec 2025 TraderLion episode 'The #1 Real Edge in Trading' features 'Matt and Jason' on growth swing trading vs contrarian positioning and asymmetric risk-reward (identity as Caruso/Shapiro is likely but not confirmed).",
+   "proponents": [
+    "Matt Caruso (Caruso Insights) - Substack, Markets Unscripted podcast, TraderLion interviews",
+    "Jason Shapiro (co-host)"
+   ],
+   "sources": [
+    "https://tradingengineered.substack.com/p/how-to-trade-stocks-with-matt-caruso",
+    "https://matthewcaruso.substack.com/about",
+    "https://trendspider.com/trading-tools-store/collection/by-caruso-insights/",
+    "https://pod.wave.co/podcast/the-traderlion-podcast-8e50b654-7b23-4b2d-aca4-50a775c117e3"
+   ],
+   "popularity": "niche",
+   "confidence": "low"
+  },
+  {
+   "name": "Price-action pullback trading (The Trading Channel / Steven Hart)",
+   "description": "Forex-first channel (~2.87M subs, Nov 2024 snapshot) teaching pullback entries in trending markets using price action and candlestick confirmation; widely cited as the strongest free resource for advanced pullback/price-action trading. Equity swing specifics are not its focus; included for reach only.",
+   "proponents": [
+    "Steven Hart - YouTube The Trading Channel"
+   ],
+   "sources": [
+    "https://sponsorradar.com/channels/thetradingchannel",
+    "https://fortraders.com/blog/top-5-best-trading-youtubers-in-2025-curated-by-expert"
+   ],
+   "popularity": "very common",
+   "confidence": "low"
+  },
+  {
+   "name": "Humbled Trader strategies (VWAP-centric, mostly day trading)",
+   "description": "Shay Huang's channel (~1.23M subs per vidIQ) is primarily day trading; her Jun 20 2024 'Trading Strategies Crash Course' video lists time-proven setups with experience level, ideal market environment/timeframe, criteria and psychology for each, and a May 4 2026 post covers her VWAP setups. 2026 content pivoted heavily to AI tooling (Claude + TradingView, Codex premarket analyst, IBKR bots). Swing-specific rules were not extractable from public pages.",
+   "proponents": [
+    "Shay (Sharon) Huang - YouTube Humbled Trader, humbledtrader.com"
+   ],
+   "sources": [
+    "https://humbledtrader.beehiiv.com/p/humbled-traders-trading-strategies-crash-course-complete-criteria-live-trading-examples",
+    "https://humbledtrader.com/blog/",
+    "https://vidiq.com/youtube-stats/channel/UCO4h1mou05OWuJ8JZaWOj8w"
+   ],
+   "popularity": "very common",
+   "confidence": "low"
+  },
+  {
+   "name": "Chat With Traders 2025-2026 swing guests (story+fundamentals+technicals; box breakouts)",
+   "description": "Podcast now hosted by Tessa Dao and Ian Cox (Aaron Fifield left in 2022). 2025-2026 swing-relevant episodes: #303 Chris Vermeulen 'From Tick to Trend' (Jul 23 2025, moving from day trading to longer wave-riding); #305 Julian Komar 'When Story, Fundamentals and Technicals Align' (Aug 20 2025); #311 Christian Carreon 'Patience Inside the Box: The Calm Before the Break' (Nov 18 2025, consolidation-box breakouts); #325 Jack Schwager & George Coyle on Market Wizards: The Next Generation (Jun 10 2026); #326 Jason Berry 'only 5 losing months in 14 years' (Jun 24 2026); #329 Peter Brandt on risk (Aug 5 2026). Episode-level rules were not retrievable (site search did not surface them), so method details are from titles/descriptions only.",
+   "proponents": [
+    "Chat With Traders - YouTube/podcast (Tessa Dao, Ian Cox)"
+   ],
+   "sources": [
+    "https://chatwithtraders.com/episodes",
+    "https://chatwithtraders.com/tag/swing-trading/",
+    "https://chatwithtraders.com/about"
+   ],
+   "popularity": "common",
+   "confidence": "low"
+  },
+  {
+   "name": "Breadth-thrust market timing (Zweig / % above MAs)",
+   "description": "Used as the market-timing filter across the momentum cohort: a Zweig Breadth Thrust fired on NYSE data Apr 24 2025 (20-for-20 six-month wins since 1938 per SentimenTrader) and Nasdaq A/D exceeded 3:1 in 3 of 10 sessions; >70% of NYSE stocks advanced for three straight days. Practitioners also track % of stocks above 50- and 200-day MAs; Minervini uses the 200-day participation measure as his correction warning, EdgeRater uses the 50-day measure (63% on May 6 2026 matched the Jan 2026 peak reading before a slide to 22%).",
+   "proponents": [
+    "Dean Christians (SentimenTrader) - Apr 25 2025",
+    "Ryan Detrick (Carson Group) - Apr 2025 breadth thrust note",
+    "Chris White (EdgeRater) - May 6 2026",
+    "Mark Minervini - % above 200-day"
+   ],
+   "sources": [
+    "https://sentimentrader.com/blog/a-cluster-of-breadth-thrusts-bodes-well-for-stocks",
+    "https://edgerater.com/blog/2026-05-06-market-notes-thrust-day",
+    "https://michaelsincere.com/articles/my-marketwatch-interview-with-stock-market-wizard-mark-minervini"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  }
+ ],
+ "things_to_recognize": [
+  "Qullamaggie breakout anatomy: a 30-100%+ move in 1-3 months, then 2 weeks to 2 months of higher lows with range tightening while price 'surfs' rising 10/20-day MAs; the trigger is a range-expansion day through the opening-range high (qullamaggie.com, 'My 3 timeless setups')",
+  "ADR discipline: if a stock's average daily range is 5%, your stop cannot be wider than 5% from entry - the stop is the low of day (qullamaggie.com)",
+  "Episodic Pivot tell: gap of 10%+ on a true surprise, with the stock printing its entire average daily volume in the first 15-30 minutes, and NO rally in the prior 3-6 months; big growth numbers (double/triple-digit EPS and revenue) matter more than the headline beat (qullamaggie.com)",
+  "Parabolic-short timing: 3-5+ consecutive up days, 50-100%+ (large cap) or 300-1000%+ (small cap); wait for the first red 1-/5-minute candle and a failed bounce into VWAP rather than guessing the top (qullamaggie.com)",
+  "Stockbee range expansion: today's bar is bigger than the last 5-10 bars, closes at/near the high, volume above the prior day, after 3-20 days of contraction; float under 25M (ideally under 10M) produces the explosive 8-40% bursts; momentum typically dies in 3-5 days so exit in the explosive phase (stockbee.blogspot.com, posts dated Jan 4 2014, Jan 16 2014, Aug 8 2019)",
+  "Momentum-burst precursors: inside bars and dojis dominate the 3 days before a 4% breakout (86-93% frequency) and three-white-soldiers was the most reliable confirmation (39% success, 8.7% avg gain) in a 1,227-breakout study (tikamalma.substack.com, Jun 18 2025)",
+  "VCP: contractions get progressively smaller left to right, volume dries up in the last contraction, and a clear overhead supply line exists; Minervini says the pattern is the effect of supply exhaustion, not the cause (TraderLion interviews summarized Dec 2025; michaelsincere.com)",
+  "Minervini's correction warning: indexes at new highs while the percentage of stocks above their 200-day MA stays low has 'never' escaped without at least a correction in his 40 years; in mid-2025 he noted ~40% of S&P market cap in the top 10 stocks (michaelsincere.com)",
+  "Kell's Wedge Pop: the first trade back up through the 5/10/20 EMA cluster after a downside extension starts the new uptrend; Wedge Drop (first trade down through the MAs after an upside extension) is the exit; extensions far from the MAs are where you sell into strength (traderlion.com Wedge Pop / Cycle of Price Action)",
+  "High Tight Flag quality checks (Soreide, 2025 TraderLion): rising RS line right into the buy point, ATR declining on the right side of the base, flag no deeper than ~25% and holding above the 50-day, volume drying up in the flag then expanding 50%+ on the break; never buy below the 200-day (sozai.app transcript; luxalgo.com HTF)",
+  "Shannon: anchor VWAP to the pivot that matters (major high/low, earnings gap, IPO) and only buy when price is above a rising AVWAP with timeframes aligned; dip-buying into a falling AVWAP is 'often a losing strategy for swing traders' (MoneyShow podcast Mar 27 2025; alphatrends.net)",
+  "IBD swing rules of thumb: 3% max loss, ~10% target, 5-10 day hold, only when the market is in a confirmed uptrend (discussion.fool.com IBD threads; valuewalk.com)",
+  "Rayner's trend filter: price has already respected the 20/50 EMA zone twice; enter on the third test, stop 2x ATR, exit on a close through the 50 EMA (financialwisdomtv.com, Dec 7 2024)",
+  "Stine's superstock chart: multi-week base, weekly breakout above the 30-week MA on volume far above prior weeks, then 'staircase' consolidations with volume dry-up where the 10-week MA holds (financialwisdomtv.com, updated Dec 7 2025)",
+  "Breadth thrust signatures: >70% of NYSE issues advancing for 3 days, Zweig thrust (10-day advancing ratio from <40% to >61.5%), Nasdaq A/D >3:1 in 3 of 10 sessions - fired Apr 24 2025 after the tariff low (sentimentrader.com Apr 25 2025)",
+  "Thrust-day caution: 60% of stocks up, 63% above the 50-day and 5.6% 'Big Kahuna' up days on May 6 2026 replicated the mid-January 2026 readings that preceded a six-week slide to 22% above the 50-day - treat identical breadth snapshots at a peak as a yellow flag (edgerater.com May 6 2026)"
+ ],
+ "modern_context": [
+  "April 2 2025 tariff announcement: S&P 500 fell 11.5% by April 8 (briefly below 5,000), then rallied on the April 9 pause and ended April down only 1.9% - the sharp V became the year's defining swing-trading event (sentimentrader.com news, Apr 2025; nasdaq.com '2025 Bull Market Persists, but Cracks Appear')",
+  "April 24-25 2025: Zweig Breadth Thrust on NYSE plus Nasdaq A/D >3:1 in three of ten sessions; SentimenTrader (Dean Christians) cited 20 straight six-month gains since 1938 and recommended buying tech on weakness despite tariff noise (sentimentrader.com, Apr 25 2025)",
+  "Mark Minervini: his firm issued an S&P 500 buy signal on May 8 2025 and went 100% long the index; after the June 21-22 2025 US strikes on Iran he said geopolitical shocks usually recover in 6-12 months, but he stayed cautious on individual small/mid caps because the percentage of stocks above the 200-day was 'still very low' and ~40% of S&P cap sat in 10 stocks (michaelsincere.com MarketWatch interview, mid-2025)",
+  "2025 US Investing Championship first-half results (Jul 30 2025): $1M+ stock division led by J Law +184.3%; under-$1M stock division Y. Chiu +299.7%; under-$1M enhanced growth Bob Doviak +1110.1% - evidence that concentrated momentum approaches worked in the post-April tape (webull.com news / businesswire.com)",
+  "Brian Shannon, Mar 27 2025 MoneyShow MoneyMasters episode 'STOP Buying the Dip': risk management, AVWAP, SMA vs EMA, and 'how to trade high-volatility environments' framed around the Q1 2025 selloff (masteremail.podbean.com)",
+  "Stockbee blog post dated Sep 17 2026 announcing a November 2026 Las Vegas bootcamp (EP entry/stops/size/exits, scans, Market Monitor); YouTube @Stockbeevideos remains the video outlet (stockbee.blogspot.com)",
+  "Q1 2026 correction: S&P 500 all-time high ~6,979-7,000 on Jan 27 2026, roughly 10% decline into late Feb/March 2026 (about 6,317 by Mar 30); drivers cited: 22x forward earnings, effective tariffs ~12-14%, 2025 GDP 2.2% with weak job creation, Feb 2026 payrolls -92K, US-Israel strikes on Iran in late Feb 2026 pushing WTI from $67 to >$100; Mag7 averaged -17% from 52-week highs while equal-weight S&P was +3% YTD (chaikinanalytics.com Mar 11 2026; raseedinvest.com May 19 2026; traderinsightsmedia beehiiv)",
+  "May 6 2026 'thrust day': 60% of stocks advancing, 63.1% above 50-day, semiconductors +44% over 21 days leading; EdgeRater (Chris White) flagged that the breadth configuration matched the Jan 14 2026 pre-correction peak and only 3 of 5 historical analogues were positive six months later (edgerater.com, May 6 2026)",
+  "TraderLion 2026 Annual Trading Conference: free, live online over three weekends in July 2026 on the TraderLion YouTube channel (170K subs, 31.3K avg views as of Sep 29 2026); speakers include Stan Weinstein, Mark Minervini, Oliver Kell and Leif Soreide; recent podcast guests Chris Camillo (AI super-cycle, Jan 2026), Peter Brandt (Dec 2025), Ariel Hernandez '7 puzzle pieces' (Dec 2025) (traderlion.com conference page via search; pod.wave.co; sponsorradar.com)",
+  "Leif Soreide's High Tight Flag masterclass from the 2025 TraderLion Conference was re-released as a podcast on May 31 2026 (pod.wave.co / search snippet)",
+  "Lance Breitstein, Oct 2026: shifted from intensive intraday to swing trading ('The 2 Swing Trading Strategies That Made me Millions', Oct 6 2026), plus an Oct 1 2026 interview on 24/7 trading and tokenized markets (Alex Paley) as a structural change traders are discussing (castbox.fm TheOneLanceB)",
+  "Chat With Traders 2026: #325 Jack Schwager & George Coyle on Market Wizards: The Next Generation (Jun 10 2026, which profiles Breitstein), #326 Jason Berry (Jun 24 2026), #329 Peter Brandt (Aug 5 2026), #333 Tim Furey 'defense, not offense' (Sep 30 2026) (chatwithtraders.com/episodes)",
+  "Humbled Trader 2026 content pivoted to AI tooling for traders: Claude + TradingView MCP (Apr 29 and May 16 2026), AI trading bot with Interactive Brokers (May 21 2026), AI premarket analyst (Jun 16 2026) (humbledtrader.com/blog)",
+  "Minervini.com lists both a 2025 and a 2026 workshop and markets an SPY Timing Model and TradeGrader; Alphatrends homepage lists its next educational seminar for Sep 30 2026 - both educators active (minervini.com; alphatrends.net)",
+  "Midterm-year framing used by several commentators in 2026: Chaikin cited a 70% historical probability of a 10%+ correction in midterm years and an 18% average intra-year drawdown since the 1950s (chaikinanalytics.com, Mar 11 2026)"
+ ],
+ "warnings": [
+  "Impersonation/paid-service scams: Qullamaggie's site states 'I am NOT running any paid service, any alert service and I don't sell anything' and points to a '$137 million fraud' as the kind of alert-service scam to avoid; his only official channels are X @qullamaggie, YouTube, Twitch and one Discord (qullamaggie.com). Any Telegram/WhatsApp 'Qullamaggie' group is fake.",
+  "Stockbee explicitly offers no free trading signals; it is a paid membership community - treat any 'Stockbee alerts' elsewhere as unaffiliated (stockbee.blogspot.com)",
+  "Subscriber-count inflation and clickbait: aggregators show Rayner Teo at '18.3M' (actual ~2.2M) and SEO-spam 'Humbled Trader net worth' pages proliferate; verify reach on SponsorRadar/vidIQ/SocialBlade, not search snippets",
+  "AI-summary sites (LilysAI etc.) re-host Minervini/TraderLion interviews in many languages; the source video/channel/date is often stripped - go back to the TraderLion or Minervini channel before quoting",
+  "Pirated-course sites (e.g., 'getwsodo' re-uploads of TraderLion's HTF masterclass) appear in search results; they are unauthorized and frequently malware vectors",
+  "Chasing: Stockbee warns the edge is the first range-expansion day, not the third day up; Qullamaggie warns parabolic shorts fail when you are early ('let the amateur shorts get run over')",
+  "Dip-buying in downtrends: Brian Shannon's 2025 message is that 'buy the dip' is often a losing strategy for swing traders without trend alignment and AVWAP confirmation (MoneyShow podcast Mar 27 2025)",
+  "Pattern-only buying: Soreide says buying patterns without leadership, RS and group strength 'can lead to average performance'; Minervini says the formation is the effect, not the cause (sozai.app transcript; TraderLion interviews)",
+  "Discipline gap: Minervini notes only a small fraction of people who study his method actually execute it; Breitstein's site states plainly that 'most fail' - expect multi-year learning curves, which Breitstein's Sep 29 2026 episode ('your first few years of PnL don't matter') also stresses",
+  "Survivorship/USIC marketing: championship returns (e.g., +1110% in H1 2025 enhanced-growth division) come from options/futures-enabled, highly concentrated accounts and are not representative of typical swing-trading outcomes (webull.com / businesswire.com Jul 30 2025)",
+  "Reach is not relevance: the largest channels (Trading Channel, Rayner, Humbled Trader, SMB) are forex- or day-trading-first; the equity swing specialists (Qullamaggie, Stockbee, TraderLion, Alphatrends, IBD) are 5-20x smaller",
+  "Data gaps in this workup: subscriber counts for @alphatrends, @Stockbeevideos, @TheOneLanceB and Minervini's channel could not be fetched (YouTube/SocialBlade blocked); Reddit (r/swingtrading) was unreachable and the web-search budget was exhausted, so community sentiment on specific gurus is not independently sourced here"
+ ]
+}

@@ -1,0 +1,368 @@
+{
+ "summary": "SOURCE: Academic & quantitative evidence on retail swing methods, as of 2026-10-06. Compiled from ~40 peer-reviewed papers, working papers and rigorous practitioner backtests fetched this session (every item carries author, venue, date, URL). Note: the web-search budget was exhausted; a few paywalled pages (ScienceDirect, CXO Advisory full text, SSGA, Semantic Scholar) could not be read, so exact post-2000 momentum magnitudes from Jegadeesh-Titman 2023 and the exact monthly spread in George-Hwang 2004 are described qualitatively and flagged.\n\nHEADLINE: The only retail-accessible swing ideas with strong, repeatedly replicated, cost-robust evidence are (1) cross-sectional momentum/relative strength (12-1 month), ideally volatility-managed, (2) proximity-to-52-week-high as a momentum signal, and (3) long-horizon trend filters (10-month SMA / 200-day) as drawdown reducers rather than return enhancers. Insider-following (opportunistic buys) and turn-of-the-month seasonality have real but small/hard-to-capture edges. Classic chart patterns and moving-average crossovers show information content but no demonstrated net profit after data-snooping corrections and costs; RSI-2 mean reversion has a high win rate but tiny returns out of sample (CAGR 1.7% vs 13.5% buy-and-hold on S&P 500, Oct 2016-Oct 2026); large-cap PEAD/earnings-gap drift has been dead since ~2006; congressional-trade copying has no edge after the 2012 STOCK Act. Base rates for discretionary retail trading remain brutal: 93-97% of persistent day traders lose (Brazil, Taiwan, India studies), and 0DTE/options retail flow loses mostly to transaction costs.\n\nRANKED TABLE (evidence quality for a retail swing trader, after costs):\n\n| Rank | Method | Evidence quality | Net-of-cost edge | Key sources |\n|---|---|---|---|---|\n| 1 | Cross-sectional momentum / relative strength (12-1 mo, monthly rebalance, vol-managed) | Very high: 30+ yrs out-of-sample, global, survives live-trading-cost tests | Positive for patient, low-turnover implementations; crash risk manageable | Jegadeesh-Titman 1993/2023; Frazzini-Israel-Moskowitz; Novy-Marx-Velikov; Daniel-Moskowitz 2016; Barroso-Santa-Clara 2015 |\n| 2 | 52-week-high proximity (buy near highs) | High: JF 2004 + 17/18 international markets positive (12 significant) | Positive; largely overlaps momentum | George-Hwang 2004; international replications |\n| 3 | Trend filter / time-series momentum (10-mo SMA, 200-day, absolute momentum) | High for risk reduction; mixed for return | Cuts drawdowns (Faber: 46%\u2192<10% in-sample; real-time 2007-17 equity-like return, bond-like vol); Zakamulin: no significant outperformance in later samples, higher Sharpe via lower risk | Faber 2007/2018; Zakamulin 2014-17; Moskowitz-Ooi-Pedersen 2012; Hurst-Ooi-Pedersen |\n| 4 | Insider-following (opportunistic, non-routine buys; buys far below 52-wk high) | Medium-high: multiple JF/JPM/FAJ papers | 82 bp/mo (opportunistic, 1986-2007); but 2026 microcap study finds most reaction on disclosure day, no 30-day drift | Cohen-Malloy-Pomorski 2012; Li et al 2019; DeVault et al 2022; Zhao 2026 |\n| 5 | Seasonality (turn-of-month; Halloween/Sell-in-May) | Medium: persistent but small | TOM ~0.55% per 4-day window (1986-2021); Halloween ~4%/yr winter advantage across 100+ markets; Santa rally failed 2023 & 2024 | Jacobsen-Zhang; 2022 AEA TOM panel; S&P futures 1980-2024 |\n| 6 | Breakouts / chart patterns (flags, cup-handle, H&S, VCP) | Medium for information content; low for net profit | LMW 2000: incremental info, no profit shown; Osler: H&S -0.24%/trade; Savin et al: 5-7%/yr risk-adj but no standalone profit; Bulkowski: failure rates doubled 14%\u219228%; CNN patterns gross Sharpe 2.5 EW / 0.6 VW before costs; ORB edge \u2248 costs on independent replication | Lo-Mamaysky-Wang; Savin-Weller-Zvingelis; Bulkowski; Jiang-Kelly-Xiu 2023; Zarattini; Krueger 2026 |\n| 7 | Pullback-in-trend (buy dips in uptrends) | Medium (indirect): short-term reversal + momentum literature | Reversal effect real but standalone uneconomic after costs; works as an entry-timing overlay | Novy-Marx et al 2023; Novy-Marx 2012 |\n| 8 | RSI-2 mean reversion (Connors) | Medium: independent 10-yr OOS tests | 71% win rate but +18% total vs +255% B&H on S&P 500 (2016-26); avg loss > avg win | Backtrex 2026 |\n| 9 | Moving-average crossovers as standalone signal | High-quality negative evidence | No significant rule survives data-snooping tests; even in-sample profit erased by low costs | Sullivan-Timmermann-White 1999; Bajgrowicz-Scaillet 2012 |\n| 10 | PEAD / earnings-gap drift | High-quality negative for large caps | Non-existent in large stocks since 2006; 2025 'PEAD is alive' papers depend on microcaps (t drops 2.18\u21921.43 ex-microcaps) | Martineau 2022; Subrahmanyam 2026 critique of Dickerson et al & Hirshleifer et al |\n| 11 | Congressional-trade following | High-quality negative post-STOCK Act | 2012-2023: match or underperform market; NANC/KRUZ \u2248 S&P with 0.74% fee | Belmont-Sacerdote-Van Hoek 2022; Chen-Sacerdote NBER 2026 |\n| \u2014 | Discretionary retail day/swing trading (base rate) | Very high (negative) | 93-97% of persistent traders lose; options/0DTE losses mostly transaction costs | Barber et al; Chague et al 2020; SEBI 2024; Beckmeyer et al 2023 |",
+ "methods": [
+  {
+   "name": "Cross-sectional momentum / relative strength (12-1 month)",
+   "description": "Rank stocks on trailing 12-month return skipping the most recent month; buy top decile, (optionally short bottom), rebalance monthly. Evidence: Jegadeesh-Titman (JF 1993) found ~1%/month winner-minus-loser spreads 1965-89; JT 2001 confirmed out-of-sample in the 1990s; JT 2023 (Pacific-Basin Finance Journal vol 82) reviews 30 years and provides a post-2000 analysis across Pacific Basin and developed Western markets, weighing data-mining vs risk vs behavioral (underreaction) explanations (exact post-2000 magnitudes sit behind a paywall - not verified here). Wiest (Financial Markets & Portfolio Management, Mar 2023) calls momentum 'perhaps the most pervasive contradiction of the efficient market hypothesis', robust across asset classes and globally. Costs: Frazzini-Israel-Moskowitz used ~$1 trillion of live institutional trades (19 markets, 1998-2011) and found real costs <1/10 of earlier academic estimates; momentum is 'robust, implementable, and sizeable' and more scalable than size or short-term reversal. Novy-Marx-Velikov (NBER w20721) find anomalies with <50% one-sided monthly turnover survive costs when designed with a buy/hold spread (hold positions you wouldn't newly buy); high-turnover versions mostly do not. Modern: momentum was the best US/developed/EM factor in 2024 (4th time in 20 years; US rolling 12-mo excess in 96th percentile of 50 years per SSGA/Morgan Stanley), among the worst in Q1 2025, then MTUM +19.6% YTD vs SPY +10.7% by Aug 13 2025 (CapitalSpectator).",
+   "proponents": [
+    "Narasimhan Jegadeesh & Sheridan Titman (JF 1993, JF 2001, PBFJ 2023)",
+    "Tobias Wiest (FMPM 2023 review)",
+    "Andrea Frazzini, Ronen Israel, Tobias Moskowitz (AQR, 'Trading Costs of Asset Pricing Anomalies')",
+    "Robert Novy-Marx & Mihail Velikov (NBER w20721)",
+    "Alpha Architect (alphaarchitect.com, momentum research summaries)",
+    "James Picerno (CapitalSpectator.com factor ETF tracking)"
+   ],
+   "sources": [
+    "https://ideas.repec.org/a/eee/pacfin/v82y2023ics0927538x23002731.html",
+    "https://ideas.repec.org/a/kap/fmktpm/v37y2023i1d10.1007_s11408-022-00417-8.html",
+    "https://alphaarchitect.com/momentum-factor-investing-30-years-of-out-of-sample-data/",
+    "https://alphaarchitect.com/surprise-the-size-value-and-momentum-anomalies-survive-after-trading-costs/",
+    "https://www.nber.org/papers/w20721",
+    "https://indexes.morningstar.com/insights/markets-review/bltd9a242a7280e6745/morningstar-factor-monitor-q1-2025",
+    "https://www.capitalspectator.com/?p=24446",
+    "https://morganstanley.com/im/en-us/financial-advisor/insights/articles/momentum-ruled-in-2024.html"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Volatility-managed momentum / momentum-crash avoidance",
+   "description": "Scale momentum exposure inversely to recent realized volatility, or cut exposure after bear markets. Daniel & Moskowitz (JFE 2016, NBER w20439): momentum suffers infrequent but persistent crashes that are partly forecastable - they occur in 'panic' states after market declines when volatility is high and coincide with sharp market rebounds; past-loser betas can exceed 3 while winner betas fall below 0.5, giving the long-short a large negative conditional beta. A dynamic strategy using forecasts of momentum's mean and variance roughly doubles alpha and Sharpe, robust across periods, international equities and other asset classes. Barroso & Santa-Clara (JFE 2015, vol 116 pp 111-120): momentum risk is highly variable and predictable; scaling by realized vol 'virtually eliminates crashes and nearly doubles the Sharpe ratio'. Practical reading for swing traders: do not lever long-momentum books into high-VIX rebounds; after a record momentum year expect payback (Morningstar: in 7 of the 11 prior years momentum was the best US factor, next-year excess was negative, avg -5%; this played out in Q1 2025 after record 2024).",
+   "proponents": [
+    "Kent Daniel & Tobias Moskowitz (JFE 2016)",
+    "Pedro Barroso & Pedro Santa-Clara (JFE 2015)",
+    "AQR (Momentum Crashes journal article page)",
+    "Larry Swedroe (etf.com, 'The Downside of Momentum')"
+   ],
+   "sources": [
+    "https://www.nber.org/papers/w20439",
+    "https://ideas.repec.org/a/eee/jfinec/v116y2015i1p111-120.html",
+    "https://www.chicagobooth.edu/review/understanding-momentum-crashes",
+    "https://www.etf.com/sections/index-investor-corner/swedroe-downside-momentum",
+    "https://aqr.com/library/journal-articles/momentum-crashes"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "52-week-high breakout / proximity-to-high momentum",
+   "description": "Rank stocks by current price divided by 52-week high; buy those nearest their highs. George & Hwang (JF Oct 2004, data 1963-2001): nearness to the 52-week high explains a large portion of momentum profits, dominates and improves on past-return signals, and - unlike standard momentum - the forecast returns do not reverse in the long run (consistent with anchoring). Replications: a later international study found positive profits in 17 of 18 markets (12 statistically significant); a 2008 index-level study cautioned that at the country-index level momentum and reversal co-exist and that US-only results carry data-mining risk. A 2026 microcap insider study (Zhao, arXiv 2602.06198) shows the 52-week-high anchor also conditions how markets react to insider buys. Exact monthly spread figures from the original paper could not be fetched (paywall) - cite the paper directly before quoting numbers.",
+   "proponents": [
+    "Thomas George & Chuan-Yang Hwang (JF 2004)",
+    "CXO Advisory (summary page)",
+    "Northern Arizona University / Massey University replication authors (international indexes)"
+   ],
+   "sources": [
+    "https://cxoadvisory.com/technical-trading/the-52-week-high-as-a-momentum-indicator-for-individual-stocks",
+    "https://experts.nau.edu/en/publications/the-52-week-high-and-momentum-investing-in-international-stock-in/",
+    "https://mro.massey.ac.nz/bitstreams/99e67c25-4ed2-4314-bd0b-062930e5742b/download",
+    "https://academicnewsletter.sufe.edu.cn/info/361244"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Trend filter / time-series momentum (10-month SMA, 200-day MA, absolute momentum)",
+   "description": "Hold the asset only when price is above its 10-month (\u2248200-day) SMA or trailing 12-month return is positive; otherwise cash/bonds. Faber (J. Wealth Mgmt 2007) on data from 1901: timing cut volatility to single digits and max drawdown from ~46% to <10%; his 2018 J. Portfolio Mgmt revisit found the model 'performed well in real-time' 2007-2017 with equity-like returns and bond-like volatility/drawdowns. Zakamulin (SSRN 2677212 and related, 150-155 years of S&P data, rolling and expanding out-of-sample windows): timing rules deliver higher Sharpe mainly by being in cash about a third of the time with lower mean returns; no statistically significant outperformance in the later half of the sample; odds of beating buy-and-hold rise only over long horizons; optimal SMA lookback averages ~10 months but drifts. Futures-level: Moskowitz-Ooi-Pedersen (JFE 2012, 58 futures 1985-2009) and Hurst-Ooi-Pedersen (67 markets, 1880-2016) document persistent time-series momentum with low correlation to stocks and best performance in extreme markets. Live CTA record: SG Trend Index CAGR 5.33% since inception, max drawdown 20.61%; 2024 +2.39%; 2025 +2.49% after being -4.54% YTD in March (SG CTA Index -8% by late May 2025); 2026 YTD +15.72% as of Oct 2 2026 (metals-led). Whipsaw cost is real: without a recession/bear market, MA timing typically lags buy-and-hold.",
+   "proponents": [
+    "Mebane Faber (Cambria; 2007 paper, 2018 JPM revisit)",
+    "Valeriy Zakamulin (University of Agder; 'Market Timing with Moving Averages')",
+    "Tobias Moskowitz, Yao Hua Ooi, Lasse Pedersen (AQR; JFE 2012)",
+    "Brian Hurst, Yao Hua Ooi, Lasse Pedersen (AQR; 'A Century of Evidence on Trend-Following')",
+    "Gary Antonacci (Dual Momentum / GEM)",
+    "Top Traders Unplugged (SG Trend Index weekly tracking)"
+   ],
+   "sources": [
+    "https://www.quantconnect.com/forum/discussion/8285/a-quantitative-approach-to-tactical-asset-allocation-gtaa-5-with-simplemovingaverage/",
+    "https://mebfaber.libsyn.com/ep86-meb-faber",
+    "https://papers.ssrn.com/abstract=2677212",
+    "https://www.cxoadvisory.com/technical-trading/market-timing-with-moving-averages-over-the-very-long-run",
+    "https://www.advisorperspectives.com/articles/2014/08/19/do-moving-average-strategies-really-work",
+    "https://papers.ssrn.com/abstract=2089463",
+    "https://www.aqr.com/Insights/Research/Journal-Article/A-Century-of-Evidence-on-Trend-Following-Investing?aqrPDF=1",
+    "https://www.toptradersunplugged.com/trend-following-week-in-review-december-26-2025/",
+    "https://thefullfx.com/ctas-end-2025-on-a-positive-note/",
+    "https://www.alternativeswatch.com/2025/06/02/trend-following-hedge-funds-endure-more-pain-societe-generale-indices/",
+    "https://www.toptradersunplugged.com/author/naomi/",
+    "https://quantifiedstrategies.substack.com/p/dual-momentum-investing-with-gary",
+    "https://hedgefundalpha.com/strategies/is-gary-antonaccis-global-equity-momentum-strategy-robust/"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Moving-average crossovers (golden cross / death cross, 50-200 etc.) as standalone signals",
+   "description": "Brock, Lakonishok & LeBaron (JF 1992) reported profitable MA and range-break rules on the Dow 1897-1986. Sullivan, Timmermann & White (JF 1999) re-tested with White's Reality Check across the full universe of ~7,800 rules the BLL rules were drawn from: after correcting for data snooping no rule is significantly profitable on the DJIA, S&P 500 or S&P futures out of sample. Bajgrowicz & Scaillet (JFE 2012, vol 106 pp 473-491) revisited DJIA 1897-2011 with a false-discovery-rate approach: no persistence in rule performance, and 'even in-sample, the performance is completely offset by the introduction of low transaction costs'. A 2022 Economics Letters paper ('No pain, no gain') reiterates that trading costs must be included for a bias-free evaluation. Zakamulin's horse races show crossover rules are not better than the simple SMA/momentum filter. Bottom line: as a long-only regime filter the 200-day works like a trend filter (risk reduction); as a standalone buy/sell signal on indexes there is no net edge.",
+   "proponents": [
+    "William Brock, Josef Lakonishok, Blake LeBaron (JF 1992)",
+    "Ryan Sullivan, Allan Timmermann, Halbert White (JF 1999)",
+    "Pierre Bajgrowicz & Olivier Scaillet (JFE 2012)",
+    "Valeriy Zakamulin"
+   ],
+   "sources": [
+    "https://researchonline.lse.ac.uk/id/eprint/119144",
+    "https://ideas.repec.org:443/a/eee/jfinec/v106y2012i3p473-491.html",
+    "https://ideas.repec.org:443/a/eee/ecolet/v216y2022ics0165176522001720.html",
+    "https://www.cxoadvisory.com/technical-trading/long-run-moving-average-horse-race-for-timing-the-u-s-stock-market"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Pullback-in-trend (buy dips in uptrends; momentum + short-term reversal)",
+   "description": "Retail version: buy a momentum stock after a 1-5 day pullback to a rising 10/20/50-day MA. Academic analog: combine 12-1 momentum with the one-month short-term reversal effect (recent losers outperform recent winners over ~1 month; Jegadeesh 1990). Novy-Marx (JFE 2012, 'Is momentum really momentum?') shows 12-7 and 12-2 momentum behave similarly for long-only investors, i.e., the recent-month move is noise/reversal, which is why signals skip the last month. Novy-Marx, Rizova, Dai & Medhat (Dimensional/Rochester, 'Reversals and the Returns to Liquidity Provision', Q&A Feb 28 2023): reversals are stronger/faster in volatile stocks and more persistent in low-turnover stocks, but a standalone reversal strategy is impractical because of extreme turnover and costs; the practical use is as an entry-timing overlay inside an existing momentum/rebalance process, with signals adjusted for earnings announcements and industry momentum (otherwise you 'buy the dip' into genuine bad news). No peer-reviewed test of the specific retail 'pullback to 20EMA' setup was found; evidence is indirect.",
+   "proponents": [
+    "Robert Novy-Marx (Rochester; JFE 2012)",
+    "Mamdouh Medhat, Savina Rizova, Wei Dai (Dimensional Fund Advisors)",
+    "Alpha Architect ('When academics disagree on momentum investing')"
+   ],
+   "sources": [
+    "https://www.dimensional.com/us-en/insights/q-and-a-on-short-run-reversals-with-mamdouh-medhat-and-robert-novy-marx",
+    "https://alphaarchitect.com/when-academics-disagree-on-momentum-investing/"
+   ],
+   "popularity": "very common",
+   "confidence": "medium"
+  },
+  {
+   "name": "RSI-2 mean reversion (Connors)",
+   "description": "Rules (Connors & Alvarez, 'Short Term Trading Strategies That Work', 2008): buy when 2-period RSI < 5-10 and price is above the 200-day SMA; exit on close above the 5-day SMA (or RSI > 65-70). Original claims were in-sample (roughly 1995-2007). Independent out-of-sample tests by Backtrex (daily data Oct 3 2016 - Oct 1 2026, 100% equity per trade, 0.02% commission per side, long and mirrored short): S&P 500 total return +18.1% (CAGR 1.7%) vs +255.4% (13.5%) buy-and-hold; 73 trades; 71.23% win rate; profit factor 1.43; avg win 1.22% vs avg loss 2.10%; max DD -21.5% vs -35%; best years 2021 and 2024 (+8.6%), worst 2018 (-9.8%), three straight losing years 2019-20. Nasdaq 100: +26.9% total (CAGR 2.4%) vs +528% B&H; 2025 -0.6%. DAX: +14.4% vs +136.7%. Verdict: high hit rate, low time-in-market, modest drawdown, but negligible compounding and negative skew (losses bigger than wins). Consistent with the academic finding that short-term reversal is real but mostly consumed by costs/turnover.",
+   "proponents": [
+    "Larry Connors & Cesar Alvarez (Connors Research; 2008 book)",
+    "Backtrex (backtrex.com independent backtests, Oct 2026)",
+    "ProRealCode community ('RSI 2P' strategy threads)"
+   ],
+   "sources": [
+    "https://backtrex.com/en/backtests/connors-rsi-2-sp-500",
+    "https://backtrex.com/en/backtests/connors-rsi-2-nasdaq-100",
+    "https://backtrex.com/en/backtests/connors-rsi-2-dax",
+    "https://prorealcode.com/prorealtime-trading-strategies/rsi-2p-larry-connors/?pnum=13"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Classic chart patterns (head-and-shoulders, double bottoms, cup-with-handle, flags, triangles) and Bulkowski statistics",
+   "description": "Lo, Mamaysky & Wang (JF 2000, 'Foundations of Technical Analysis'): kernel-regression pattern detection on US stocks 1962-1996; most patterns occur ~once a year per stock; conditioning on patterns changes the return distribution (7 of 10 patterns on NYSE/AMEX, 10 of 10 on NASDAQ), so patterns 'provide incremental information' - but the authors did not show a profitable trading rule. Osler (NY Fed 1998): H&S on stocks 1962-93, ~10-day holds, mean -0.24% per round trip, volume +11% on neckline break - 'on average unprofitable'. Savin, Weller & Zvingelis (J. Financial Econometrics 2007, 1990-99): H&S has predictive power (5-7%/yr risk-adjusted) but 'little or no support' for a stand-alone strategy. Bulkowski (thepatternsite.com, Encyclopedia of Chart Patterns): failure = price fails to move 5% past breakout; his study of ~14,000 patterns 1991-2008 found patterns fail 2-4x more often than in the 1990s (failure to climb 10%: 14% in 1990s bull vs 28% in 2003-07); best up-breakout performers include bump-and-run reversal bottom (performance rank 1), cup-with-handle (perf 3rd, failure 2nd), rounding bottom (failure rank 1), high-and-tight flag (~22% avg gain at 1 month); his site notes (Sept 2021) that these statistics 'have not been updated... so they are outdated' and rank tables date to Aug 24 2020. Machine learning: Jiang, Kelly & Xiu (JF Dec 2023, '(Re-)Imag(in)ing Price Trends') train CNNs on OHLC/volume chart images; decile long-short portfolios reach gross Sharpe ~2.5 equal-weight but only ~0.6 value-weight, gross of weekly/monthly rebalancing and shorting costs; patterns transfer across horizons and countries. Net retail profitability of visual pattern trading remains undemonstrated.",
+   "proponents": [
+    "Andrew Lo, Harry Mamaysky, Jiang Wang (MIT; JF 2000)",
+    "Carol Osler (NY Fed 1998)",
+    "Gene Savin, Paul Weller, Janis Zvingelis (Iowa; JFEc 2007)",
+    "Thomas Bulkowski (thepatternsite.com; Encyclopedia of Chart Patterns)",
+    "Jingwen Jiang, Bryan Kelly, Dacheng Xiu (Yale/Chicago; JF 2023)",
+    "CXO Advisory (reviews)"
+   ],
+   "sources": [
+    "https://www.cxoadvisory.com/technical-trading/classic-papers-returns-from-pattern-based-technical-analysis/",
+    "https://ideas.repec.org/p/fip/fednrp/9414.html",
+    "https://ideas.repec.org/a/oup/jfinec/v5yi2p243-265.html",
+    "https://thepatternsite.com/FailureRates.html",
+    "https://thepatternsite.com/BestPatterns.html",
+    "https://thepatternsite.com/id84.html",
+    "https://papers.ssrn.com/abstract=3756587",
+    "https://www.cxoadvisory.com/technical-trading/machine-assisted-stock-price-pattern-analysis/"
+   ],
+   "popularity": "very common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Opening-range / intraday breakout (Zarattini-Aziz-Barbon ORB, 'stocks in play')",
+   "description": "Not swing per se, but the most-cited recent 'breakout works' evidence. Zarattini & Aziz ('Can Day Trading Really Be Profitable?', SSRN 4416622, 2023): 5-minute ORB on QQQ/leveraged ETFs. Zarattini, Barbon & Aziz ('A Profitable Day Trading Strategy for the U.S. Equity Market', Feb 2024): 5-min ORB on top-20 'stocks in play' (price > $5, 14-day avg volume >= 1M, ATR > $0.50, high relative volume) reported >1,600% net return, Sharpe 2.81, 36% annual alpha. Zarattini-Aziz-Barbon ('Beat the Market', Swiss Finance Institute 24-97, 2024): intraday momentum on SPY 2007-early 2024, 19.6% annualized, Sharpe 1.33 net of costs per authors. Independent replication (Timon-pascal Krueger, mql5 blog, Sept 25 2026) on NQ, SPX, Dow, DAX, FTSE CFDs Jan 2015-Jun 2026: gross results reproduce (+0.131R per trade on NQ, ~23% hit rate at 10R targets) but after realistic spread/slippage net is ~breakeven on NQ (+0.002R) and negative on 4 of 5 markets - 'this advantage essentially equals the transaction costs traders face'.",
+   "proponents": [
+    "Carlo Zarattini (Concretum Group)",
+    "Andrew Aziz (Bear Bull Traders)",
+    "Andrea Barbon (University of St. Gallen / Swiss Finance Institute)",
+    "Timon-pascal Krueger (mql5.com replication, Sept 2026)",
+    "QuantConnect community replications",
+    "CXO Advisory reviews"
+   ],
+   "sources": [
+    "https://concretumgroup.com/a-profitable-day-trading-strategy-for-the-u-s-equity-market/",
+    "https://concretumgroup.com/beat-the-market-an-effective-intraday-momentum-strategy-for-sp500-etf-spy/",
+    "https://www.sfi.ch/de/publications/n-24-97-beat-the-market-an-effective-intraday-momentum-strategy-for-s-p500-etf-spy",
+    "https://www.mql5.com/en/blogs/post/776235",
+    "https://www.cxoadvisory.com/technical-trading/day-trading-with-an-opening-range-breakout-strategy",
+    "https://www.quantconnect.com/forum/discussion/18444/Opening+Range+Breakout+for+Stocks+in+Play/p3/comment-50591"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Post-earnings-announcement drift (PEAD) / earnings-gap continuation",
+   "description": "Retail version: buy stocks that gap up on an earnings beat and hold for drift. Martineau (Critical Finance Review 11(3-4), Aug 2022, 'Rest in Peace Post-Earnings Announcement Drift'): in modern markets prices fully reflect earnings surprises on the announcement day; PEAD has been non-existent for large stocks since 2006 and only recently disappeared for microcaps. Counter-claims: Dickerson, Julliard & Mueller (JFE, in press 2025/26) and Hirshleifer, Peng & Wang (RFS 2025, t-stat ~14, social-network channel) say drift persists - but neither excludes microcaps (bottom 20% by market cap, ~3% of market value). Subrahmanyam's replication (UCLA Anderson Review, Jan 21 2026): excluding microcaps drops the Dickerson strategy t-stat from 2.18 to 1.43, i.e., 'the inclusion of the microcaps was the reason PEAD appeared'. A 2026 study of S&P 500 announcements 2022-2024 finds PEAD small, benchmark-sensitive and closer to mild mean reversion (secondary mention; low confidence on authorship). Related and still robust: the earnings announcement premium (Frazzini & Lamont, NBER w13090, 2007) - stocks tend to rise into/around scheduled announcements, strongest where prior announcement volume (retail attention) was high. Net: large-cap earnings-gap 'drift' trades have no academic support in 2025-26; the tradeable residue is in illiquid microcaps where spreads eat it.",
+   "proponents": [
+    "Charles Martineau (University of Toronto; CFR 2022)",
+    "Avanidhar Subrahmanyam (UCLA Anderson; Jan 2026 critique)",
+    "Alexander Dickerson, Christian Julliard, Philippe Mueller (JFE in press)",
+    "David Hirshleifer, Lin Peng, Qiguang Wang (RFS 2025)",
+    "Andrea Frazzini & Owen Lamont (NBER 2007, earnings announcement premium)"
+   ],
+   "sources": [
+    "https://ideas.repec.org/a/now/jnlcfr/104.00000122.html",
+    "https://cfr.ivo-welch.info/published/papers/martineau2021rest.pdf",
+    "https://anderson-review.ucla.edu/is-post-earnings-announcement-drift-a-thing-again/",
+    "https://www.nber.org/papers/w13090"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  },
+  {
+   "name": "Seasonality: Halloween / Sell-in-May, turn-of-the-month, Santa rally",
+   "description": "Bouman & Jacobsen (AER 2002) and Jacobsen & Zhang ('The Halloween Indicator... Everywhere and All the Time'): tested across 100+ countries with data back to 1693 (UK) / 1792 (US); Nov-Apr returns exceed May-Oct by roughly 4 percentage points per year on average, 'surprisingly resilient', strongest in liquid developed markets (figures via Globe and Mail / tradingsat secondary summaries - medium confidence on exact numbers). Turn-of-the-month: panel study of NYSE/AMEX/NASDAQ stocks 1986-2021 (AEA 2022 paper summarized by Harbourfront Quant, Apr 14 2025) finds ~0.55% average return per 4-day TOM window and 1.66% per turn-of-year window; turn-of-quarter has faded, plausibly from disclosure rules. A 2024 S&P 500 futures study (1980-Q3 2024, cited by ETF Trends) concludes TOM is 'the only calendar effect that is statistically and economically significant and persistent over time'; TOM persisted in 19 of 20 countries in a 2014 study. CXO Advisory (Jan 22 2024) tests TOM on S&P 500 1928-2024 and Russell 2000 1987-2024 (full results paywalled). Santa Claus rally: S&P 500 averaged +1.3% over the last 5 trading days of Dec + first 2 of Jan (1950-2022) vs +0.2% for other 7-day windows, positive ~80% of years (LPL/Fidelity), but it failed in 2023 and 2024 (Dec 24 2024-Jan 3 2025: S&P -1.5%). Edges are small, trade rarely, and are vulnerable to multiple-testing.",
+   "proponents": [
+    "Ben Jacobsen (TCU/Massey) & Cherry Zhang",
+    "Sven Bouman & Ben Jacobsen (AER 2002)",
+    "Nam Nguyen (Harbourfront Quant newsletter, Apr 2025)",
+    "Steve LeCompte (CXO Advisory calendar-effects tests)",
+    "LPL Research / Fidelity (Santa rally statistics)"
+   ],
+   "sources": [
+    "https://research.nottingham.edu.cn/en/publications/the-halloween-indicator-sell-in-may-and-go-away-everywhere-and-al/fingerprints/",
+    "https://arc-dev.theglobeandmail.com/investing/markets/inside-the-market/article-inside-the-strange-behaviour-of-sell-in-may-and-go-away",
+    "https://harbourfrontquant.substack.com/p/do-calendar-anomalies-still-work",
+    "https://www.etftrends.com/etf-strategist-channel/turn-month-effect/",
+    "https://www.cxoadvisory.com/calendar-effects/turn-of-the-month-effect-persistence-and-robustness",
+    "https://fidelity.com/insights/markets-economy/santa-claus-rally",
+    "https://www.nerdwallet.com/article/investing/santa-claus-rally"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Insider-trade following (Form 4 open-market purchases)",
+   "description": "Cohen, Malloy & Pomorski (JF 2012, 'Decoding Inside Information', 1986-2007): over half of insider trades are 'routine' (same calendar month each year) and carry no information; the remaining 'opportunistic' trades yield value-weighted abnormal returns of 82 bp/month, predict firm news, and are concentrated among local non-senior insiders at poorly governed, geographically concentrated firms; opportunistic trading falls after SEC enforcement news. Li et al. (J. Portfolio Mgmt Nov 2019, 1986-2017): insider buys made far below the 52-week high ('against the grain') beat buys near highs by 3.3+ pts over 30 days; a long-short on that signal earned ~2%/month before costs. DeVault et al. (Financial Analysts Journal Q1 2022, 1997-2020): stocks insiders hold but do not sell earn 42-53 bp/month alpha. Zhao (arXiv 2602.06198, Feb 2026, rev. Sept 24 2026; 13,534 Form 4 code-P purchases, 1,192 microcaps $30M-$500M, 2018-2024): first-day abnormal return 4.13% for stocks farthest below their 52-week high vs 0.86% near highs (control 0.14%), but the gradient shrinks after volatility controls, 30-day drift is imprecise (t=1.70) and calendar-time portfolios excluding day 1 show no significant alpha - i.e., most of the edge is captured on the disclosure day, before a retail trader can act; the author also retracted earlier momentum claims in v2. Edge exists but is concentrated in small/illiquid names and immediate reactions.",
+   "proponents": [
+    "Lauren Cohen, Christopher Malloy, Lukasz Pomorski (Harvard/LBS; JF 2012)",
+    "Ruihai Li et al. (JPM 2019)",
+    "Luke DeVault et al. (FAJ 2022)",
+    "Hangyi Zhao (arXiv 2026)",
+    "Robin Powell (The Evidence-Based Investor summaries)"
+   ],
+   "sources": [
+    "https://papers.ssrn.com/abstract=1692517",
+    "https://www.nber.org/digest/apr11/decoding-inside-information",
+    "https://www.evidenceinvestor.com/what-insider-trades-and-non-trades-tell-us-about-future-returns/",
+    "https://arxiv.org/abs/2602.06198"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Congressional-trade following (Pelosi tracker, NANC/KRUZ ETFs)",
+   "description": "Early evidence of an edge: Ziobrowski et al. (JFQA 2004; Senate 1993-98) found senators' buy portfolios compounded ~31.1%/yr vs 21.3% for the market; Ziobrowski et al. (Business and Politics 2011; ~16,000 House trades, ~300 members, 1985-2001) found purchases beat the market by ~55 bp/month (~6%/yr). Reversals: Eggers & Hainmueller ('Capitol Losses', 2004-08) - average member portfolios underperformed by 2-3%/yr; Belmont, Sacerdote & Van Hoek (J. Public Economics 2022, STOCK Act disclosures Jan 2012-Dec 2020) - 'no evidence of superior investment performance' in aggregate or for senators accused of informed trading; House buys underperform by 26 bp and sells by 11 bp over six months; even 95th/99th-percentile outcomes are consistent with random picking. Chen & Sacerdote (NBER w35041, Apr 2026, 'Capital in the Capitol', 2012-2023): legislators 'underperform or, at best, match market benchmarks after the STOCK Act'; their positions track sell-side recommendations and their timing tracks retail social-media sentiment - public-signal following, not private information. Practitioner data: Unusual Whales 2024 report (Jan 2025) claims members with 5+ stocks averaged 31.1% (Democrats) / 26.1% (Republicans) vs S&P 24.9%, Pelosi +70.9%, but the report calls figures approximations, ignores holding periods, and attributes outperformance to large Big Tech positions. ETFs: NANC returned 26.83% in 2024 vs VOO 24.98% (KRUZ 14.45%); 12 months to Aug 28 2025: NANC 20.33%, KRUZ 15.37%, VOO 17.75%; both charge 0.74%. Disclosures arrive with up to 45-day lag.",
+   "proponents": [
+    "Alan Ziobrowski et al. (JFQA 2004; Business & Politics 2011)",
+    "Andrew Eggers & Jens Hainmueller ('Capitol Losses')",
+    "Serena Belmont, Bruce Sacerdote, Ranjan Van Hoek (JPubE 2022)",
+    "Haotian Chen & Bruce Sacerdote (NBER w35041, 2026)",
+    "Unusual Whales (annual congressional trading reports; NANC/KRUZ ETFs)",
+    "Maxwell Tabarrok (EA Forum literature summary, Aug 30 2024)"
+   ],
+   "sources": [
+    "https://www.cambridge.org/core/journals/business-and-politics/article/abnormal-returns-from-the-common-stock-investments-of-members-of-the-us-house-of-representatives/BC6C6A524BBE96738BB94D37EF0FD1A5",
+    "https://ideas.repec.org/a/eee/pubeco/v207y2022ics0047272722000044.html",
+    "https://www.nber.org/papers/w35041",
+    "https://forum.effectivealtruism.org/posts/ojjotdtWgY9JCwMZK/congressional-insider-trading",
+    "https://fortune.com/2025/01/08/congress-stock-trading-pelosi-2024",
+    "https://www.webull.com/news/13470340294333440",
+    "https://cepr.org/voxeu/columns/political-power-and-profitable-trades-us-congress"
+   ],
+   "popularity": "common",
+   "confidence": "high"
+  },
+  {
+   "name": "Breadth / regime filters (Zweig Breadth Thrust, % stocks above 200-day, dual-momentum absolute filter)",
+   "description": "Evidence hierarchy: (a) Price-based regime filters (10-month SMA, 12-month absolute momentum) have the strongest support - see trend-filter entry (Faber 2007/2018; Zakamulin; Antonacci's GEM tested 1974-2011 in-sample with 1950-73 and 2012-18 out-of-sample per the author; third-party reviews at HedgeFundAlpha/QuantifiedStrategies flag parameter sensitivity and post-2018 lag vs S&P). (b) Volatility-based regime scaling has peer-reviewed support (Daniel-Moskowitz 2016; Barroso-Santa-Clara 2015). (c) Breadth thrusts: no peer-reviewed study of the Zweig Breadth Thrust was found. Rules: 10-day EMA of NYSE advances/(advances+declines) rising from <0.40 to >0.615 within 10 days. Practitioner backtests (Arthur Hill, StockCharts/TrendInvestorPro, Nov 2023; SentimenTrader posts) report strong, consistent 6-12-month forward S&P returns after thrusts; one summarized backtest since 2007 shows ~67% exposure, 53% winning signals, average gain >3x average loss, higher risk-adjusted return and much lower drawdown but compound return below buy-and-hold (secondary summary, low-medium confidence). Hill notes the NYSE-only version is 'missing' Nasdaq and recommends an S&P 1500 breadth version. Treat breadth thrusts as supportive context, not a validated standalone edge.",
+   "proponents": [
+    "Martin Zweig (originator)",
+    "Arthur Hill (StockCharts / TrendInvestorPro)",
+    "SentimenTrader (Jason Goepfert, Dean Christians)",
+    "Gary Antonacci (absolute momentum filter)",
+    "Mebane Faber"
+   ],
+   "sources": [
+    "https://articles.stockcharts.com/article/articles-arthurhill-2023-11-the-zweig-breadth-thrust-trigg-609/",
+    "https://sentimentrader.com/blog/a-cluster-of-breadth-thrusts-bodes-well-for-stocks",
+    "https://investing.com/analysis/the-zweig-breadth-thrust-as-a-case-study-in-quantitative-analysis-267684",
+    "https://quantifiedstrategies.substack.com/p/dual-momentum-investing-with-gary",
+    "https://hedgefundalpha.com/strategies/is-gary-antonaccis-global-equity-momentum-strategy-robust/",
+    "https://www.cxoadvisory.com/technical-trading/dual-momentum-with-multi-market-breadth-crash-protection"
+   ],
+   "popularity": "common",
+   "confidence": "medium"
+  },
+  {
+   "name": "Discretionary retail day/swing trading (base-rate evidence on outcomes)",
+   "description": "Not a method but the denominator every method must beat. Barber & Odean (JF 2000, 66,465 US households 1991-96): most active traders earned 11.4%/yr vs 17.9% market. Barber, Lee, Liu & Odean (Taiwan, all day trades 1992-2006): <1% of day traders earn reliable positive abnormal returns net of fees; 74% of volume comes from traders with loss histories. Chague, De-Losso & Giovannetti (FGV 2020, Brazil index futures): 97% of individuals who day-traded 300+ days lost money; 1.1% earned above minimum wage. SEBI (Sept 24 2024, India): 93% of ~10 million individual F&O traders lost money FY22-FY24, average loss Rs 2 lakh including costs, aggregate >Rs 1.8 lakh crore. Barber, Huang, Odean & Schwarz (Robinhood, 2022): intense retail herding episodes are followed by -3% five-day abnormal returns (-6% for extreme episodes), ~-5% relative to market per episode. Options: Bryzgalova, Pavlova & Sikorskaya (JF 2023) - retail options lost $2.1B Nov 2019-Jun 2021, average gross monthly loss 1.81%; de Silva, Smith & So (2022) - ~$3B lost 2010-2021; Beckmeyer, Branger & Gayda (Muenster, 2023) - retail 0DTE traders lost ~$358k/day since May 2022 (>$70M over ~2 years), with >60% of losses being transaction costs. DALBAR QAIB 2025: average equity investor earned 16.54% in 2024 vs S&P 25.02% (848 bp gap, 15 straight years of underperformance). Chen & Lin (Nov 2025 working paper; Chicago Booth Review Feb 2 2026; Taiwan 2016-17 day-trade tax cut 0.3%\u21920.15%): volume rose 30% (45% for smallest accounts), net returns improved only 0.1% per dollar traded, least-sophisticated traders' annual losses deepened from ~6% to ~9% - cheaper trading made outcomes worse. Hoffmann & Shefrin (2014, 5,500 Dutch investors 2000-06): technical-analysis users underperformed others by ~0.6-0.7%/month. Park & Irwin (J. Economic Surveys 2007) survey of 92 modern studies: 58 positive, 24 negative, 10 mixed - but most positives predate rigorous data-snooping/cost adjustment.",
+   "proponents": [
+    "Brad Barber & Terrance Odean (UC Davis/Berkeley)",
+    "Fernando Chague, Rodrigo De-Losso, Bruno Giovannetti (FGV/USP)",
+    "SEBI (Securities and Exchange Board of India)",
+    "Svetlana Bryzgalova, Anna Pavlova, Taisiya Sikorskaya (LBS; JF 2023)",
+    "Heiner Beckmeyer, Nicole Branger, Leander Gayda (University of Muenster)",
+    "Ching-Tse Chen & Ming-Jen Lin (Chicago Booth / NTU)",
+    "Arvid Hoffmann & Hersh Shefrin (Maastricht / Santa Clara)",
+    "Lance Roberts (RIA Advisors summary, July 20 2026)"
+   ],
+   "sources": [
+    "https://repositorio.fgv.br/items/e87d04fc-4b4c-4a56-ab5a-1c84c1afde1b/full",
+    "https://faculty.haas.berkeley.edu/odean/papers/day%20traders/Day%20Trading%20Skill%20110523.pdf",
+    "https://www.sebi.gov.in/media-and-notifications/press-releases/sep-2024/updated-sebi-study-reveals-93-of-individual-traders-incurred-losses-in-equity-fando-between-fy22-and-fy24-aggregate-losses-exceed-1-8-lakh-crores-over-three-years_86906.html",
+    "https://www.evidenceinvestor.com/why-most-robinhood-traders-earn-lousy-returns/",
+    "https://www.bloomberg.com/news/articles/2023-04-21/day-traders-lose-358-000-per-day-gambling-on-zero-day-options",
+    "https://cxoadvisory.com/individual-investing/retail-0dte-option-trader-performance",
+    "https://realinvestmentadvice.com/resources/blog/why-retail-traders-consistently-underperform-over-time/",
+    "https://www.chicagobooth.edu/review/high-price-cheaper-stock-trades",
+    "https://cris.maastrichtuniversity.nl/en/publications/technical-analysis-and-individual-investors",
+    "https://www.cxoadvisory.com/individual-investing/technical-analysis-a-drag/",
+    "https://ideas.repec.org/a/bla/jecsur/v21y2007i4p786-826.html"
+   ],
+   "popularity": "very common",
+   "confidence": "high"
+  }
+ ],
+ "things_to_recognize": [
+  "Momentum-crash setup: a sharp market decline followed by high volatility and a fast rebound - past losers' betas exceed 3 while winners' fall below 0.5, so long-momentum books get crushed on the rebound (Daniel & Moskowitz, JFE 2016, https://www.nber.org/papers/w20439).",
+  "Payback after a record momentum year: in 7 of 11 prior years when momentum was the best US factor, next-year excess return was negative (avg -5%); 2024 was a 96th-percentile momentum year and Q1 2025 saw momentum among the worst factors before it recovered (Morningstar Factor Monitor Q1 2025, Apr 14 2025, https://indexes.morningstar.com/insights/markets-review/bltd9a242a7280e6745/morningstar-factor-monitor-q1-2025; CapitalSpectator Jun 4 and Aug 14 2025).",
+  "Turnover is the cost gate: anomalies with less than ~50% one-sided monthly turnover keep significant net spreads when built with a buy/hold band; faster strategies mostly do not (Novy-Marx & Velikov, NBER w20721, https://www.nber.org/papers/w20721).",
+  "Realized-volatility scaling: cut momentum/trend position size when trailing realized vol spikes - it 'virtually eliminates crashes and nearly doubles the Sharpe ratio' (Barroso & Santa-Clara, JFE 2015, https://ideas.repec.org/a/eee/jfinec/v116y2015i1p111-120.html).",
+  "Price relative to the 52-week high is a better continuation signal than raw past return, and it does not reverse long-term (George & Hwang, JF 2004, via https://cxoadvisory.com/technical-trading/the-52-week-high-as-a-momentum-indicator-for-individual-stocks).",
+  "Trend filters earn their keep only in bear markets: above/below the 10-month SMA cuts drawdowns dramatically but lags buy-and-hold in choppy, rising markets; expect whipsaws (Faber 2007/2018; Zakamulin via https://www.cxoadvisory.com/technical-trading/market-timing-with-moving-averages-over-the-very-long-run).",
+  "Chart-pattern reliability has decayed: failure-to-climb-10% rates doubled from 14% (1990s) to 28% (2003-07) and Bulkowski's published pattern stats are flagged as outdated since 2021 (https://thepatternsite.com/FailureRates.html; https://thepatternsite.com/BestPatterns.html).",
+  "Gross edge vs net edge: the opening-range-breakout edge (+0.10 to +0.13R per trade over random direction) is roughly equal to spread + slippage, leaving ~0 net on index CFDs (Krueger replication, Sept 25 2026, https://www.mql5.com/en/blogs/post/776235); ML chart-pattern Sharpe falls from 2.5 (equal-weight, gross) to 0.6 (value-weight) and is before costs (Jiang-Kelly-Xiu via https://www.cxoadvisory.com/technical-trading/machine-assisted-stock-price-pattern-analysis/).",
+  "High win rate is not edge: RSI-2 on S&P 500 won 71% of trades 2016-2026 yet compounded 1.7%/yr with average loss (2.10%) nearly double average win (1.22%) (https://backtrex.com/en/backtests/connors-rsi-2-sp-500).",
+  "Earnings-day reaction is now complete on day one for large caps: no post-earnings drift since 2006; any residual drift lives in microcaps (bottom 20%, ~3% of market cap) where spreads dominate (Martineau CFR 2022, https://ideas.repec.org/a/now/jnlcfr/104.00000122.html; Subrahmanyam, UCLA Anderson Review Jan 21 2026, https://anderson-review.ucla.edu/is-post-earnings-announcement-drift-a-thing-again/).",
+  "Insider signals: ignore routine (same-month-every-year) trades; opportunistic buys, cluster buys far below the 52-week high, and 'not-sold' holdings are the informative ones - but most of the abnormal return prints on the Form 4 disclosure day (Cohen-Malloy-Pomorski JF 2012; Li et al 2019; Zhao arXiv 2026, https://arxiv.org/abs/2602.06198).",
+  "Congressional trades after the STOCK Act track analyst recommendations and retail social-media sentiment, so copying them is copying public signals with a 45-day lag (Chen & Sacerdote, NBER w35041, Apr 2026, https://www.nber.org/papers/w35041).",
+  "Turn-of-the-month (last ~5 to first ~4 trading days) is the one calendar effect that keeps showing up (0.55% per 4-day window 1986-2021; S&P futures 1980-2024); turn-of-quarter has faded; the Santa rally failed in 2023 and 2024 (https://harbourfrontquant.substack.com/p/do-calendar-anomalies-still-work; https://www.etftrends.com/etf-strategist-channel/turn-month-effect/; https://www.nerdwallet.com/article/investing/santa-claus-rally).",
+  "Volume confirmation has a measurable footprint: NYSE head-and-shoulders neckline breaks show ~11% volume increase, yet the trades still averaged -0.24% (Osler 1998 via https://www.cxoadvisory.com/technical-trading/classic-papers-returns-from-pattern-based-technical-analysis/).",
+  "Retail herding is a contrarian signal: stocks with intense Robinhood buying show -3% to -6% five-day abnormal returns afterward (Barber-Huang-Odean-Schwarz 2022 via https://www.evidenceinvestor.com/why-most-robinhood-traders-earn-lousy-returns/).",
+  "Trend-following regime check: 2025 CTA gains came from a narrow metals-led set of trends while equity trend positions were whipsawed by the spring crash/rebound; 2026 has been broad (SG Trend +15.72% YTD at Oct 2 2026 after seven straight weekly gains) (https://www.toptradersunplugged.com/author/naomi/; https://thefullfx.com/ctas-end-2025-on-a-positive-note/)."
+ ],
+ "modern_context": [
+  "2024 was a top-decile momentum year: momentum ranked best factor across US, developed ex-US and EM (4th time in 20 years); US momentum's rolling 12-month excess vs S&P 500 was in the 96th percentile of the past 50 years, exceeded only by 2000 (Morgan Stanley IM 'Momentum ruled in 2024'; Morningstar Factor Monitor Q1 2025, Apr 14 2025; SSGA 2024 note).",
+  "Q1 2025 momentum reversal then recovery: quality and momentum were among the worst factors in Q1 2025 as volatility rose (Morningstar, Apr 14 2025); by Jun 3 2025 MTUM was +13.5% YTD vs SPY +2.0%, and by Aug 13 2025 MTUM +19.6% vs SPY +10.7% (CapitalSpectator, https://www.capitalspectator.com/?p=24078 and ?p=24446).",
+  "Trend-following CTAs: SG Trend Index 2024 +2.39%; 2025 opened with a drawdown (-4.54% YTD by end-March; SG CTA Index -8% by late May 2025, Alternatives Watch Jun 2 2025) and finished 2025 at +2.49% with December +1.92%, gains concentrated in silver/platinum/palladium (Top Traders Unplugged Dec 26 2025; The Full FX 'CTAs End 2025 on a Positive Note'). 2026: +10.27% YTD at end-April, +7.49% at Jul 31, +11.07% at end-August, +15.72% at Oct 2 2026 (Top Traders Unplugged weekly reviews).",
+  "PEAD debate reignited: Dickerson-Julliard-Mueller (JFE, in press) and Hirshleifer-Peng-Wang (RFS 2025) argue drift persists; Subrahmanyam's Jan 21 2026 UCLA Anderson Review piece shows the result depends on microcaps (t-stat 2.18 \u2192 1.43 ex-microcaps), siding with Martineau (CFR 2022) that large-cap PEAD is gone (https://anderson-review.ucla.edu/is-post-earnings-announcement-drift-a-thing-again/).",
+  "Congressional trading: Chen & Sacerdote, NBER w35041 (Apr 2026), 2012-2023 data - legislators underperform or match benchmarks, positions follow sell-side recs and retail sentiment (https://www.nber.org/papers/w35041). Unusual Whales' 2024 report (Jan 8 2025, Fortune) still claimed Democrats averaged 31.1% and Republicans 26.1% vs S&P 24.9%, with caveats that figures are approximations driven by Big Tech holdings. NANC vs VOO: 2024 26.83% vs 24.98%; trailing 12 months to Aug 28 2025 20.33% vs 17.75%; KRUZ 14.45% / 15.37%; 0.74% expense ratios (Webull/Motley Fool, Sept 7 2025).",
+  "Retail losses, new data: SEBI (Sept 24 2024) - 93% of ~10M Indian F&O traders lost money FY22-FY24, aggregate >Rs 1.8 lakh crore; DALBAR QAIB 2025 - average equity investor 16.54% vs S&P 25.02% in 2024, 15 consecutive years of underperformance (RIA/Advisor Perspectives, Jul 20 2026); Chen & Lin working paper (Nov 2025; Chicago Booth Review Feb 2 2026) - halving Taiwan's day-trade tax raised volume 30% and deepened unsophisticated traders' losses to ~9%/yr; Beckmeyer-Branger-Gayda - retail 0DTE losses ~$358k/day, >60% transaction costs (Bloomberg Apr 21 2023).",
+  "Independent out-of-sample verdicts on popular retail systems: Backtrex RSI-2 tests through Oct 1 2026 (S&P 500 CAGR 1.7% vs 13.5% B&H; Nasdaq 100 2025 -0.6%; DAX 2025 -0.5%) (https://backtrex.com/en/backtests/connors-rsi-2-sp-500); Krueger's Sept 25 2026 replication of the Zarattini-Aziz ORB paper on five index CFDs 2015-2026 - gross reproduces, net \u2248 0 or negative (https://www.mql5.com/en/blogs/post/776235).",
+  "Insider-following, 2026: Zhao (arXiv 2602.06198, Feb 2026, rev. Sept 24 2026) on 2018-2024 microcap Form 4 purchases - 4.13% first-day CAR for stocks far below 52-week highs vs 0.86% near highs, but no significant 30-day drift or calendar-time alpha after day one; v2 retracted earlier momentum/classifier claims (https://arxiv.org/abs/2602.06198).",
+  "Seasonality 2024-25: no Santa Claus rally in 2023 or 2024 (S&P -1.5% Dec 24 2024-Jan 3 2025, NerdWallet/Fidelity); turn-of-month remained the only robust calendar effect in S&P futures data through Q3 2024 (ETF Trends) and in the 1986-2021 stock panel (Harbourfront Quant, Apr 14 2025).",
+  "Chart-pattern reference data is stale: thepatternsite.com rank tables last updated Aug 24 2020 and the site's own Sept 2021 note says the best-pattern statistics 'have not been updated... so they are outdated'; Bulkowski's 1991-2008 study documents failure rates 2-4x higher than in the 1990s (https://thepatternsite.com/id84.html; https://thepatternsite.com/BestPatterns.html)."
+ ],
+ "warnings": [
+  "Data snooping: thousands of rule variants were tested on the same Dow/S&P history; after White's Reality Check (Sullivan-Timmermann-White 1999) and false-discovery-rate control (Bajgrowicz-Scaillet 2012) no technical rule is significantly profitable, and even in-sample profits vanish with low transaction costs. Any backtest you see on social media without a multiple-testing correction should be assumed overfit.",
+  "Gross vs net: the two most-cited 'breakout works' papers (Zarattini et al. ORB; Jiang-Kelly-Xiu CNN patterns) show edges that equal or are smaller than realistic spreads, slippage and shorting costs for a retail account; demand net-of-cost, value-weighted results.",
+  "Microcap mirage: 'PEAD is alive' (2025) and insider-drift results are driven by the bottom-20% market-cap stocks (~3% of market value) where bid-ask spreads and impact erase paper returns; strip microcaps before believing an anomaly.",
+  "Momentum crashes: the best-documented retail edge has fat left tails - 2009-style rebounds after bear markets, and payback years after record momentum years (2024\u2192Q1 2025). Do not lever momentum; scale by volatility.",
+  "Mean-reversion systems with 70%+ win rates (RSI-2 and relatives) hide negative skew (average loss ~2x average win) and have compounded ~1-2%/yr out of sample since 2016 versus 13%+ for buy-and-hold; a high hit rate is a marketing feature, not an edge.",
+  "Moving-average crossovers and trend filters will whipsaw repeatedly in rising, choppy markets; their documented benefit is drawdown reduction in bear markets, not higher returns. Nobody has shown statistically significant outperformance of buy-and-hold in post-1930s US data (Zakamulin).",
+  "Congressional-trade copying: post-STOCK Act academic studies (2022, 2026) find no edge; disclosures lag up to 45 days; Unusual Whales annual 'Congress beat the market' numbers are self-described approximations that ignore holding periods and are driven by Big Tech buy-and-hold positions; NANC/KRUZ charge 0.74% to roughly track the S&P.",
+  "Calendar effects are small (tenths of a percent per window), trade rarely, and are vulnerable to multiple testing; the Santa rally has failed two years running and turn-of-quarter has faded. Do not build a swing strategy on them alone.",
+  "Chart-pattern statistics (Bulkowski) are from pre-2008 data, flagged outdated by the author, and show failure rates doubling over time; pattern recognition results are 'critically sensitive to precise pattern definitions', so human-eyeballed patterns are not the patterns that were tested.",
+  "Overtrading is the dominant cause of retail losses in every dataset: lower commissions increase trading and worsen net returns (Chen & Lin 2025; Barber & Odean 2000); technical-analysis users underperform by ~7%/yr (Hoffmann & Shefrin 2014); 93-97% of persistent day traders lose (Brazil, Taiwan, India).",
+  "Options and 0DTE: retail aggregate options P&L is negative in every study (Bryzgalova et al JF 2023; de Silva et al 2022), with more than 60% of 0DTE losses being transaction costs to market makers (Beckmeyer et al 2023).",
+  "Attention/herding: stocks retail crowds pile into (Robinhood top-movers, social-media favorites) underperform by 3-6% over the next week on average; following crowd momentum on short horizons is a documented losing trade (Barber-Huang-Odean-Schwarz 2022).",
+  "Verification gaps in this report: exact post-2000 momentum magnitudes from Jegadeesh-Titman (2023) and exact monthly spreads from George-Hwang (2004) could not be fetched (paywalls); Jacobsen-Zhang's ~4% Halloween differential and the Zweig breadth-thrust backtest numbers come from secondary summaries; a 'Huang & Xuan 2023' STOCK Act paper surfaced only in a search snippet and could not be verified - treat these as medium/low confidence until checked against the originals."
+ ]
+}
