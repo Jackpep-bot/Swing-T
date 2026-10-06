@@ -39,3 +39,6 @@ One asyncio process; `websockets` reconnect loop (ping 20 s, re-auth + resubscri
 
 ## Cost tiers
 Paper ~$10-20/mo (VPS $6, Haiku $3-10, Pushover $4.99 once). Live ~$160-200 (+Alpaca Plus $99, Finviz $39.50). Full ~$250-300 (+sec-api $49, X credits).
+
+## Small-cap runner / pump track
+See docs/smallcap-spec.md for the two-classifier design, thresholds, bag-holder scorer and halt semantics.

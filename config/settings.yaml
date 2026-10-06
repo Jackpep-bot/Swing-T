@@ -45,14 +45,32 @@ monitor:
   hourly_alert_cap: 20
   quiet_hours_et: [22, 6]
   classify_model: claude-haiku-4-5
-  smallcap:                    # small-cap runner track; thresholds are placeholders pending research
+  smallcap:                    # see docs/smallcap-spec.md; posture is warn/fade, long alerts only in the early window
     enabled: true
-    max_price: 10.0
-    max_float_m: 20.0
-    premarket_gap_pct: 20.0
-    premarket_volume_min: 100000
-    rvol_min: 5.0
-
+    min_price: 1.0
+    max_price: 20.0
+    max_float_m: 20.0          # float unknown => warnings only, never long alerts
+    preferred_float_m: 10.0
+    max_market_cap_m: 200.0
+    gap_pct_b_grade: 10.0
+    gap_pct_a_grade: 20.0
+    rvol_min: 5.0              # vs 30-day ADV, cumulative incl. pre-market
+    premarket_volume_min: 50000
+    premarket_volume_exhaustion: 50000000
+    float_rotation_warn: 1.0
+    float_rotation_no_trade: 5.0
+    long_alert_cutoff_et: "09:45"
+    never_long_after_et: "10:30"
+    dilution_lookback_sessions: 5
+    bagholder_alert_threshold: 6
+    ramp_ipo_months: 24
+    ramp_ipo_price_range: [4.0, 6.0]
+    ramp_ipo_max_proceeds_m: 25.0
+    ramp_ipo_max_shares_m: 20.0
+    ramp_5d_gain_pct: 50.0
+    ramp_20d_gain_pct: 100.0
+    up_halts_climax: 2
+    up_halts_exhaustion: 4
 agent:
   review_model: claude-sonnet-5-5
   lab_model: claude-opus-5-5
