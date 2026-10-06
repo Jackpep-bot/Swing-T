@@ -1,0 +1,59 @@
+# Non-secret configuration. Secrets live in .env (see .env.example).
+data:
+  bar_provider: massive        # massive | eodhd | alpaca | sample
+  history_years: 5
+  store_path: data/swing.duckdb
+  event_log_path: data/events.sqlite
+  calendar: NYSE
+
+universe:
+  min_price: 5.0
+  min_avg_dollar_volume: 5000000
+  min_avg_volume: 500000
+  exclude_otc: true
+  include_etfs: false
+  max_symbols: 1500
+  static_symbols: []           # if non-empty, overrides the screened universe
+
+risk:
+  risk_per_trade_pct: 1.0      # Schwab example: $50k account, 1% = $500 risk, $2 trade risk -> 250 shares
+  max_position_pct: 10.0
+  max_open_positions: 8
+  max_sector_pct: 30.0
+  max_daily_loss_pct: 3.0
+  max_drawdown_pct: 15.0
+  min_reward_risk: 2.0
+  vol_target_annual_pct: null
+  kill_switch_file: state/KILL
+
+strategies:                    # name -> {enabled, params}; names come from swing_engine/strategies/*.py
+  sr_bounce:        {enabled: true}
+  sr_breakout:      {enabled: true}
+  pullback_trend:   {enabled: true}
+  breakout_52w:     {enabled: true}
+  momentum_burst:   {enabled: false}   # logged as a feature; weak standalone evidence
+  rsi2_meanrev:     {enabled: true}
+  insider_cluster:  {enabled: false}   # needs EDGAR Form 4 ingest
+
+monitor:
+  feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]
+  watchlist: []
+  keywords: []
+  rvol_gate: 2.0
+  gap_pct_alert: 8.0
+  per_ticker_cooldown_min: 15
+  hourly_alert_cap: 20
+  quiet_hours_et: [22, 6]
+  classify_model: claude-haiku-4-5
+  smallcap:                    # small-cap runner track; thresholds are placeholders pending research
+    enabled: true
+    max_price: 10.0
+    max_float_m: 20.0
+    premarket_gap_pct: 20.0
+    premarket_volume_min: 100000
+    rvol_min: 5.0
+
+agent:
+  review_model: claude-sonnet-5-5
+  lab_model: claude-opus-5-5
+  max_candidates_per_day: 20

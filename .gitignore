@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+data/
+*.duckdb
+*.sqlite
+*.log
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+dist/
+build/
+state/
