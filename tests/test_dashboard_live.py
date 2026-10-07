@@ -487,3 +487,18 @@ def test_result_cache_is_bounded() -> None:
     cache.put("k2", 22)  # re-put moves the key to the newest end
     cache.put("k5", 5)
     assert cache.get("k3", 60) is None and cache.get("k2", 60) == 22
+
+
+def test_ledger_row_prefers_newest_entry_over_older_filled_trade(tmp_path: Path) -> None:
+    from swing_engine.core.models import OrderIntent, Side
+    from swing_engine.execution.ledger import OrderLedger
+
+    data = live_data(tmp_path)  # AAA: a September row already `filled`
+    ledger = OrderLedger(tmp_path / "state" / "orders.sqlite")
+    newer = OrderIntent(symbol="AAA", side=Side.LONG, qty=50, entry_limit=45.0, stop=43.0, target=50.0,
+                        strategy="sr_bounce", client_order_id="swing-sr_bounce-AAA-20261006-long", risk_dollars=100.0)
+    ledger.reserve(newer, "autopilot:paper")
+    ledger.update(newer.client_order_id, "accepted", "brk-9", {"broker_order_id": "brk-9", "status": "accepted"})
+    ledger.close()
+    row = data._ledger_for_symbol("AAA")
+    assert row is not None and row["intent"]["stop"] == 43.0 and row["strategy"] == "sr_bounce"

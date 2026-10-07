@@ -747,9 +747,9 @@ class LiveData:
     def _ledger_for_symbol(self, symbol: str) -> dict[str, Any] | None:
         rows = [r for r in self._ledger_rows() if r.get("symbol") == symbol
                 and _text(r.get("status")) not in ("canceled", "expired", "rejected", "error")]
-        filled = [r for r in rows if _text(r.get("status")) in ("filled", "partially_filled")]
-        pick = filled or rows
-        return pick[-1] if pick else None
+        # newest live row: an older closed trade's `filled` row must not beat tonight's `accepted` entry
+        # (statuses only advance at the next reconcile)
+        return rows[-1] if rows else None
 
     # ------------------------------------------------------------------------------------------ health
     def health(self) -> dict[str, Any]:
