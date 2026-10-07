@@ -160,6 +160,18 @@ def load_bar_reference(settings: Settings) -> dict[str, dict[str, float]]:
     return reference_from_panel(panel)
 
 
+def wire_live_volume(feeds: Sequence[Feed], track: Any) -> bool:
+    """Give the small-cap track the stock feed's running volume (cumulative and pre-market) for every symbol."""
+    if track is None or not hasattr(track, "volume_source"):
+        return False
+    for feed in feeds:
+        engine = getattr(feed, "engine", None)
+        if engine is not None and callable(getattr(engine, "volumes", None)):
+            track.volume_source = engine.volumes
+            return True
+    return False
+
+
 def build_bar_engine(
     settings: Settings,
     held: set[str] | None = None,
@@ -798,6 +810,7 @@ async def run_monitor_async(settings: Settings, secrets: Secrets, dry_run: bool 
             await asyncio.to_thread(pipeline.load_float_map)
     # the same set object: fills reported on alpaca_account update both the rules and the bar-trigger engine
     feed_objs = build_feeds(settings, secrets, dry_run, feeds, held=pipeline.ctx["held"], reference=reference)
+    wire_live_volume(feed_objs, pipeline.smallcap)
     updates = build_telegram_updates(secrets, pipeline, dry_run)
     service = MonitorService(
         feed_objs, pipeline, stop_when_feeds_end=dry_run, updates=updates,

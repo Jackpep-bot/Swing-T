@@ -20,7 +20,7 @@ Every number in a snapshot is read from a feed, a filing or the store; nothing i
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import date, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
@@ -249,6 +249,8 @@ class SmallCapTrack:
         self.set_float_map(float_map)
         self.reference: dict[str, dict[str, Any]] = {}
         self._dilution: dict[str, list[tuple[datetime, str]]] = {}  # survives reset_session
+        # (symbol, ET day) -> (cumulative volume, pre-market volume) from the live bar engine; see service.py
+        self.volume_source: Callable[[str, date], tuple[float, float] | None] | None = None
         self.set_reference(reference)
 
     # ---- float lookup hook ---------------------------------------------------------------------------------------
@@ -597,6 +599,11 @@ class SmallCapTrack:
             adv = next((v for v in (_num(q.get(k)) or _num(ref.get(k)) for k in ADV_META_KEYS) if v), None)
             if adv is not None:
                 data["adv_30d"] = adv
+        live = self.volume_source(sym, to_et(now).date()) if self.volume_source is not None else None
+        if live is not None:
+            cum_live, pre_live = live
+            data["cum_volume"] = max(float(data.get("cum_volume") or 0.0), cum_live)
+            data["premarket_volume"] = max(float(data.get("premarket_volume") or 0.0), pre_live)
         if "premarket_volume" not in data and data.get("cum_volume") is not None and to_et(now).time() < REGULAR_OPEN:
             data["premarket_volume"] = data["cum_volume"]  # before the open, cumulative volume is pre-market volume
         catalyst, offering = self._catalyst_flags(sym, now)

@@ -30,6 +30,7 @@ from ..constants import (
     HALT_STATUS_PAUSED,
     HALT_STATUS_RESUMED,
     MINUTES_IN_SESSION,
+    REGULAR_OPEN,
     TRIGGER_ADVERSE,
     TRIGGER_BREAKOUT_52W,
     TRIGGER_GAP,
@@ -150,7 +151,17 @@ class BarTriggerEngine:
         self.profile = profile or {}
         self.held = held or set()
         self._cum: dict[tuple[str, date], float] = {}
+        self._pre: dict[tuple[str, date], float] = {}  # volume before the 09:30 ET open
         self._fired: set[tuple[str, date, str]] = set()
+
+    def volumes(self, symbol: str, day: date) -> tuple[float, float] | None:
+        """(cumulative volume, pre-market volume) for ``symbol`` on ET ``day`` from every bar seen so far, or None.
+        The small-cap track reads this so float rotation and pre-market exhaustion follow the live tape, not the
+        single bar that happened to fire a trigger."""
+        key = (symbol.upper(), day)
+        if key not in self._cum:
+            return None
+        return self._cum[key], self._pre.get(key, 0.0)
 
     def expected_fraction(self, sym: str, minute: int) -> float:
         prof = self.profile.get(sym)
@@ -169,7 +180,10 @@ class BarTriggerEngine:
         ts = parse_ts(msg.get("t"))
         day = to_et(ts).date()
         key = (sym, day)
-        self._cum[key] = self._cum.get(key, 0.0) + float(msg.get("v", 0.0))
+        vol = float(msg.get("v", 0.0))
+        self._cum[key] = self._cum.get(key, 0.0) + vol
+        if to_et(ts).time() < REGULAR_OPEN:
+            self._pre[key] = self._pre.get(key, 0.0) + vol
         cum = self._cum[key]
         minute = minute_of_session(ts)
         avg20 = float(ref.get("avg_vol_20d") or 0.0)

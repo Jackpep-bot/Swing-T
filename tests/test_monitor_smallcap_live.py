@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from swing_engine.core.models import Priority
 from swing_engine.monitor.smallcap import (
     CLASSIFIER_BAGHOLDER,
@@ -186,3 +188,24 @@ def test_dilution_memory_survives_the_session_reset_and_expires():
     assert track.dilution_recent("TINY", later) == (0, False)
     track.seed_dilution([("TINY", datetime(2026, 9, 20, 14, 0, tzinfo=UTC), "reverse_split")])
     assert track.dilution_recent("TINY", monday)[1] is True  # reverse split within 30 days
+
+
+def test_live_volume_source_drives_float_rotation_and_premarket_volume():
+    """Finding: snapshots kept the first bar's 3k shares, so float rotation and pre-market exhaustion never fired."""
+    from datetime import UTC, datetime
+
+    from swing_engine.monitor.adapters.alpaca_stocks import BarTriggerEngine
+    from swing_engine.monitor.smallcap import SmallCapTrack
+
+    engine = BarTriggerEngine(reference={"TINY": {"prev_close": 4.0, "avg_vol_20d": 400_000.0}})
+    bars = [("2026-10-06T08:00:00Z", 3_000), ("2026-10-06T12:00:00Z", 20_000_000), ("2026-10-06T12:30:00Z", 20_000_000)]
+    for t, v in bars:  # 04:00, 08:00, 08:30 ET: all pre-market
+        engine.on_bar({"T": "b", "S": "TINY", "t": t, "o": 5.0, "h": 5.0, "l": 5.0, "c": 5.0, "v": v})
+    assert engine.volumes("TINY", datetime(2026, 10, 6).date()) == (40_003_000.0, 40_003_000.0)
+    track = SmallCapTrack({}, reference={"TINY": {"prev_close": 4.0, "avg_vol_20d": 400_000.0}})
+    track.volume_source = engine.volumes
+    track._quotes["TINY"] = {"price": 5.0, "cum_volume": 3_000.0}
+    snap = track.snapshot_for("TINY", datetime(2026, 10, 6, 12, 31, tzinfo=UTC))
+    assert snap is not None and snap.cum_volume == 40_003_000.0 and snap.premarket_volume == 40_003_000.0
+    snap = snap.model_copy(update={"float_m": 8.0})
+    assert snap.float_rotation == pytest.approx(5.0, rel=1e-3)
