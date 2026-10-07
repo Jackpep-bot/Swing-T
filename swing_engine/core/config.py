@@ -222,13 +222,40 @@ class Settings(BaseModel):
     strategies: dict[str, dict[str, Any]] = Field(default_factory=dict)  # name -> params/enabled
 
 
+MAX_EXTENDS_DEPTH = 5
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    out = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def _read_settings_yaml(p: Path, depth: int = 0) -> dict[str, Any]:
+    """Read a settings file; ``extends: <path>`` (relative to this file) layers it over a base file so an
+    override file such as config/live.yaml only states what differs and never drifts from settings.yaml."""
+    if not p.exists():
+        return {}
+    raw = yaml.safe_load(p.read_text()) or {}
+    base_ref = raw.pop("extends", None)
+    if base_ref is None:
+        return raw
+    if depth >= MAX_EXTENDS_DEPTH:
+        raise ValueError(f"settings 'extends' chain deeper than {MAX_EXTENDS_DEPTH} at {p}")
+    base_path = (p.parent / str(base_ref)).resolve()
+    if not base_path.exists():
+        raise FileNotFoundError(f"settings file {p} extends missing {base_path}")
+    return _deep_merge(_read_settings_yaml(base_path, depth + 1), raw)
+
+
 @lru_cache
 def load_settings(path: str | Path | None = None) -> Settings:
     p = Path(path) if path else ROOT / "config" / "settings.yaml"
-    raw: dict[str, Any] = {}
-    if p.exists():
-        raw = yaml.safe_load(p.read_text()) or {}
-    return Settings.model_validate(raw)
+    return Settings.model_validate(_read_settings_yaml(p))
 
 
 @lru_cache

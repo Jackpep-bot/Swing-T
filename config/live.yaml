@@ -1,0 +1,7 @@
+# Real-data settings: everything from settings.yaml, with the real-market store and event log.
+# Use with: uv run swing --settings config/live.yaml <command>
+extends: settings.yaml
+data:
+  bar_provider: massive
+  store_path: data/market.duckdb
+  event_log_path: data/market_events.sqlite
