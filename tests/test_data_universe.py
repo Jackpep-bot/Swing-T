@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 import pandas as pd
+import pytest
 
 from swing_engine.core.config import Settings
 from swing_engine.data._common import normalize_symbols
@@ -80,3 +81,25 @@ def test_liquidity_screen_requires_recent_bars() -> None:
     stats = liquidity_screen(bars, _settings().universe, last_day + timedelta(days=90)).set_index("symbol")
     assert not bool(stats.loc[sym, "passes"])
     assert bool(stats.loc["SPY", "passes"])
+
+
+def test_screen_uses_as_traded_prices_not_future_split_adjusted_ones() -> None:
+    """Finding: a $0.80 stock that later did a 1:10 reverse split showed as $8.00 and entered past universes."""
+    import pandas as pd
+
+    from swing_engine.core.config import UniverseConfig
+    from swing_engine.data.universe import as_traded, liquidity_screen
+
+    days = pd.bdate_range("2025-03-03", "2025-03-31", tz="America/New_York")
+    bars = pd.DataFrame([{"symbol": "RVSP", "ts": d, "open": 8.0, "high": 8.0, "low": 8.0, "close": 8.0,
+                          "volume": 1_000_000.0} for d in days])  # adjusted: 10 x 0.80, volume / 10
+    splits = pd.DataFrame([{"symbol": "RVSP", "ex_date": "2025-09-15", "split_from": 10, "split_to": 1, "ratio": 0.1}])
+    cfg = UniverseConfig(min_price=5.0, min_avg_volume=500_000, min_avg_dollar_volume=1_000_000)
+    adjusted = liquidity_screen(bars, cfg, pd.Timestamp("2025-03-31").date())
+    traded = liquidity_screen(bars, cfg, pd.Timestamp("2025-03-31").date(), splits)
+    assert bool(adjusted["passes"].iloc[0]) is True  # the old, wrong answer
+    assert bool(traded["passes"].iloc[0]) is False and traded["last_close"].iloc[0] == pytest.approx(0.8)
+    raw = as_traded(bars, splits)
+    assert (raw["close"] * raw["volume"]).iloc[0] == pytest.approx(8_000_000.0)  # dollar volume unchanged
+    after = bars.assign(ts=pd.bdate_range("2025-10-01", periods=len(bars), tz="America/New_York"))
+    assert as_traded(after, splits)["close"].iloc[0] == 8.0  # bars after the split are already as-traded

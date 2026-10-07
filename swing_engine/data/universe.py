@@ -27,7 +27,7 @@ import structlog
 from swing_engine.core.config import Settings, UniverseConfig
 from swing_engine.core.interfaces import BarProvider
 
-from ._common import as_date, empty_bars, normalize_symbols, session_ts
+from ._common import TZ, as_date, empty_bars, normalize_symbols, session_ts
 from .calendar import trading_days
 from .store import Store
 
@@ -85,9 +85,45 @@ def filter_symbols(symbols: pd.DataFrame, cfg: UniverseConfig, as_of: date) -> p
     return df
 
 
-def liquidity_screen(bars: pd.DataFrame, cfg: UniverseConfig, as_of: date) -> pd.DataFrame:
-    """Per-symbol stats over the last `LIQUIDITY_LOOKBACK_SESSIONS` bars at or before `as_of`:
-    columns symbol, last_close, avg_volume, avg_dollar_volume, sessions, passes."""
+SPLITS_TABLE = "splits"  # symbol, ex_date, split_from, split_to, ratio (= split_to / split_from); see data.ingest
+
+
+def as_traded(window: pd.DataFrame, splits: pd.DataFrame | None) -> pd.DataFrame:
+    """Undo split adjustment so each bar shows the price and share volume that actually traded on its date.
+
+    Split-adjusted history is rewritten by every later split: a $0.80 stock that later did a 1:10 reverse split
+    shows as $8.00. A screen at a historical date must use as-traded values or it selects names by their future
+    corporate actions. For each bar, factor = product of ``ratio`` (split_to / split_from) over the symbol's
+    splits with ex_date AFTER the bar; as-traded close = close * factor, volume = volume / factor. Dollar volume
+    is invariant. Without a splits table the window is returned unchanged (documented limitation)."""
+    if splits is None or len(splits) == 0 or window.empty:
+        return window
+    sp = splits.copy()
+    sp["symbol"] = sp["symbol"].astype(str).str.upper()
+    sp["ex_date"] = pd.to_datetime(sp["ex_date"]).dt.date
+    sp = sp[sp["symbol"].isin(set(window["symbol"].astype(str).str.upper()))]
+    if sp.empty:
+        return window
+    out = window.copy()
+    bar_dates = pd.to_datetime(out["ts"], utc=True).dt.tz_convert(TZ).dt.date
+    factor = pd.Series(1.0, index=out.index)
+    for row in sp.itertuples(index=False):
+        ratio = float(row.ratio) if row.ratio and row.ratio == row.ratio else None
+        if not ratio or ratio <= 0:
+            continue
+        hit = (out["symbol"].astype(str).str.upper() == row.symbol) & (bar_dates < row.ex_date)
+        factor[hit] *= ratio
+    out["close"] = out["close"] * factor
+    out["volume"] = out["volume"] / factor
+    return out
+
+
+def liquidity_screen(
+    bars: pd.DataFrame, cfg: UniverseConfig, as_of: date, splits: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Per-symbol stats over the last `LIQUIDITY_LOOKBACK_SESSIONS` bars at or before `as_of`, on as-traded
+    prices and volumes when a splits table is given: columns symbol, last_close, avg_volume, avg_dollar_volume,
+    sessions, passes."""
     cols = ["symbol", "last_close", "avg_volume", "avg_dollar_volume", "sessions", "passes"]
     if bars.empty:
         return pd.DataFrame(columns=cols)
@@ -95,6 +131,7 @@ def liquidity_screen(bars: pd.DataFrame, cfg: UniverseConfig, as_of: date) -> pd
     window = window.groupby("symbol", sort=False).tail(LIQUIDITY_LOOKBACK_SESSIONS)
     if window.empty:
         return pd.DataFrame(columns=cols)
+    window = as_traded(window, splits)
     dollar = window["close"] * window["volume"]
     stats = (
         window.assign(_dollar=dollar)
@@ -185,6 +222,7 @@ def build_universe(
     *,
     bars: pd.DataFrame | None = None,
     store: Store | None = None,
+    splits: pd.DataFrame | None = None,
 ) -> list[str]:
     """Symbols that pass `settings.universe` at `as_of`, ranked by average dollar volume, capped at
     `max_symbols`. `static_symbols` overrides the screen. Pass `bars` (e.g. a panel) or `store` (a DuckDB
@@ -203,7 +241,9 @@ def build_universe(
     if bars is None:
         bars = _window_bars(provider, store, names, start, as_of_d)
     bars = bars[bars["symbol"].isin(names)]
-    stats = liquidity_screen(bars, cfg, as_of_d)
+    if splits is None and store is not None and store.has_table(SPLITS_TABLE):
+        splits = store.read_table(SPLITS_TABLE)
+    stats = liquidity_screen(bars, cfg, as_of_d, splits)
     passed = stats[stats["passes"]].sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])
     universe = passed["symbol"].head(cfg.max_symbols).tolist()
     log.info(

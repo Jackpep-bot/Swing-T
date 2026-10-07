@@ -36,6 +36,7 @@ from ._common import TZ, as_date, normalize_symbols, session_ts
 from ._http import redact_secrets
 from .calendar import trading_days
 from .store import BARS_TABLE, Store
+from .universe import SPLITS_TABLE
 
 log = structlog.get_logger(__name__)
 
@@ -347,6 +348,8 @@ def repair_splits(prov: BarProvider, st: Store, since: date, through: date) -> l
     splits = splits_fn(since=since)
     if splits is None or len(splits) == 0:
         return []
+    persist = splits.assign(ex_date=pd.to_datetime(splits["ex_date"]).dt.date)
+    st.write_table(SPLITS_TABLE, persist, ["symbol", "ex_date"])  # the universe screen un-adjusts with it
     ex = pd.to_datetime(splits["ex_date"]).dt.date
     window = splits.loc[(ex >= since) & (ex <= through)].assign(ex_date=ex)
     if window.empty:
