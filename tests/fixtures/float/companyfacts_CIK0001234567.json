@@ -1,0 +1,37 @@
+{
+  "cik": 1234567,
+  "entityName": "TINY BIOTECH INC",
+  "facts": {
+    "dei": {
+      "EntityCommonStockSharesOutstanding": {
+        "label": "Entity Common Stock, Shares Outstanding",
+        "description": "Indicate number of shares or other units outstanding of each of registrant's classes of capital or common stock or other ownership interests, if and as stated on cover of related periodic report.",
+        "units": {
+          "shares": [
+            {"end": "2025-05-05", "val": 9800000, "accn": "0001234567-25-000010", "fy": 2025, "fp": "Q1", "form": "10-Q", "filed": "2025-05-08", "frame": "CY2025Q1I"},
+            {"end": "2025-08-04", "val": 10100000, "accn": "0001234567-25-000020", "fy": 2025, "fp": "Q2", "form": "10-Q", "filed": "2025-08-07", "frame": "CY2025Q2I"},
+            {"end": "2026-03-02", "val": 11000000, "accn": "0001234567-26-000005", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-03-05"},
+            {"end": "2026-03-02", "val": 11000000, "accn": "0001234567-26-000005", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-03-05", "frame": "CY2025Q4I"},
+            {"end": "2026-08-03", "val": 12000000, "accn": "0001234567-26-000030", "fy": 2026, "fp": "Q2", "form": "10-Q", "filed": "2026-08-06"},
+            {"end": "2026-08-03", "val": 500000, "accn": "0001234567-26-000030", "fy": 2026, "fp": "Q2", "form": "10-Q", "filed": "2026-08-06"}
+          ]
+        }
+      },
+      "EntityPublicFloat": {
+        "label": "Entity Public Float",
+        "description": "The aggregate market value of the voting and non-voting common equity held by non-affiliates computed by reference to the price at which the common equity was last sold, or the average bid and asked price of such common equity, as of the last business day of the registrant's most recently completed second fiscal quarter.",
+        "units": {
+          "USD": [
+            {"end": "2024-06-28", "val": 30000000, "accn": "0001234567-24-000040", "fy": 2024, "fp": "FY", "form": "10-K", "filed": "2024-09-20", "frame": "CY2024Q2I"},
+            {"end": "2025-06-30", "val": 42000000, "accn": "0001234567-26-000005", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-03-05", "frame": "CY2025Q2I"}
+          ]
+        }
+      }
+    },
+    "us-gaap": {
+      "Assets": {"label": "Assets", "description": "Total assets", "units": {"USD": [
+        {"end": "2025-12-31", "val": 18000000, "accn": "0001234567-26-000005", "fy": 2025, "fp": "FY", "form": "10-K", "filed": "2026-03-05", "frame": "CY2025Q4I"}
+      ]}}
+    }
+  }
+}

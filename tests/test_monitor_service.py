@@ -121,6 +121,7 @@ async def test_service_dry_run_processes_file_feed_and_stops():
     s.monitor.watchlist = ["MEGA"]
     p = build_pipeline(s, Secrets(_env_file=None), dry_run=True, deliverers=[ConsoleDeliverer(printer=out.append)])
     p.ctx["held"] = {"HELD"}
+    p.policy.clock = lambda: MARKET_OPEN_TS  # pin outside quiet hours; wall clock would digest the P2 at night
     feed = FileFeed(FIXTURES / "replay_events.jsonl", rebase_received=True)
     svc = MonitorService([feed], p, stop_when_feeds_end=True, watchdog_interval_s=0.01)
     await asyncio.wait_for(svc.run(), timeout=5)

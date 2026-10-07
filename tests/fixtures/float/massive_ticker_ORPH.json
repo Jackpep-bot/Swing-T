@@ -1,0 +1,15 @@
+{
+  "request_id": "g7h8i9",
+  "status": "OK",
+  "results": {
+    "ticker": "ORPH",
+    "name": "Orphan Microcap Corp.",
+    "market": "stocks",
+    "locale": "us",
+    "primary_exchange": "XASE",
+    "type": "CS",
+    "active": true,
+    "market_cap": 24000000,
+    "weighted_shares_outstanding": 8000000
+  }
+}

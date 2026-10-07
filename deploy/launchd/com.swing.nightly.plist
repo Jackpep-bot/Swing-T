@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  swing-engine nightly pipeline as a per-user LaunchAgent (no sudo): ingest -> features -> scan ->
+  rank -> size -> review -> journal, via scripts/run-nightly.sh (which also pings healthchecks.io when set).
+  Placeholders (@@...@@) are filled by scripts/install-launchd.sh; do not load this file directly.
+
+  StartCalendarInterval is evaluated in the Mac's LOCAL time zone. The defaults below are 06:30 Mon-Fri,
+  which is 06:30 ET only when the Mac is set to America/New_York; the installer warns otherwise and
+  accepts --hour/--minute to shift it. If the Mac is asleep at 06:30 the job runs at the next wake; if it
+  is powered off the run is skipped (see deploy/README.md).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.swing.nightly</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@@REPO_DIR@@/scripts/run-nightly.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@@REPO_DIR@@</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@UV_DIR@@:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>@@HOME@@</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+    <key>HEALTHCHECKS_URL</key>
+    <string>@@HEALTHCHECKS_NIGHTLY_URL@@</string>
+  </dict>
+
+  <!-- Hour 6 / Minute 30 are the template defaults; the installer rewrites these exact elements from
+       --hour/--minute (integers must stay integers so the template itself passes plutil -lint). -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>6</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- A calendar job must not be KeepAlive'd: it exits on purpose. -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>ExitTimeOut</key>
+  <integer>600</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>@@REPO_DIR@@/data/logs/nightly.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@REPO_DIR@@/data/logs/nightly.err.log</string>
+</dict>
+</plist>

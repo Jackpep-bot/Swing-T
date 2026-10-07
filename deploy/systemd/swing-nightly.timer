@@ -1,0 +1,18 @@
+# Fires swing-nightly.service at 06:30 America/New_York on weekdays, regardless of the VPS's own time zone
+# (systemd.time(7) accepts an IANA zone at the end of OnCalendar; DST is handled by the zone, not by you).
+#   systemctl --user enable --now swing-nightly.timer
+#   systemctl --user list-timers swing-nightly.timer    # shows the next ET-correct fire time in local time
+[Unit]
+Description=Run the swing-engine nightly pipeline at 06:30 ET on weekdays
+
+[Timer]
+OnCalendar=Mon..Fri *-*-* 06:30:00 America/New_York
+# If the box was down at 06:30, run as soon as it is back (still before the open in most cases).
+Persistent=true
+# Spread by up to 2 minutes so a fleet of boxes does not hit Massive/EDGAR at the same second.
+RandomizedDelaySec=120
+AccuracySec=30s
+Unit=swing-nightly.service
+
+[Install]
+WantedBy=timers.target

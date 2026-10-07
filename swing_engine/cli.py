@@ -1541,5 +1541,116 @@ def trials(
     _console().print(table)
 
 
+# ----------------------------------------------------------------------------------------------------------
+# ops: doctor / nightly / monitor outcomes
+# ----------------------------------------------------------------------------------------------------------
+DEFAULT_OUTCOMES_DAYS = 30
+CHECK_STYLES = {"ok": "green", "warn": "yellow", "fail": "bold red", "skip": "dim"}
+STEP_STYLES = {"ok": "green", "fail": "bold red", "skip": "dim"}
+
+
+def _status_text(value: Any, styles: dict[str, str]) -> Text:
+    key = str(getattr(value, "value", value))
+    return Text(key, style=styles.get(key, ""))
+
+
+@app.command()
+def doctor(
+    ctx: typer.Context,
+    live: Annotated[
+        bool, typer.Option("--live", help="also probe each vendor whose key is set (one cheap request each)")
+    ] = False,
+    send_test: Annotated[
+        bool, typer.Option("--send-test", help="with --live: send a test message to TELEGRAM_CHAT_ID")
+    ] = False,
+) -> None:
+    """Pre-flight checks: .env keys, settings, store, calendar, plugins, kill switch, versions (ops.doctor).
+
+    Exit code 1 when any check fails. Secret values are never printed.
+    """
+    if send_test and not live:
+        _fail("--send-test only makes sense together with --live", EXIT_USAGE)
+    st = _state(ctx)
+    run_doctor = _load("ops.doctor.run_doctor")
+    checks = list(
+        _call_supported(
+            run_doctor, st.settings, load_secrets(), live, send_test=send_test, settings_path=st.settings_path
+        )
+    )
+    table = Table(title=f"swing doctor ({'offline + live' if live else 'offline'})")
+    table.add_column("check", style="cyan")
+    table.add_column("status")
+    table.add_column("detail")
+    counts: dict[str, int] = {}
+    for check in checks:
+        status = str(getattr(check.status, "value", check.status))
+        counts[status] = counts.get(status, 0) + 1
+        table.add_row(escape(check.name), _status_text(status, CHECK_STYLES), escape(str(check.detail)))
+    _console().print(table)
+    _console().print(", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    if counts.get("fail"):
+        raise typer.Exit(EXIT_FAILED)
+
+
+@app.command()
+def nightly(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", "-p", help="bar provider (default settings.data.bar_provider)")
+    ] = None,
+    equity: Annotated[
+        float | None,
+        typer.Option("--equity", help="account equity for sizing (default risk.account_equity_override; else skipped)"),
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="skip the Claude calls (review, journal prose); data steps still run")
+    ] = False,
+) -> None:
+    """Ingest -> features -> scan -> rank -> size -> review -> journal, each timed and isolated (ops.nightly).
+
+    Writes runs/nightly/<date>.json next to the other run files. Never submits orders. Exit code 1 when a step failed.
+    """
+    settings = _state(ctx).settings
+    as_of_d = _parse_date(as_of, date.today())
+    provider_name = provider or settings.data.bar_provider
+    run_nightly = _load("ops.nightly.run_nightly")
+    report = run_nightly(settings, load_secrets(), as_of_d, provider_name, equity, dry_run)
+    steps = list(getattr(report, "steps", []) or [])
+    table = Table(title=f"Nightly {as_of_d} via {provider_name}{' (dry run)' if dry_run else ''}")
+    for col in ("step", "status", "seconds", "detail"):
+        table.add_column(col)
+    for step in steps:
+        table.add_row(
+            escape(str(step.name)),
+            _status_text(step.status, STEP_STYLES),
+            f"{float(step.elapsed_s):.2f}",
+            escape(str(step.detail)),
+        )
+    _console().print(table)
+    files = dict(getattr(report, "files", {}) or {})
+    report_path = getattr(report, "report_path", None)
+    if files or report_path:
+        _print_mapping("Files written", {**files, "report": report_path})
+    failed = [str(s.name) for s in steps if str(getattr(s.status, "value", s.status)) == "fail"]
+    if failed:
+        _fail(f"nightly finished with failed steps: {', '.join(failed)} (see {report_path})", EXIT_FAILED)
+
+
+@monitor_app.command("outcomes")
+def monitor_outcomes(
+    ctx: typer.Context,
+    days: Annotated[int, typer.Option("--days", help="look-back window in days")] = DEFAULT_OUTCOMES_DAYS,
+) -> None:
+    """Forward outcomes of recent alerts (monitor.outcomes.compute_outcomes); prints whatever columns it returns."""
+    settings = _state(ctx).settings
+    compute_outcomes = _load("monitor.outcomes.compute_outcomes")
+    frame = _call_supported(compute_outcomes, settings, days)
+    if frame is None or len(frame) == 0:
+        _console().print(f"no alert outcomes in the last {days} days")
+        return
+    _print_frame(f"Alert outcomes, last {days} days", pd.DataFrame(frame))
+
+
 if __name__ == "__main__":  # pragma: no cover
     app()

@@ -1,0 +1,30 @@
+# swing-engine nightly pipeline (oneshot), started by swing-nightly.timer. Never submits orders.
+#   systemctl --user enable --now swing-nightly.timer
+#   systemctl --user start swing-nightly.service      # run it right now
+#   journalctl --user -u swing-nightly -n 100         # (if StandardOutput below is changed to journal)
+[Unit]
+Description=swing-engine nightly pipeline (ingest -> features -> scan -> rank -> size -> review -> journal)
+Documentation=file:%h/swing-engine/docs/OPERATIONS.md
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+# Never run two DuckDB writers at once: if a previous nightly is still going, this one is queued, not parallel.
+# (systemd serialises starts of the same unit by design; this line documents the intent.)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/swing-engine
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=UV_CACHE_DIR=%h/.cache/uv
+#Environment=HEALTHCHECKS_URL=https://hc-ping.com/<uuid>
+#Environment=SWING_INGEST_ARGS=--provider massive
+#LoadCredential=anthropic_key:%h/.config/swing/anthropic_key   # see swing-monitor.service and deploy/README.md
+ExecStart=/bin/bash %h/swing-engine/scripts/run-nightly.sh
+# A full Massive Basic refresh of a large universe can take hours (5 calls/min); incremental runs take minutes.
+TimeoutStartSec=4h
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/swing-engine/data %h/swing-engine/state %h/.cache/uv
+StandardOutput=append:%h/swing-engine/data/logs/nightly.out.log
+StandardError=append:%h/swing-engine/data/logs/nightly.err.log

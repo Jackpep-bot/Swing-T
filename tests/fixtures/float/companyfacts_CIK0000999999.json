@@ -1,0 +1,17 @@
+{
+  "cik": 999999,
+  "entityName": "NOFLOAT HOLDINGS LTD",
+  "facts": {
+    "dei": {
+      "EntityCommonStockSharesOutstanding": {
+        "label": "Entity Common Stock, Shares Outstanding",
+        "description": "Shares outstanding as stated on the cover page.",
+        "units": {
+          "shares": [
+            {"end": "2026-05-04", "val": 15000000, "accn": "0000999999-26-000003", "fy": 2026, "fp": "Q1", "form": "10-Q", "filed": "2026-05-07", "frame": "CY2026Q1I"}
+          ]
+        }
+      }
+    }
+  }
+}

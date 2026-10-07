@@ -5,13 +5,16 @@ Two classifiers on one snapshot plus the bag-holder scorer:
 - Classifier A "runner": long candidate (grade A/B) inside 07:00-09:45 ET, expired after 09:45, never after 10:30.
 - Classifier B "ramp-and-dump": structural IPO profile + behavioral no-news run => "promoted / do not buy", blocklisted.
 - Bag-holder scorer: fires on any ticker at any time; >= threshold => "DO NOT HOLD / short watch".
-Float unknown => warnings only, never a long alert. All thresholds come from settings.monitor.smallcap
-(SmallCapThresholds mirrors config/settings.yaml); structural weights are versioned constants below.
+Float unknown or stale => warnings only, never a long alert. A float map (`data.float_data.load_float_map`)
+can be attached with `float_map=` / `set_float_map`; it fills `float_m` on snapshots that lack one and carries
+the stale flag. All thresholds come from settings.monitor.smallcap (SmallCapThresholds mirrors
+config/settings.yaml); structural weights are versioned constants below.
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import datetime
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import structlog
 from pydantic import BaseModel, Field
@@ -52,6 +55,16 @@ DILUTION_BAGHOLDER_DAYS = 10
 RUNWAY_BAGHOLDER_MONTHS = 6.0  # < 2 quarters
 WINDOW_START_ET = "07:00"
 WINDOW_END_ET = "11:00"
+FLOAT_UNKNOWN_WARNING = "float unknown: warnings only"
+FLOAT_STALE_WARNING = "float stale: warnings only"
+
+
+@runtime_checkable
+class FloatRecord(Protocol):
+    """What the track needs from a float-map value (`data.float_data.FloatInfo` satisfies it)."""
+
+    float_shares: float | None
+    stale: bool
 
 
 class SmallCapThresholds(BaseModel):
@@ -94,6 +107,7 @@ class SmallCapSnapshot(BaseModel):
     price: float
     prev_close: float
     float_m: float | None = None
+    float_stale: bool = False
     market_cap_m: float | None = None
     exchange: str = "NASDAQ"
     security_type: str = "CS"
@@ -168,11 +182,34 @@ class SmallCapAssessment(BaseModel):
 
 
 class SmallCapTrack:
-    def __init__(self, thresholds: SmallCapThresholds | dict[str, Any] | None = None):
+    def __init__(
+        self,
+        thresholds: SmallCapThresholds | dict[str, Any] | None = None,
+        *,
+        float_map: Mapping[str, FloatRecord] | None = None,
+    ):
         self.t = thresholds if isinstance(thresholds, SmallCapThresholds) else SmallCapThresholds.from_settings(thresholds)
         self.blocklist: set[str] = set()
         self.tainted: set[str] = set()
         self._session: dict[str, dict[str, Any]] = {}
+        self.float_map: dict[str, FloatRecord] = {}
+        self.set_float_map(float_map)
+
+    # ---- float lookup hook ---------------------------------------------------------------------------------------
+    def set_float_map(self, float_map: Mapping[str, FloatRecord] | None) -> None:
+        """Attach (or replace) the symbol -> float record map produced by `data.float_data.load_float_map`."""
+        self.float_map = {k.upper(): v for k, v in (float_map or {}).items()}
+
+    def apply_float(self, s: SmallCapSnapshot) -> SmallCapSnapshot:
+        """Fill `float_m` / `float_stale` from the float map when the snapshot carries no float of its own.
+        A caller-supplied float wins; a stale map entry marks the snapshot stale (=> warnings only)."""
+        rec = self.float_map.get(s.symbol.upper())
+        if rec is None or s.float_m is not None:
+            return s
+        update: dict[str, Any] = {"float_stale": s.float_stale or bool(rec.stale)}
+        if rec.float_shares is not None:
+            update["float_m"] = float(rec.float_shares) / SHARES_PER_M
+        return s.model_copy(update=update)
 
     # ---- universe gate ----------------------------------------------------------------------------------------
     def universe_ok(self, s: SmallCapSnapshot) -> tuple[bool, bool, list[str]]:
@@ -194,6 +231,9 @@ class SmallCapTrack:
         long_ok = warn_ok
         if s.float_m is None:
             reasons.append("float_unknown")
+            long_ok = False
+        elif s.float_stale:
+            reasons.append("float_stale")
             long_ok = False
         elif s.float_m >= self.t.max_float_m:
             reasons.append("float_too_large")
@@ -325,6 +365,7 @@ class SmallCapTrack:
     # ---- combined ---------------------------------------------------------------------------------------------
     def evaluate(self, s: SmallCapSnapshot) -> SmallCapAssessment:
         sym = s.symbol.upper()
+        s = self.apply_float(s)
         st = self._session.get(sym, {})
         if st:
             s = s.model_copy(
@@ -358,7 +399,9 @@ class SmallCapTrack:
         if s.up_halts_today >= self.t.up_halts_climax and (s.float_rotation or 0.0) >= self.t.float_rotation_warn:
             a.warnings.append("climax zone: >= 2 up-halts with float rotation, not a buy")
         if s.float_m is None:
-            a.warnings.append("float unknown: warnings only")
+            a.warnings.append(FLOAT_UNKNOWN_WARNING)
+        elif s.float_stale:
+            a.warnings.append(FLOAT_STALE_WARNING)
         if long_ok and not a.promoted and not a.toxic and not a.bagholder_alert:
             grade, downs, blockers = self.runner(s)
             a.score_downs, a.runner_blockers = downs, blockers
@@ -386,7 +429,7 @@ class SmallCapTrack:
         if s.rvol is not None:
             parts.append(f"rvol {s.rvol:.1f}x")
         if s.float_m is not None:
-            parts.append(f"float {s.float_m:.1f}M")
+            parts.append(f"float {s.float_m:.1f}M" + (" (stale)" if s.float_stale else ""))
         if a.long_alert:
             parts.append(f"RUNNER grade {a.grade} (early window only; expires 09:45 ET)")
         if a.score_downs:

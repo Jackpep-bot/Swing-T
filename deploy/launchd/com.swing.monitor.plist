@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  swing-engine live monitor as a per-user LaunchAgent (no sudo).
+  Placeholders (@@...@@) are filled by scripts/install-launchd.sh; do not load this file directly.
+  KeepAlive restarts the process whenever it exits (crash, network loss, `swing monitor` SIGTERM);
+  ThrottleInterval keeps a crash loop from spinning faster than once every 30 s.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.swing.monitor</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@@REPO_DIR@@/scripts/run-monitor.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@@REPO_DIR@@</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@UV_DIR@@:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>@@HOME@@</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+    <key>HEALTHCHECKS_URL</key>
+    <string>@@HEALTHCHECKS_MONITOR_URL@@</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>30</integer>
+
+  <!-- launchd sends SIGTERM, then SIGKILL after ExitTimeOut seconds. The monitor drains in-flight
+       classification/deliveries for up to 30 s (SHUTDOWN_DRAIN_S) plus a grace period, so give it 90. -->
+  <key>ExitTimeOut</key>
+  <integer>90</integer>
+
+  <key>ProcessType</key>
+  <string>Standard</string>
+
+  <key>StandardOutPath</key>
+  <string>@@REPO_DIR@@/data/logs/monitor.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@REPO_DIR@@/data/logs/monitor.err.log</string>
+</dict>
+</plist>

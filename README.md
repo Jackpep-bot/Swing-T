@@ -12,6 +12,7 @@ Hard rule everywhere: the language model never produces a number that reaches an
 cp .env.example .env                       # fill in keys you have; everything degrades gracefully without them
 uv sync --extra dev
 uv run swing status                        # configured providers/keys, store counts, registered plugins
+uv run swing doctor                        # offline pre-flight: .env keys, settings, store, calendar, plugins, versions
 uv run swing ingest --provider sample      # ~60 synthetic symbols, 5 years, instant
 uv run swing features                      # build the 64-column feature panel into DuckDB
 uv run swing scan --as-of 2026-09-30       # run enabled strategies, save signals
@@ -20,13 +21,18 @@ uv run swing backtest rsi2_meanrev   --provider sample --start 2022-01-01
 uv run swing rank train                    # cross-sectional ranker (LightGBM, or scikit-learn fallback)
 uv run swing size --as-of 2026-09-30 --equity 50000          # 1% risk sizing + reward:risk floor + caps
 uv run swing paper --broker paper_sim --as-of 2026-09-30 --approve "your name"   # refuses without --approve
+uv run swing nightly --provider sample --as-of 2026-09-30 --dry-run   # the whole chain in one command, timed per step
 uv run swing monitor run --dry-run         # replays a fixture feed through rules -> alerts, then exits
+uv run swing monitor outcomes --days 30    # forward returns after each logged alert (+5m .. +20d)
 uv run swing review --dry-run              # prints the Claude review prompt without calling the API
-uv run pytest -q                           # 597 tests, no network
+uv run pytest -q                           # ~700 tests, no network
 ```
 Create `state/KILL` to block every order path; delete it to resume.
 
 ## Going live with real data (paper account)
+Step-by-step account setup, the command order and a failure/fix table live in `docs/SETUP.md`; the daily
+routine in `docs/OPERATIONS.md`; launchd/systemd units and install scripts in `deploy/`. `swing doctor --live`
+probes every vendor whose key is set (`--send-test` also pushes one Telegram message).
 1. Massive (ex-Polygon) free key -> `MASSIVE_API_KEY`; `swing ingest --provider massive --symbols AAPL,MSFT,...`.
 2. Alpaca paper keys -> `ALPACA_API_KEY/SECRET`, keep `ALPACA_PAPER=true`; `swing paper --broker alpaca ...`.
    Live trading additionally requires `SWING_ALLOW_LIVE=yes` and is blocked until the gates in `docs/gates.md` pass.
@@ -41,4 +47,5 @@ registered through `swing_engine/core/registry.py`; see `docs/api-contract.md` a
 ## Docs
 `docs/research-architecture.md` (vendors, prices, methodology), `docs/research-monitor.md` (feeds, rules, alert
 policy), `docs/smallcap-spec.md` (runner / pump track), `docs/sources-schwab-massive.md`, `docs/methods.md`
-(swing-methods work-up), `docs/gates.md` (what must be true before live money), `docs/STATUS.md`.
+(swing-methods work-up), `docs/gates.md` (what must be true before live money), `docs/SETUP.md`,
+`docs/OPERATIONS.md`, `deploy/README.md`, `docs/STATUS.md`.

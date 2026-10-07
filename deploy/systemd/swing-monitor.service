@@ -1,0 +1,48 @@
+# swing-engine live monitor as a systemd USER service (no root):
+#   mkdir -p ~/.config/systemd/user && cp deploy/systemd/*.service deploy/systemd/*.timer ~/.config/systemd/user/
+#   sed -i "s|%h/swing-engine|$PWD|g" ~/.config/systemd/user/swing-*.{service,timer}   # if the repo is elsewhere
+#   systemctl --user daemon-reload && systemctl --user enable --now swing-monitor.service
+#   sudo loginctl enable-linger "$USER"     # once, so user services run without a login session (this is the
+#                                            # only step that needs root; skip it if your VPS image already lingers)
+#
+# Secrets: the app reads <repo>/.env (chmod 600). If you prefer systemd credentials, keep the secrets OUT of the
+# unit and out of the repo and use LoadCredential (see the commented block below and deploy/README.md).
+[Unit]
+Description=swing-engine live monitor (feeds -> rules -> Haiku classify -> alerts)
+Documentation=file:%h/swing-engine/docs/OPERATIONS.md
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/swing-engine
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+# Optional healthchecks.io dead-man ping (scripts/run-monitor.sh sends /start, /fail and success pings):
+#Environment=HEALTHCHECKS_URL=https://hc-ping.com/<uuid>
+# --- Credentials (optional, instead of .env). LoadCredential=ID:PATH exposes the file at
+# $CREDENTIALS_DIRECTORY/ID, readable only by this service; the app does not read that directory itself yet,
+# so a wrapper has to export it (see deploy/README.md "LoadCredential"). Requires systemd >= 250 for user units.
+#LoadCredential=alpaca_key:%h/.config/swing/alpaca_key
+#LoadCredential=alpaca_secret:%h/.config/swing/alpaca_secret
+#LoadCredential=anthropic_key:%h/.config/swing/anthropic_key
+#LoadCredential=telegram_token:%h/.config/swing/telegram_token
+ExecStart=/bin/bash %h/swing-engine/scripts/run-monitor.sh
+Restart=always
+RestartSec=15
+# SIGTERM -> graceful drain (SHUTDOWN_DRAIN_S + grace in monitor/constants.py); SIGKILL after 90 s.
+KillSignal=SIGTERM
+TimeoutStopSec=90
+# Hardening that still allows writing data/ and state/ inside the repo.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=%h/swing-engine/data %h/swing-engine/state
+# uv needs its cache; keep it inside the home directory.
+Environment=UV_CACHE_DIR=%h/.cache/uv
+ReadWritePaths=%h/.cache/uv
+StandardOutput=append:%h/swing-engine/data/logs/monitor.out.log
+StandardError=append:%h/swing-engine/data/logs/monitor.err.log
+
+[Install]
+WantedBy=default.target

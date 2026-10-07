@@ -22,6 +22,7 @@ class Secrets(BaseSettings):
     alpaca_secret_key: str | None = None
     alpaca_paper: bool = True
     quiver_api_key: str | None = None
+    fmp_api_key: str | None = None  # Financial Modeling Prep: optional float/shares vendor (data.float_data)
     anthropic_api_key: str | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None

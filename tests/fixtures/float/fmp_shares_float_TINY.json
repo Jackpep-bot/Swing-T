@@ -1,0 +1,10 @@
+[
+  {
+    "symbol": "TINY",
+    "date": "2026-09-30 12:00:00",
+    "freeFloat": 55.2,
+    "floatShares": 6900000,
+    "outstandingShares": 12500000,
+    "source": "https://www.sec.gov/Archives/edgar/data/1234567/000123456726000030/0001234567-26-000030-index.htm"
+  }
+]

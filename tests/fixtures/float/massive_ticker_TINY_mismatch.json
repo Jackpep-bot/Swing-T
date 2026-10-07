@@ -1,0 +1,17 @@
+{
+  "request_id": "d4e5f6",
+  "status": "OK",
+  "results": {
+    "ticker": "TINY",
+    "name": "Tiny Biotech Inc.",
+    "market": "stocks",
+    "locale": "us",
+    "primary_exchange": "XNAS",
+    "type": "CS",
+    "active": true,
+    "cik": "0001234567",
+    "market_cap": 110000000,
+    "share_class_shares_outstanding": 20000000,
+    "weighted_shares_outstanding": 19500000
+  }
+}
