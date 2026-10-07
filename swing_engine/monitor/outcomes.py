@@ -59,6 +59,7 @@ TITLE_MAX = 120
 #: user feedback on an alert, read from ``event.meta["rating"]`` (or ``useful: bool``)
 RATING_USEFUL = "useful"
 RATING_NOISE = "noise"
+RATING_TRADED = "traded"  # monitor.rate.AlertRating.TRADED: you acted on it; counts as useful in the precision proxy
 RATING_KEY = "rating"
 USEFUL_KEY = "useful"
 SMALLCAP_KEY = "smallcap"
@@ -121,8 +122,9 @@ def compute_outcomes(
 
 def summarize_outcomes(df: pd.DataFrame) -> pd.DataFrame:
     """Per-rule summary of an outcomes frame: ``n``, and for every horizon the hit rate (return > 0 among the
-    measured returns), mean and median return; plus ``rated``/``useful`` counts and ``precision_proxy``
-    (useful / rated, NaN when nothing is rated). The first row (``rule == "all"``) covers every alert."""
+    measured returns), mean and median return; plus ``rated``/``useful``/``traded`` counts and ``precision_proxy``
+    (useful / rated, NaN when nothing is rated; a ``traded`` rating counts as useful). The first row
+    (``rule == "all"``) covers every alert."""
     if df is None or df.empty:
         return pd.DataFrame(columns=_summary_columns())
     rows = [_summarize_group(ALL_RULES, df)]
@@ -206,7 +208,7 @@ def _rating(meta: dict[str, Any]) -> str | None:
     if value is None:
         return None
     text = str(value).strip().lower()
-    return text if text in (RATING_USEFUL, RATING_NOISE) else None
+    return text if text in (RATING_USEFUL, RATING_NOISE, RATING_TRADED) else None
 
 
 def _text(value: Any) -> str | None:
@@ -361,7 +363,7 @@ def _summary_columns() -> list[str]:
     cols = ["rule", "n"]
     for h in HORIZONS:
         cols.extend([f"hit_{h}", f"mean_{h}", f"median_{h}"])
-    cols.extend(["rated", "useful", "precision_proxy"])
+    cols.extend(["rated", "useful", "traded", "precision_proxy"])
     return cols
 
 
@@ -373,7 +375,8 @@ def _summarize_group(rule: str, group: pd.DataFrame) -> dict[str, Any]:
         row[f"mean_{h}"] = float(rets.mean()) if len(rets) else float("nan")
         row[f"median_{h}"] = float(rets.median()) if len(rets) else float("nan")
     ratings = group["rating"].dropna().astype(str).str.lower()
-    rated = int(ratings.isin([RATING_USEFUL, RATING_NOISE]).sum())
-    useful = int((ratings == RATING_USEFUL).sum())
-    row.update(rated=rated, useful=useful, precision_proxy=(useful / rated) if rated else float("nan"))
+    rated = int(ratings.isin([RATING_USEFUL, RATING_NOISE, RATING_TRADED]).sum())
+    traded = int((ratings == RATING_TRADED).sum())
+    useful = int((ratings == RATING_USEFUL).sum()) + traded
+    row.update(rated=rated, useful=useful, traded=traded, precision_proxy=(useful / rated) if rated else float("nan"))
     return row

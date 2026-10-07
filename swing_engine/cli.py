@@ -63,12 +63,16 @@ RANKER_FILENAME = "ranker.pkl"
 REVIEW_SYSTEM_PROMPT = "agent/prompts/review_system.md"  # relative to the swing_engine package
 LIVE_OVERRIDE_ENV = "SWING_ALLOW_LIVE"
 LIVE_OVERRIDE_VALUE = "yes"
+INGEST_MODE_AUTO = "auto"  # values data.ingest.run_ingest(mode=) accepts: auto | symbols | grouped
+INGEST_MODE_ALIASES = {"auto": "auto", "grouped": "grouped", "per-symbol": "symbols", "symbols": "symbols"}
+INGEST_MODE_CHOICES = ("auto", "grouped", "per-symbol")
 
 DAYS_PER_YEAR = 365
 PANEL_WARMUP_CALENDAR_DAYS = 400  # covers sma_200 / mom_12_1 (252 trading days) before `start`
 DEFAULT_RANK_HORIZON = 10
 DEFAULT_TOP_N = 25
 DEFAULT_MONITOR_REPORT_DAYS = 7
+RATE_REASON_UNKNOWN_EVENT = "unknown_event"  # monitor.rate.RatingResult.reason when the event id is not logged
 DEFAULT_TRIALS_SHOWN = 20
 DEFAULT_PAPER_BROKER = "alpaca"
 MIN_APPROVER_LEN = 2  # "--approve x" is not a name
@@ -363,6 +367,14 @@ def _print_any(title: str, obj: Any) -> None:
 # ----------------------------------------------------------------------------------------------------------
 # Data / panel helpers
 # ----------------------------------------------------------------------------------------------------------
+def _anthropic_client(secrets: Secrets, *, async_client: bool) -> Any | None:
+    """Claude client built from the .env key (the SDK by itself only reads os.environ). None without a key."""
+    if not secrets.anthropic_api_key:
+        return None
+    factory = _try_load("agent.client.get_async_client" if async_client else "agent.client.get_client")
+    return factory(secrets) if factory is not None else None
+
+
 def _open_store(settings: Settings, must_exist: bool = True) -> Any:
     path = _store_path(settings)
     if must_exist and not path.exists():
@@ -779,6 +791,14 @@ def ingest(
         list[str] | None, typer.Option("--symbols", "-s", help="repeat or comma-separate; default universe")
     ] = None,
     full: Annotated[bool, typer.Option("--full", help="full refresh instead of incremental")] = False,
+    mode: Annotated[
+        str,
+        typer.Option(
+            "--mode",
+            help="auto | grouped | per-symbol. auto = grouped (one call per session for the whole market) when "
+            "the provider supports it and no symbols are named, else per-symbol",
+        ),
+    ] = INGEST_MODE_AUTO,
 ) -> None:
     """Fetch daily bars through a provider into the DuckDB store (data.ingest.run_ingest)."""
     settings = _state(ctx).settings
@@ -786,13 +806,25 @@ def ingest(
     provider_name = provider or settings.data.bar_provider
     end_d = _parse_date(end, date.today())
     start_d = _parse_date(start, _default_start(settings, end_d))
+    mode_value = INGEST_MODE_ALIASES.get(mode.strip().lower())
+    if mode_value is None:
+        _fail(f"--mode must be one of {', '.join(INGEST_MODE_CHOICES)}, got {mode!r}", EXIT_USAGE)
     run_ingest = _load("data.ingest.run_ingest")
     store = _open_store(settings, must_exist=False)
-    log.info("ingest_start", provider=provider_name, start=str(start_d), end=str(end_d))
-    result = _call_supported(
-        run_ingest, settings, secrets, provider_name, _split_list(symbols), start_d, end_d, store, full=full
-    )
+    log.info("ingest_start", provider=provider_name, start=str(start_d), end=str(end_d), mode=mode_value)
+    try:
+        result = _call_supported(
+            run_ingest, settings, secrets, provider_name, _split_list(symbols), start_d, end_d, store,
+            full=full, mode=mode_value, progress=_ingest_progress,
+        )
+    except ValueError as e:  # e.g. --mode grouped with --symbols, or a provider without grouped-daily
+        _fail(str(e), EXIT_USAGE)
     _print_mapping(f"Ingest via {provider_name}", dict(result or {}))
+
+
+def _ingest_progress(line: str) -> None:
+    """`run_ingest(progress=)` sink: estimate and every-N-sessions progress lines go to the console."""
+    _console().print(escape(line))
 
 
 @app.command()
@@ -1188,10 +1220,15 @@ def review(
     if dry_run:
         _console().print(_render_review_prompt(signals, context, settings), markup=False, highlight=False)
         return
-    if not load_secrets().anthropic_api_key:
+    secrets = load_secrets()
+    if not secrets.anthropic_api_key:
         _fail("ANTHROPIC_API_KEY is not set; use --dry-run to see the prompt", EXIT_USAGE)
     review_candidates = _load("agent.review.review_candidates")
-    reviews: list[Review] = list(review_candidates(signals, context, settings))
+    reviews: list[Review] = list(
+        _call_supported(
+            review_candidates, signals, context, settings, client=_anthropic_client(secrets, async_client=True)
+        )
+    )
     table = Table(title=f"Reviews as of {as_of_d} ({len(reviews)})")
     for col in ("symbol", "strategy", "decision", "catalyst", "contradicted", "liquidity", "flags", "thesis"):
         table.add_column(col)
@@ -1332,8 +1369,17 @@ def paper(
     reconcile: Annotated[
         bool, typer.Option("--reconcile", help="also run OrderManager.reconcile() afterwards")
     ] = False,
+    from_intents: Annotated[
+        bool,
+        typer.Option("--from-intents", help="submit runs/intents/<date>.json even when a staged plan exists"),
+    ] = False,
 ) -> None:
-    """Submit saved OrderIntents through execution.OrderManager. Refuses without --approve NAME."""
+    """Submit saved OrderIntents through execution.OrderManager. Refuses without --approve NAME.
+
+    When the autopilot staged a plan for the date (runs/pending/<date>.json: a live account without automatic
+    approval), that plan is executed exactly (its exits, then its review-vetted and capped entries) through
+    execution.autopilot.run_pending instead of the intents file; --from-intents overrides.
+    """
     approver = (approve or "").strip()
     if len(approver) < MIN_APPROVER_LEN:
         _fail('refusing to submit orders: a human must approve with --approve "<your name>"', EXIT_REFUSED)
@@ -1349,6 +1395,10 @@ def paper(
             f"ALPACA_PAPER is false and {LIVE_OVERRIDE_ENV} != {LIVE_OVERRIDE_VALUE!r}; see docs/gates.md",
             EXIT_REFUSED,
         )
+    pending_path = _run_file(settings, "pending", as_of_d)
+    if pending_path.exists() and not from_intents:
+        _paper_pending(settings, secrets, as_of_d, broker, approver, pending_path)
+        return
     intents = _load_models(_run_file(settings, "intents", as_of_d), OrderIntent)
     if not intents:
         _fail(
@@ -1406,6 +1456,35 @@ def paper(
     _console().print(f"saved {len(results)} submission results to {path}")
     if reconcile:
         _print_any("Reconcile", manager.reconcile())
+
+
+def _paper_pending(
+    settings: Settings, secrets: Secrets, as_of_d: date, broker_name: str, approver: str, path: Path
+) -> None:
+    """Execute the autopilot's staged plan with a human approver (kill switch: only entry cancels run)."""
+    load_pending = _load("execution.autopilot.load_pending")
+    run_pending = _load("execution.autopilot.run_pending")
+    intents, exits = load_pending(settings, as_of_d)
+    _console().print(f"staged plan {path}: {len(exits)} exits, {len(intents)} entries (--from-intents to bypass)")
+    plan = [{"kind": str(getattr(a.kind, "value", a.kind)), "symbol": a.symbol, "qty": a.qty,
+             "new_stop": a.new_stop, "detail": a.detail} for a in exits]
+    plan += [{"kind": "entry", "symbol": i.symbol, "qty": i.qty, "new_stop": i.stop, "detail": i.client_order_id}
+             for i in intents]
+    if plan:
+        _print_frame("Staged plan", pd.DataFrame(plan))
+    report = run_pending(settings, secrets, as_of_d, _make_broker(broker_name, settings, secrets), approver)
+    results = [r.model_dump(mode="json") for r in [*report.exits, *report.entries]]
+    mode = str(getattr(report.mode, "value", report.mode))
+    if results:
+        _print_frame(f"Staged plan via {broker_name} approved by {approver} ({mode})", pd.DataFrame(results))
+    out = _run_file(settings, "fills", as_of_d)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(results, indent=2, default=str))
+    _console().print(f"saved {len(results)} results to {out}")
+    if mode == "aborted":
+        _fail(f"staged plan not executed: {'; '.join(report.errors)}", EXIT_FAILED)
+    if mode == "killed":
+        _fail("kill switch tripped: only unfilled-entry cancels ran; remove the file to resume", EXIT_REFUSED)
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -1478,6 +1557,26 @@ def monitor_replay(
     )
 
 
+@monitor_app.command("rate")
+def monitor_rate(
+    ctx: typer.Context,
+    event_id: Annotated[str, typer.Argument(help="event id of the alert (shown in the alert and the event log)")],
+    rating: Annotated[str, typer.Argument(help="useful | noise | traded")],
+) -> None:
+    """Rate an alert (same as the Telegram Useful / Noise / Traded buttons; monitor.rate.rate_cli)."""
+    settings = _state(ctx).settings
+    rate_cli = _load("monitor.rate.rate_cli")
+    try:
+        result = rate_cli(settings, event_id, rating)
+    except ValueError as e:  # not one of useful | noise | traded
+        _fail(str(e), EXIT_USAGE)
+    summary = result.summary() if hasattr(result, "summary") else str(result)
+    if not getattr(result, "ok", False):
+        code = EXIT_NO_DATA if getattr(result, "reason", None) == RATE_REASON_UNKNOWN_EVENT else EXIT_FAILED
+        _fail(escape(summary), code)
+    _console().print(escape(summary))
+
+
 # ----------------------------------------------------------------------------------------------------------
 # journal / trials
 # ----------------------------------------------------------------------------------------------------------
@@ -1494,9 +1593,11 @@ def journal(
     intents = _load_models(_run_file(settings, "intents", as_of_d), OrderIntent)
     fills = _load_json(_run_file(settings, "fills", as_of_d), [])
     write_entry = _load("agent.journal.write_entry")
-    narrative = bool(load_secrets().anthropic_api_key)  # tables only when no key; prose needs the API
+    secrets = load_secrets()
+    narrative = bool(secrets.anthropic_api_key)  # tables only when no key; prose needs the API
+    client = _anthropic_client(secrets, async_client=False) if narrative else None
     out = _call_supported(
-        write_entry, as_of_d, signals, reviews, intents, fills, settings=settings, narrative=narrative
+        write_entry, as_of_d, signals, reviews, intents, fills, settings=settings, narrative=narrative, client=client
     )
     _console().print(str(out), markup=False)
 
@@ -1592,32 +1693,21 @@ def doctor(
         raise typer.Exit(EXIT_FAILED)
 
 
-@app.command()
-def nightly(
-    ctx: typer.Context,
-    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
-    provider: Annotated[
-        str | None, typer.Option("--provider", "-p", help="bar provider (default settings.data.bar_provider)")
-    ] = None,
-    equity: Annotated[
-        float | None,
-        typer.Option("--equity", help="account equity for sizing (default risk.account_equity_override; else skipped)"),
-    ] = None,
-    dry_run: Annotated[
-        bool, typer.Option("--dry-run", help="skip the Claude calls (review, journal prose); data steps still run")
-    ] = False,
-) -> None:
-    """Ingest -> features -> scan -> rank -> size -> review -> journal, each timed and isolated (ops.nightly).
+def _open_execution_broker(name: str, settings: Settings, secrets: Secrets) -> Any:
+    """Build the broker the nightly / autopilot reads and trades; a live session without the override is refused."""
+    try:
+        return _make_broker(name, settings, secrets)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        code = EXIT_REFUSED if type(e).__name__ == "LiveTradingBlocked" else EXIT_USAGE
+        _fail(f"could not open broker {name!r}: {type(e).__name__}: {e}", code)
 
-    Writes runs/nightly/<date>.json next to the other run files. Never submits orders. Exit code 1 when a step failed.
-    """
-    settings = _state(ctx).settings
-    as_of_d = _parse_date(as_of, date.today())
-    provider_name = provider or settings.data.bar_provider
-    run_nightly = _load("ops.nightly.run_nightly")
-    report = run_nightly(settings, load_secrets(), as_of_d, provider_name, equity, dry_run)
+
+def _print_step_report(title: str, report: Any) -> list[str]:
+    """Steps table plus written files; returns the names of failed steps."""
     steps = list(getattr(report, "steps", []) or [])
-    table = Table(title=f"Nightly {as_of_d} via {provider_name}{' (dry run)' if dry_run else ''}")
+    table = Table(title=title)
     for col in ("step", "status", "seconds", "detail"):
         table.add_column(col)
     for step in steps:
@@ -1632,9 +1722,98 @@ def nightly(
     report_path = getattr(report, "report_path", None)
     if files or report_path:
         _print_mapping("Files written", {**files, "report": report_path})
-    failed = [str(s.name) for s in steps if str(getattr(s.status, "value", s.status)) == "fail"]
+    return [str(s.name) for s in steps if str(getattr(s.status, "value", s.status)) == "fail"]
+
+
+@app.command()
+def nightly(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+    provider: Annotated[
+        str | None, typer.Option("--provider", "-p", help="bar provider (default settings.data.bar_provider)")
+    ] = None,
+    equity: Annotated[
+        float | None,
+        typer.Option("--equity", help="account equity for sizing (default: the broker's, else risk.account_equity_override)"),
+    ] = None,
+    dry_run: Annotated[
+        bool,
+        typer.Option("--dry-run", help="skip the Claude calls and never execute; data steps still run"),
+    ] = False,
+    broker: Annotated[
+        str | None,
+        typer.Option("--broker", help="alpaca | paper_sim: equity, positions and the execute step (default execution.broker)"),
+    ] = None,
+    execute: Annotated[
+        bool | None,
+        typer.Option("--execute/--no-execute", help="run positions -> execute via execution.autopilot "
+                     "(default execution.nightly_execute; never with --dry-run)"),
+    ] = None,
+) -> None:
+    """Ingest -> features -> scan -> rank -> size -> review -> positions -> execute -> journal (ops.nightly).
+
+    Writes runs/nightly/<date>.json next to the other run files. Orders leave only through the execute step
+    (execution.autopilot: automatic approval on a paper broker only). Exit code 1 when a step failed.
+    """
+    settings = _state(ctx).settings
+    secrets = load_secrets()
+    as_of_d = _parse_date(as_of, date.today())
+    provider_name = provider or settings.data.bar_provider
+    broker_name = broker or settings.execution.broker
+    execute_flag = settings.execution.nightly_execute if execute is None else execute
+    run_nightly = _load("ops.nightly.run_nightly")
+    b: Any | None = None
+    broker_error: tuple[str, int] | None = None
+    if broker_name:
+        try:  # a broken broker must not stop the data steps; it fails the run afterwards instead
+            b = _open_execution_broker(broker_name, settings, secrets)
+        except typer.Exit as e:
+            broker_error = (f"broker {broker_name!r} unavailable; positions/execute were skipped", int(e.exit_code))
+    report = _call_supported(
+        run_nightly, settings, secrets, as_of_d, provider_name, equity, dry_run, broker=b, execute=execute_flag
+    )
+    mode = " (dry run)" if dry_run else (f", execute via {broker_name}" if execute_flag and b is not None else "")
+    failed = _print_step_report(f"Nightly {as_of_d} via {provider_name}{mode}", report)
+    report_path = getattr(report, "report_path", None)
     if failed:
         _fail(f"nightly finished with failed steps: {', '.join(failed)} (see {report_path})", EXIT_FAILED)
+    if broker_error is not None and execute_flag and not dry_run:
+        _fail(broker_error[0], broker_error[1])
+
+
+@app.command()
+def autopilot(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+    broker: Annotated[
+        str | None, typer.Option("--broker", help="alpaca | paper_sim (default execution.broker)")
+    ] = None,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="reconcile and plan only; nothing reaches the broker")
+    ] = False,
+) -> None:
+    """Size -> positions -> execute from the latest saved signals (ops.nightly.run_cycle, execution.autopilot).
+
+    Orders are approved automatically only on a paper broker (alpaca with ALPACA_PAPER=true, or paper_sim) as
+    'autopilot:paper'. A live account stages its plan to runs/pending/<date>.json; `swing paper --approve NAME
+    --as-of <date>` executes exactly that plan.
+    The kill switch, risk limits, review vetoes and execution.max_new_orders_per_day always apply.
+    """
+    settings = _state(ctx).settings
+    secrets = load_secrets()
+    as_of_d = _parse_date(as_of, date.today())
+    broker_name = broker or settings.execution.broker
+    if not broker_name:
+        _fail("no broker: pass --broker alpaca|paper_sim or set execution.broker in settings.yaml", EXIT_USAGE)
+    run_cycle = _load("ops.nightly.run_cycle")
+    b = _open_execution_broker(broker_name, settings, secrets)
+    report = run_cycle(settings, secrets, as_of_d, b, dry_run)
+    failed = _print_step_report(f"Autopilot {as_of_d} via {broker_name}{' (dry run)' if dry_run else ''}", report)
+    execute_step = report.step("execute") if hasattr(report, "step") else None
+    if execute_step is not None and execute_step.data:
+        _print_mapping("Autopilot", dict(execute_step.data))
+    if failed:
+        _fail(f"autopilot finished with failed steps: {', '.join(failed)} (see {report.report_path})", EXIT_FAILED)
 
 
 @monitor_app.command("outcomes")

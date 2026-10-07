@@ -1,6 +1,8 @@
 """Alpaca stock websocket (`/v2/iex` Basic or `/v2/sip` Plus): statuses (halts), lulds and bars.
 
-Statuses `T="s"` carry sc/sm (status code/message) and rc/rm (reason code/message). LULD `T="l"` carries u/d/i.
+Statuses `T="s"` carry sc/sm (status code/message) and rc/rm (reason code/message). Both the UTP letter codes
+(H/P/T/Q) and the CTA codes (2 halt, 3 resume, F LULD) become `halt` events; CTA `E` (SSR) becomes an `ssr`
+event and the indication/imbalance codes (5-9, A, C, D) are dropped. LULD `T="l"` carries u/d/i.
 Bars `T="b"` are turned into `bar_trigger` events by `BarTriggerEngine` when reference data is available.
 """
 from __future__ import annotations
@@ -16,14 +18,17 @@ from swing_engine.core.registry import register
 
 from ..constants import (
     ADVERSE_MOVE_PCT,
+    ALPACA_CTA_STATUS_SSR,
     ALPACA_HEARTBEAT_SYMBOL,
-    ALPACA_STATUS_HALT,
-    ALPACA_STATUS_PAUSE,
-    ALPACA_STATUS_QUOTE_RESUME,
-    ALPACA_STATUS_RESUME,
+    ALPACA_STATUS_HALTED_CODES,
+    ALPACA_STATUS_PAUSED_CODES,
+    ALPACA_STATUS_RESUMED_CODES,
     ALPACA_STOCKS_WS_IEX,
     ALPACA_STOCKS_WS_SIP,
     BREAKOUT_VOL_RATIO,
+    HALT_STATUS_HALTED,
+    HALT_STATUS_PAUSED,
+    HALT_STATUS_RESUMED,
     MINUTES_IN_SESSION,
     TRIGGER_ADVERSE,
     TRIGGER_BREAKOUT_52W,
@@ -44,14 +49,26 @@ def parse_status(msg: dict[str, Any]) -> Event | None:
     sc = str(msg.get("sc", "")).upper()
     rc = str(msg.get("rc", "")).upper()
     ts = parse_ts(msg.get("t"))
-    if sc in (ALPACA_STATUS_RESUME, ALPACA_STATUS_QUOTE_RESUME):
-        status = "resumed"
-    elif sc == ALPACA_STATUS_PAUSE:
-        status = "paused"
-    elif sc == ALPACA_STATUS_HALT:
-        status = "halted"
-    else:
-        status = sc.lower() or "unknown"
+    if sc in ALPACA_STATUS_RESUMED_CODES:
+        status = HALT_STATUS_RESUMED
+    elif sc in ALPACA_STATUS_PAUSED_CODES:
+        status = HALT_STATUS_PAUSED
+    elif sc in ALPACA_STATUS_HALTED_CODES:
+        status = HALT_STATUS_HALTED
+    elif sc == ALPACA_CTA_STATUS_SSR:
+        return Event(
+            event_id=stable_id(SOURCE, "ssr", sym, sc, rc, ts.isoformat()),
+            source=SOURCE,
+            kind="ssr",
+            ts_source=ts,
+            ts_received=now_utc(),
+            symbols=[sym],
+            title=f"{sym} short sale restriction {msg.get('sm') or ''}".strip(),
+            meta={"status_code": sc, "reason_code": rc, "reason": msg.get("rm"), "tape": msg.get("z")},
+        )
+    else:  # indications, imbalances, unknown codes: not a halt and not worth an alert
+        log.debug("alpaca_status_ignored", symbol=sym, status_code=sc, reason_code=rc)
+        return None
     return Event(
         event_id=stable_id(SOURCE, "status", sym, sc, rc, ts.isoformat()),
         source=SOURCE,

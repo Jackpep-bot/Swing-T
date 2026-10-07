@@ -1,15 +1,26 @@
 """`swing nightly`: the unattended evening pipeline, one step per CLI command, each timed and isolated.
 
 ingest (incremental) -> features -> scan -> rank predict (when a model exists) -> size (when equity is known)
--> review (ANTHROPIC key, not dry-run) -> journal. A failing step is recorded and the pipeline carries on with
+-> review (ANTHROPIC key, not dry-run) -> positions (exit decisions, when a broker is injected) -> execute
+(execution.autopilot, when enabled) -> journal. A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
 
 Hand-offs use the same `<store dir>/runs/<kind>/<date>.json` files as the CLI, so `swing size`, `swing paper`
-and `swing journal` can pick up where the nightly left off. Nothing here submits an order: the only broker
-access is reading equity and open positions when a broker object is injected. The review step only filters
-already-sized intents by `Review.decision` (an enum); every price, stop and share count comes from
-`strategies/` and `risk/`.
+and `swing journal` can pick up where the nightly left off. The broker, when injected, supplies equity and
+open positions to `size` and `positions`. Orders leave this module only through `execute`, which hands the
+sized intents, the reviews and the exit actions to `execution.autopilot.run_autopilot` (paper-only automatic
+approval, kill switch, limits, daily cap, audit). `execute` runs after `review` so Claude's vetoes apply, is
+skipped on `dry_run` (never execute when dry), and defaults to `settings.execution.nightly_execute`.
+The review step only filters already-sized intents by `Review.decision` (an enum); every price, stop and
+share count comes from `strategies/` and `risk/`.
+
+`run_cycle` (`swing autopilot`) runs size -> positions -> execute alone from the latest saved signals.
+
+Fail-closed entry gates in `execute` (exits always still run): entries are held when the review step failed
+(nightly), when the saved review outcome for the signals' day says the review failed or never finished
+(`runs/review_status/<date>.json`, written by the review step; `run_cycle`), and when the positions step
+failed (an exception there means no exit decisions were made, so no new risk is added either).
 """
 from __future__ import annotations
 
@@ -44,6 +55,10 @@ INTENTS_KIND = "intents"
 FILLS_KIND = "fills"
 CONTEXT_KIND = "context"
 RANK_KIND = "rank"
+EXITS_KIND = "exits"
+CYCLE_KIND = "cycle"
+REVIEW_STATUS_KIND = "review_status"  # {"status": running|ok|skip|fail, "detail": ...} per signals day
+EARNINGS_TABLE = "earnings"  # optional store table (symbol, report_date) for the close-before-earnings rule
 PANEL_TABLE = "panel"
 PANEL_KEYS = ["symbol", "ts"]
 SYMBOLS_TABLE = "symbols"
@@ -57,7 +72,10 @@ PANEL_WARMUP_CALENDAR_DAYS = 400  # covers sma_200 / mom_12_1 before the first s
 REGIME_COLUMNS = ("market_trend_state", "market_vol_regime")
 ERROR_PREVIEW_CHARS = 200
 
-STEP_NAMES = ("ingest", "features", "scan", "rank", "size", "review", "journal")
+STEP_NAMES = ("ingest", "features", "scan", "rank", "size", "review", "positions", "execute", "journal")
+REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
+CYCLE_STEP_NAMES = ("size", "positions", "execute")
+ABORTED_MODE = "aborted"  # execution.autopilot.AutopilotMode.ABORTED
 
 
 class StepStatus(StrEnum):
@@ -275,6 +293,11 @@ class _Context:
     signals: list[Signal] = field(default_factory=list)
     reviews: list[Review] = field(default_factory=list)
     intents: list[OrderIntent] = field(default_factory=list)
+    execute: bool = False
+    plan_on_dry_run: bool = False  # `swing autopilot --dry-run` plans through the autopilot; the nightly skips
+    exit_actions: list[Any] = field(default_factory=list)
+    stale_signals: str | None = None  # why saved signals were not sized (run_cycle only)
+    review_hold: str | None = None  # why entries must be held: the saved review failed/never finished (run_cycle)
 
     @property
     def history_start(self) -> date:
@@ -433,14 +456,18 @@ def _step_rank(ctx: _Context) -> tuple[str, dict[str, Any]]:
 
 
 def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    if ctx.stale_signals:
+        raise Skip(ctx.stale_signals)
     if not ctx.signals:
         raise Skip("no signals to size")
-    equity = ctx.equity if ctx.equity is not None else ctx.settings.risk.account_equity_override
+    equity = ctx.equity  # explicit --equity, else the broker's account, else risk.account_equity_override
     positions: list[Any] = []
     if ctx.broker is not None:
         if equity is None:
             equity = _account_equity(dict(ctx.broker.account()))
         positions = list(ctx.broker.positions())
+    if equity is None:
+        equity = ctx.settings.risk.account_equity_override
     if equity is None:
         raise Skip("equity unknown: pass --equity, set risk.account_equity_override, or inject a broker")
     size_detail = _try_load("risk.sizing.size_signal_detail")
@@ -465,7 +492,29 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"{len(intents)} intents from {len(ctx.signals)} signals at equity {equity:,.0f}; {len(skipped)} skipped by risk", data
 
 
+def _save_review_status(ctx: _Context, status: str, detail: str) -> None:
+    payload = {"status": status, "detail": detail, "at": datetime.now(UTC).isoformat(timespec="seconds")}
+    path = _save_json(ctx.file(REVIEW_STATUS_KIND), payload)
+    ctx.report.files[REVIEW_STATUS_KIND] = str(path)
+
+
 def _step_review(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """Persists its outcome (``running`` first, so a process that dies mid-review also fails closed) for
+    `run_cycle`, which otherwise cannot tell a crashed review from one that never ran."""
+    _save_review_status(ctx, REVIEW_RUNNING, "")
+    try:
+        detail, data = _review_body(ctx)
+    except Skip as e:
+        _save_review_status(ctx, REVIEW_SKIP, str(e))
+        raise
+    except Exception as e:
+        _save_review_status(ctx, REVIEW_FAIL, _error_text(e))
+        raise
+    _save_review_status(ctx, REVIEW_OK, detail)
+    return detail, data
+
+
+def _review_body(ctx: _Context) -> tuple[str, dict[str, Any]]:
     if ctx.dry_run:
         raise Skip("dry run: no Claude calls")
     if not ctx.secrets.anthropic_api_key:
@@ -476,7 +525,10 @@ def _step_review(ctx: _Context) -> tuple[str, dict[str, Any]]:
     cap = ctx.settings.agent.max_candidates_per_day
     candidates = ctx.signals[:cap]
     context = _load_json(ctx.file(CONTEXT_KIND), {})
-    reviews: list[Review] = list(_call_supported(review_candidates, candidates, context, ctx.settings, client=ctx.review_client))
+    client = ctx.review_client
+    if client is None:  # build from Secrets: the SDK alone only reads os.environ, not the .env that Secrets loads
+        client = _load("agent.client.get_async_client")(ctx.secrets)
+    reviews: list[Review] = list(_call_supported(review_candidates, candidates, context, ctx.settings, client=client))
     ctx.reviews = reviews
     ctx.save(REVIEWS_KIND, reviews)
     decisions: dict[str, int] = {}
@@ -494,11 +546,128 @@ def _step_review(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"{len(reviews)} reviewed ({decisions}); {dropped} unapproved intents dropped", data
 
 
+def _earnings_frame(ctx: _Context) -> pd.DataFrame | None:
+    has_table = getattr(ctx.store, "has_table", None)
+    try:
+        if callable(has_table) and not has_table(EARNINGS_TABLE):
+            return None
+        return ctx.store.read_table(EARNINGS_TABLE)
+    except Exception as e:  # optional input: no table means no earnings rule
+        log.info("earnings_table_unavailable", error=str(e))
+        return None
+
+
+def _step_positions(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    if ctx.broker is None:
+        raise Skip("no broker: pass --broker (or set execution.broker) to manage open positions")
+    review_positions = _load("execution.position_manager.review_positions")
+    _reconcile_ledger(ctx)
+    earnings = _earnings_frame(ctx)
+    actions = list(review_positions(ctx.settings, ctx.broker, _panel_for(ctx), ctx.as_of, None, earnings))
+    ctx.exit_actions = actions
+    ctx.save(EXITS_KIND, actions)
+    by_kind: dict[str, int] = {}
+    for a in actions:
+        by_kind[str(a.kind)] = by_kind.get(str(a.kind), 0) + 1
+    flagged = sorted({a.symbol for a in actions if str(a.kind) == "flag"})
+    data = {"actions": len(actions), "by_kind": by_kind, "flagged": flagged, "earnings_rows": 0 if earnings is None else len(earnings)}
+    return f"{len(actions)} exit actions {by_kind or ''}".rstrip() + (f"; flagged {flagged}" if flagged else ""), data
+
+
+def _reconcile_ledger(ctx: _Context) -> None:
+    """Refresh ledger statuses from the broker before exit decisions (a fill since the last run must be the
+    ledger row the R ladder reads). Best effort: the autopilot reconciles again and fails closed itself."""
+    order_manager = _try_load("execution.order_manager.OrderManager")
+    ledger_cls = _try_load("execution.ledger.OrderLedger")
+    if order_manager is None or ledger_cls is None:
+        return
+    ledger = None
+    try:
+        ledger = ledger_cls(ctx.settings.execution.ledger_file)
+        order_manager(ctx.broker, None, ctx.settings.risk.kill_switch_file, ledger=ledger).reconcile()
+    except Exception as e:  # noqa: BLE001
+        log.warning("positions_reconcile_failed", error=_error_text(e))
+    finally:
+        if ledger is not None:
+            ledger.close()
+
+
+def _veto_filtered(ctx: _Context, intents: list[OrderIntent]) -> list[OrderIntent]:
+    if not ctx.reviews or not ctx.settings.execution.require_review_approval:
+        return intents
+    vetoed = {(r.symbol, r.strategy) for r in ctx.reviews
+              if r.decision in (ReviewDecision.REJECT, ReviewDecision.NEEDS_MORE_INFO)}
+    return [i for i in intents if (i.symbol, i.strategy) not in vetoed]
+
+
+def _step_execute(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    if ctx.dry_run and not ctx.plan_on_dry_run:
+        raise Skip("dry run: no orders")
+    if not ctx.execute:
+        raise Skip("execution disabled (settings.execution.nightly_execute / --no-execute)")
+    if ctx.broker is None:
+        raise Skip("no broker: pass --broker (or set execution.broker) to execute")
+    run_autopilot = _load("execution.autopilot.run_autopilot")
+    intents = ctx.intents
+    unreviewed = 0
+    if intents and ctx.reviews and ctx.settings.execution.require_review_approval:
+        # with reviews present, only reviewed intents go on (the nightly's review step already did this; saved
+        # signals in `swing autopilot` can hold more intents than agent.max_candidates_per_day reviewed)
+        reviewed = {(r.symbol, r.strategy) for r in ctx.reviews}
+        kept = [i for i in intents if (i.symbol, i.strategy) in reviewed]
+        unreviewed, intents = len(intents) - len(kept), kept
+        if unreviewed:
+            log.warning("execute_entries_held", reason="no review for the signal", intents=unreviewed)
+    if ctx.intents and not ctx.dry_run:
+        # the intents file holds what a human may send (reviewed, not vetoed), never the raw sized set; the
+        # automation holds below do not empty it (a person can still look and approve with `swing paper`)
+        ctx.save(INTENTS_KIND, _veto_filtered(ctx, intents))
+    held = 0
+    review_step = ctx.report.step("review")
+    if (
+        intents
+        and review_step is not None
+        and review_step.status == StepStatus.FAIL
+        and ctx.settings.execution.require_review_approval
+    ):  # fail closed: a crashed review must not let unreviewed entries through; exits still run
+        held, intents = len(intents), []
+        log.warning("execute_entries_held", reason="review step failed", intents=held)
+    if intents and ctx.review_hold and ctx.settings.execution.require_review_approval:
+        held, intents = len(intents), []  # run_cycle: the saved review of the signals' day failed or never finished
+        log.warning("execute_entries_held", reason=ctx.review_hold, intents=held)
+    held_positions = 0
+    positions_step = ctx.report.step("positions")
+    if intents and positions_step is not None and positions_step.status == StepStatus.FAIL:
+        held_positions, intents = len(intents), []  # no exit decisions were made: add no new risk either
+        log.warning("execute_entries_held", reason="positions step failed", intents=held_positions)
+    report = run_autopilot(
+        ctx.settings, ctx.secrets, ctx.as_of, ctx.broker, intents, ctx.reviews or None, ctx.exit_actions,
+        dry_run=ctx.dry_run,
+    )
+    if report.audit_path:
+        ctx.report.files["autopilot"] = str(report.audit_path)
+    if report.staged_path:
+        ctx.report.files["pending"] = str(report.staged_path)
+    summary = report.summary()
+    if summary["mode"] == ABORTED_MODE:
+        raise RuntimeError("; ".join(report.errors) or "autopilot aborted")
+    data = {**summary, "submitted": report.submitted, "approved_by": report.approved_by, "errors": report.errors,
+            "entries_held_review_failed": held, "entries_held_unreviewed": unreviewed,
+            "entries_held_positions_failed": held_positions}
+    held_note = f"; {held} entries held ({ctx.review_hold or 'review step failed'})" if held else ""
+    held_note += f"; {unreviewed} unreviewed entries held" if unreviewed else ""
+    held_note += f"; {held_positions} entries held (positions step failed)" if held_positions else ""
+    return f"{summary['mode']}: entries {summary['entries'] or '{}'}; exits {summary['exits'] or '{}'}{held_note}", data
+
+
 def _step_journal(ctx: _Context) -> tuple[str, dict[str, Any]]:
     write_entry = _load("agent.journal.write_entry")
     fills = _load_json(ctx.file(FILLS_KIND), [])
     narrative = bool(ctx.secrets.anthropic_api_key) and not ctx.dry_run
-    extra: dict[str, Any] = {"settings": ctx.settings, "narrative": narrative, "client": ctx.journal_client}
+    client = ctx.journal_client
+    if client is None and narrative:  # same .env-key reason as the review step
+        client = _load("agent.client.get_client")(ctx.secrets)
+    extra: dict[str, Any] = {"settings": ctx.settings, "narrative": narrative, "client": client}
     if ctx.journal_root is not None:
         extra["root"] = ctx.journal_root
     text = _call_supported(write_entry, ctx.as_of, ctx.signals, ctx.reviews, ctx.intents, fills, **extra)
@@ -517,6 +686,8 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("rank", _step_rank),
     ("size", _step_size),
     ("review", _step_review),
+    ("positions", _step_positions),
+    ("execute", _step_execute),
     ("journal", _step_journal),
 )
 
@@ -524,6 +695,36 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
 # ----------------------------------------------------------------------------------------------------------
 # entry point
 # ----------------------------------------------------------------------------------------------------------
+def _open_store(settings: Settings, store: Any | None) -> tuple[Any, bool]:
+    if store is not None:
+        return store, False
+    store_cls = _load("data.store.Store")
+    return store_cls(str(_resolve(settings.data.store_path))), True
+
+
+def _run_steps(
+    ctx: _Context,
+    steps: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...],
+    kind: str,
+    own_store: bool,
+) -> NightlyReport:
+    report = ctx.report
+    t0 = time.perf_counter()
+    try:
+        for name, fn in steps:
+            _run_step(ctx, name, fn)
+    finally:
+        if own_store and hasattr(ctx.store, "close"):
+            ctx.store.close()
+    report.finished_at = datetime.now(UTC)
+    report.elapsed_s = round(time.perf_counter() - t0, 3)
+    report_path = run_file(ctx.settings, kind, ctx.as_of)
+    report.report_path = str(report_path)
+    _save_json(report_path, report.model_dump(mode="json"))
+    log.info(f"{kind}_done", ok=report.ok, failed=report.failed, elapsed_s=report.elapsed_s, report=str(report_path))
+    return report
+
+
 def run_nightly(
     settings: Settings,
     secrets: Secrets,
@@ -534,24 +735,22 @@ def run_nightly(
     *,
     store: Any | None = None,
     broker: Any | None = None,
+    execute: bool | None = None,
     review_client: Any | None = None,
     journal_client: Any | None = None,
     journal_root: Path | None = None,
 ) -> NightlyReport:
-    """Run the nightly pipeline for `as_of` (default today) and write the JSON report. Never submits orders.
+    """Run the nightly pipeline for `as_of` (default today) and write the JSON report.
 
-    `dry_run` skips the Claude calls (review, journal prose); data steps still run so the store stays fresh.
-    Keyword arguments inject a store, a read-only broker (equity/positions), Anthropic clients and the
-    journal root for tests and embedding.
+    `dry_run` skips the Claude calls (review, journal prose) and never executes; data steps still run so the
+    store stays fresh. `broker` supplies equity and positions and is where `execute` sends orders (through
+    execution.autopilot only); `execute=None` means `settings.execution.nightly_execute`. Other keyword
+    arguments inject a store, Anthropic clients and the journal root for tests and embedding.
     """
     as_of_d = as_of or date.today()
     provider_name = provider or settings.data.bar_provider
-    started = datetime.now(UTC)
-    report = NightlyReport(as_of=as_of_d, provider=provider_name, dry_run=dry_run, started_at=started)
-    own_store = store is None
-    if own_store:
-        store_cls = _load("data.store.Store")
-        store = store_cls(str(_resolve(settings.data.store_path)))
+    report = NightlyReport(as_of=as_of_d, provider=provider_name, dry_run=dry_run, started_at=datetime.now(UTC))
+    store, own_store = _open_store(settings, store)
     ctx = _Context(
         settings=settings,
         secrets=secrets,
@@ -565,19 +764,106 @@ def run_nightly(
         journal_client=journal_client,
         journal_root=journal_root,
         report=report,
+        execute=settings.execution.nightly_execute if execute is None else bool(execute),
     )
-    log.info("nightly_start", as_of=str(as_of_d), provider=provider_name, dry_run=dry_run)
-    t0 = time.perf_counter()
-    try:
-        for name, fn in STEPS:
-            _run_step(ctx, name, fn)
-    finally:
-        if own_store and hasattr(store, "close"):
-            store.close()
-    report.finished_at = datetime.now(UTC)
-    report.elapsed_s = round(time.perf_counter() - t0, 3)
-    report_path = run_file(settings, NIGHTLY_KIND, as_of_d)
-    report.report_path = str(report_path)
-    _save_json(report_path, report.model_dump(mode="json"))
-    log.info("nightly_done", ok=report.ok, failed=report.failed, elapsed_s=report.elapsed_s, report=str(report_path))
-    return report
+    log.info("nightly_start", as_of=str(as_of_d), provider=provider_name, dry_run=dry_run, execute=ctx.execute,
+             broker=getattr(broker, "name", None))
+    return _run_steps(ctx, STEPS, NIGHTLY_KIND, own_store)
+
+
+def _saved_review_hold(settings: Settings, signals_day: date) -> str | None:
+    """Why `run_cycle` must hold entries for `signals_day`'s signals: the review step recorded a failure, or
+    started and never finished. Falls back to that day's nightly report for runs saved before the marker
+    existed. A review that was skipped on purpose (no key, dry run) or never attempted (`swing scan`) does not
+    hold; `require_review_approval` then works as before (enforced on the reviews that exist)."""
+    status = _load_json(run_file(settings, REVIEW_STATUS_KIND, signals_day), {})
+    state = status.get("status") if isinstance(status, dict) else None
+    if state == REVIEW_FAIL:
+        return f"the review of {signals_day} failed: {status.get('detail') or 'see the nightly report'}"
+    if state == REVIEW_RUNNING:
+        return f"the review of {signals_day} started and never finished"
+    if state is None:
+        nightly_report = _load_json(run_file(settings, NIGHTLY_KIND, signals_day), {})
+        steps = nightly_report.get("steps") if isinstance(nightly_report, dict) else None
+        step = next((s for s in steps or [] if isinstance(s, dict) and s.get("name") == "review"), None)
+        if step is not None and step.get("status") == StepStatus.FAIL.value:
+            return f"the review of {signals_day} failed: {step.get('detail') or 'see the nightly report'}"
+    return None
+
+
+def latest_signals_date(settings: Settings, as_of: date) -> date | None:
+    """Most recent `runs/signals/<date>.json` on or before `as_of`."""
+    folder = store_dir(settings) / RUNS_DIRNAME / SIGNALS_KIND
+    days: list[date] = []
+    for path in folder.glob("*.json"):
+        try:
+            day = date.fromisoformat(path.stem)
+        except ValueError:
+            continue
+        if day <= as_of:
+            days.append(day)
+    return max(days) if days else None
+
+
+CYCLE_STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] = tuple(
+    (name, fn) for name, fn in STEPS if name in CYCLE_STEP_NAMES
+)
+
+
+def run_cycle(
+    settings: Settings,
+    secrets: Secrets,
+    as_of: date | None = None,
+    broker: Any | None = None,
+    dry_run: bool = False,
+    *,
+    equity: float | None = None,
+    store: Any | None = None,
+) -> NightlyReport:
+    """`swing autopilot`: size -> positions -> execute from the latest saved signals (and their reviews).
+
+    Signals older than `execution.max_signal_age_days` are not sized, but positions and exits still run.
+    `dry_run` plans through the autopilot (nothing reaches the broker). Report: `runs/cycle/<date>.json`.
+    """
+    as_of_d = as_of or date.today()
+    report = NightlyReport(as_of=as_of_d, provider=settings.data.bar_provider, dry_run=dry_run,
+                           started_at=datetime.now(UTC))
+    signals: list[Signal] = []
+    reviews: list[Review] = []
+    stale: str | None = None
+    signals_day = latest_signals_date(settings, as_of_d)
+    max_age = settings.execution.max_signal_age_days
+    if signals_day is None:
+        stale = f"no saved signals on or before {as_of_d}; run `swing scan` or `swing nightly` first"
+    elif (as_of_d - signals_day).days > max_age:
+        stale = f"latest saved signals are from {signals_day}, older than execution.max_signal_age_days={max_age}"
+    else:
+        signals_path = run_file(settings, SIGNALS_KIND, signals_day)
+        signals = _load_models(signals_path, Signal)
+        reviews = _load_models(run_file(settings, REVIEWS_KIND, signals_day), Review)
+        report.files["signals_used"] = str(signals_path)
+    review_hold = _saved_review_hold(settings, signals_day) if signals and signals_day is not None else None
+    store, own_store = _open_store(settings, store)
+    ctx = _Context(
+        settings=settings,
+        secrets=secrets,
+        as_of=as_of_d,
+        provider=settings.data.bar_provider,
+        equity=equity,
+        dry_run=dry_run,
+        store=store,
+        broker=broker,
+        review_client=None,
+        journal_client=None,
+        journal_root=None,
+        report=report,
+        signals=signals,
+        reviews=reviews,
+        execute=True,
+        plan_on_dry_run=True,
+        stale_signals=stale,
+        review_hold=review_hold,
+    )
+    log.info("cycle_start", as_of=str(as_of_d), signals_day=str(signals_day), signals=len(signals), dry_run=dry_run,
+             broker=getattr(broker, "name", None))
+    return _run_steps(ctx, CYCLE_STEPS, CYCLE_KIND, own_store)

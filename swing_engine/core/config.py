@@ -61,6 +61,7 @@ class DataConfig(BaseModel):
     store_path: str = "data/swing.duckdb"
     event_log_path: str = "data/events.sqlite"
     calendar: str = "NYSE"
+    massive_calls_per_min: float | None = None  # paid Massive plans; None = Basic's 5/min (env MASSIVE_CALLS_PER_MIN wins)
 
 
 class MonitorConfig(BaseModel):
@@ -82,12 +83,35 @@ class AgentConfig(BaseModel):
     max_candidates_per_day: int = 20
 
 
+class ExecutionConfig(BaseModel):
+    """Autopilot and position-management rules (execution.autopilot, execution.position_manager).
+
+    Orders are approved automatically only on a paper broker (`auto_submit_paper`); a live broker additionally
+    needs `auto_submit_live` AND env SWING_ALLOW_LIVE=yes, otherwise intents are staged for a human.
+    """
+
+    auto_submit_paper: bool = True
+    auto_submit_live: bool = False
+    max_new_orders_per_day: int = Field(default=5, ge=0)
+    require_review_approval: bool = True  # enforced only when reviews exist for the day
+    cancel_unfilled_entries_after_sessions: int = Field(default=1, ge=1)
+    breakeven_after_r: float | None = 1.0  # stop -> entry once the close is this many R in profit (None = off)
+    trail_after_r: float | None = 2.0  # then trail to the lowest low of `trail_lookback_days` (None = off)
+    trail_lookback_days: int = Field(default=10, ge=1)
+    earnings_exit_days: int = Field(default=1, ge=0)  # close when earnings are within this many sessions
+    max_signal_age_days: int = Field(default=3, ge=0)  # `swing autopilot` refuses older saved signals (weekend = 3)
+    broker: str | None = None  # broker for `swing autopilot` and the nightly (alpaca | paper_sim); None = none
+    nightly_execute: bool = False  # nightly runs positions -> execute when a broker is configured
+    ledger_file: str = "state/orders.sqlite"  # OrderManager idempotency ledger
+
+
 class Settings(BaseModel):
     data: DataConfig = DataConfig()
     universe: UniverseConfig = UniverseConfig()
     risk: RiskConfig = RiskConfig()
     monitor: MonitorConfig = MonitorConfig()
     agent: AgentConfig = AgentConfig()
+    execution: ExecutionConfig = ExecutionConfig()
     strategies: dict[str, dict[str, Any]] = Field(default_factory=dict)  # name -> params/enabled
 
 

@@ -1,0 +1,43 @@
+{
+ "results": [
+  {
+   "ticker": "PENNY",
+   "name": "Penny Corp",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "XNYS",
+   "type": "CS",
+   "active": true,
+   "currency_name": "usd",
+   "list_date": "2015-05-01",
+   "last_updated_utc": "2024-03-01T00:00:00Z"
+  },
+  {
+   "ticker": "THIN",
+   "name": "Thin Trading Inc",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "XNAS",
+   "type": "CS",
+   "active": true,
+   "currency_name": "usd",
+   "list_date": "2018-01-02",
+   "last_updated_utc": "2024-03-01T00:00:00Z"
+  },
+  {
+   "ticker": "PNKX",
+   "name": "Pink Sheet Co",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "OTCM",
+   "type": "CS",
+   "active": true,
+   "currency_name": "usd",
+   "list_date": "2010-01-04",
+   "last_updated_utc": "2024-03-01T00:00:00Z"
+  }
+ ],
+ "status": "OK",
+ "request_id": "req-ref-cs-2",
+ "count": 3
+}

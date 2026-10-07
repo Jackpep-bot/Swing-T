@@ -9,19 +9,33 @@ Float unknown or stale => warnings only, never a long alert. A float map (`data.
 can be attached with `float_map=` / `set_float_map`; it fills `float_m` on snapshots that lack one and carries
 the stale flag. All thresholds come from settings.monitor.smallcap (SmallCapThresholds mirrors
 config/settings.yaml); structural weights are versioned constants below.
+
+Live use (`Pipeline`): `observe(event)` keeps per-session memory (halts, dilution, SSR), per-symbol quote fields
+read from single-symbol event meta (any `SmallCapSnapshot` field name, plus `price`/`close`/`halt_price` and
+`gap_pct`) and a 24 h catalyst memory (news headlines / 8-K / 6-K; offerings are not catalysts).
+`assess_event(event, held)` builds a snapshot per symbol from that memory, the bar reference
+(`set_reference`: prev_close, avg_vol_*) and the float map, and evaluates it; symbols without a known price and
+prior close, or outside the universe, are skipped. `assessment_meta` is what lands in `event.meta["smallcap"]`.
+Every number in a snapshot is read from a feed, a filing or the store; nothing is guessed.
 """
 from __future__ import annotations
 
-from collections.abc import Mapping
-from datetime import datetime
+from collections.abc import Iterable, Mapping
+from datetime import datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from swing_engine.core.models import Event, Priority
 
-from .constants import DILUTION_FORM_PREFIXES, LULD_CODES, TOXIC_HALT_CODES
+from .constants import (
+    DILUTION_FORM_PREFIXES,
+    HALT_OPENING_STATUSES,
+    LULD_CODES,
+    REGULAR_OPEN,
+    TOXIC_HALT_CODES,
+)
 from .hours import parse_hhmm, to_et
 
 log = structlog.get_logger(__name__)
@@ -57,6 +71,39 @@ WINDOW_START_ET = "07:00"
 WINDOW_END_ET = "11:00"
 FLOAT_UNKNOWN_WARNING = "float unknown: warnings only"
 FLOAT_STALE_WARNING = "float stale: warnings only"
+FLOAT_WARNINGS: frozenset[str] = frozenset({FLOAT_UNKNOWN_WARNING, FLOAT_STALE_WARNING})
+# ---- live evaluation (pipeline) ---------------------------------------------------------------------------
+#: event kinds the pipeline evaluates the track on
+SMALLCAP_EVENT_KINDS: frozenset[str] = frozenset({"bar_trigger", "halt", "filing", "news"})
+CATALYST_KINDS: frozenset[str] = frozenset({"news", "filing"})
+CATALYST_FORM_PREFIXES: tuple[str, ...] = ("8-K", "6-K")
+CATALYST_WINDOW_H = 24.0
+#: a catalyst stamped slightly after the evaluating event (feed clock skew) still counts
+CATALYST_CLOCK_SKEW_MIN = 5.0
+#: a headline tagging more symbols than this is a list / round-up, not a catalyst for any one of them
+CATALYST_MAX_SYMBOLS = 3
+OFFERING_KEYWORDS: tuple[str, ...] = (
+    "offering", "registered direct", "private placement", "at-the-market", "equity distribution agreement",
+    "warrant inducement", "shelf registration",
+)
+UNREGISTERED_SALE_ITEM = "3.02"
+#: meta keys read as the current price, in order (bar close, halt price, last trade)
+PRICE_META_KEYS: tuple[str, ...] = ("price", "last_price", "close", "halt_price")
+GAP_META_KEY = "gap_pct"
+#: average-volume keys for the spec's 30-day ADV, in order; avg_vol_20d (bar reference) is the stored proxy
+ADV_META_KEYS: tuple[str, ...] = ("adv_30d", "avg_vol_30d", "avg_vol_20d")
+_CONTEXT_FIELDS: frozenset[str] = frozenset({"symbol", "now", "held"})
+_REQUIRED_FIELDS: frozenset[str] = frozenset({"symbol", "now", "price", "prev_close"})
+CLASSIFIER_RUNNER = "runner"
+CLASSIFIER_RAMP = "ramp_and_dump"
+CLASSIFIER_BAGHOLDER = "bagholder"
+CLASSIFIER_WARNING = "warning"
+CLASSIFIER_NONE = "none"
+DO_NOT_BUY_CLASSIFIERS: frozenset[str] = frozenset({CLASSIFIER_RAMP, CLASSIFIER_BAGHOLDER})
+#: tie-break between symbols of one event with the same priority (higher = more severe)
+CLASSIFIER_SEVERITY: dict[str, int] = {
+    CLASSIFIER_NONE: 0, CLASSIFIER_WARNING: 1, CLASSIFIER_RUNNER: 2, CLASSIFIER_BAGHOLDER: 3, CLASSIFIER_RAMP: 4,
+}
 
 
 @runtime_checkable
@@ -187,13 +234,21 @@ class SmallCapTrack:
         thresholds: SmallCapThresholds | dict[str, Any] | None = None,
         *,
         float_map: Mapping[str, FloatRecord] | None = None,
+        reference: Mapping[str, Mapping[str, Any]] | None = None,
+        degraded_feed: bool = False,
     ):
         self.t = thresholds if isinstance(thresholds, SmallCapThresholds) else SmallCapThresholds.from_settings(thresholds)
         self.blocklist: set[str] = set()
         self.tainted: set[str] = set()
         self._session: dict[str, dict[str, Any]] = {}
+        self._quotes: dict[str, dict[str, Any]] = {}
+        #: symbol -> (last non-offering catalyst ts, last offering headline/filing ts)
+        self._catalysts: dict[str, dict[str, datetime]] = {}
+        self.degraded_feed = degraded_feed
         self.float_map: dict[str, FloatRecord] = {}
         self.set_float_map(float_map)
+        self.reference: dict[str, dict[str, Any]] = {}
+        self.set_reference(reference)
 
     # ---- float lookup hook ---------------------------------------------------------------------------------------
     def set_float_map(self, float_map: Mapping[str, FloatRecord] | None) -> None:
@@ -443,10 +498,13 @@ class SmallCapTrack:
 
     # ---- session memory from the live event stream -------------------------------------------------------------
     def observe(self, event: Event) -> None:
-        """Record halts / dilution filings / SSR from pipeline events so later snapshots inherit them."""
+        """Record halts / dilution filings / SSR from pipeline events so later snapshots inherit them; also the
+        quote fields of single-symbol events and the catalyst memory (see the module docstring)."""
+        self._remember_quote(event)
+        self._remember_catalyst(event)
         for sym in event.symbols:
             st = self._session.setdefault(sym.upper(), {"up_halts": 0, "halt_codes": set(), "dilution": False, "ssr": False})
-            if event.kind == "halt" and event.meta.get("status", "halted") != "resumed":
+            if event.kind == "halt" and str(event.meta.get("status", "halted")).lower() in HALT_OPENING_STATUSES:
                 code = str(event.meta.get("reason_code", "")).upper()
                 st["halt_codes"].add(code)
                 if code in LULD_CODES:
@@ -467,5 +525,194 @@ class SmallCapTrack:
         return {k: (sorted(v) if isinstance(v, set) else v) for k, v in st.items()}
 
     def reset_session(self) -> None:
+        """New ET session: forget halts, quotes and the session blocklist (catalysts age out after 24 h)."""
         self._session.clear()
+        self._quotes.clear()
         self.blocklist.clear()
+
+    # ---- live evaluation -----------------------------------------------------------------------------------
+    def set_reference(self, reference: Mapping[str, Mapping[str, Any]] | None) -> None:
+        """Attach the bar reference (`adapters.alpaca_stocks.reference_from_panel`: prev_close, avg_vol_20d, ...)."""
+        self.reference = {k.upper(): dict(v) for k, v in (reference or {}).items()}
+
+    def quote(self, symbol: str) -> dict[str, Any]:
+        return dict(self._quotes.get(symbol.upper(), {}))
+
+    def snapshot_for(self, symbol: str, now: datetime, *, held: bool = False) -> SmallCapSnapshot | None:
+        """Snapshot from quote memory + bar reference + catalyst memory; None without a price and prior close.
+        The price falls back to prev_close * (1 + gap_pct) when a bar trigger reported only the gap."""
+        sym = symbol.upper()
+        q = self._quotes.get(sym, {})
+        ref = self.reference.get(sym, {})
+        prev_close = _num(q.get("prev_close")) or _num(ref.get("prev_close"))
+        price = _num(q.get("price"))
+        gap = _num(q.get(GAP_META_KEY))
+        if price is None and prev_close and gap is not None:
+            price = prev_close * (1.0 + gap / PCT)
+        if price is None or not prev_close or price <= 0:
+            return None
+        data: dict[str, Any] = {k: v for k, v in q.items() if k in SmallCapSnapshot.model_fields}
+        data.update(symbol=sym, now=now, price=price, prev_close=prev_close, held=held)
+        if data.get("adv_30d") is None:
+            adv = next((v for v in (_num(q.get(k)) or _num(ref.get(k)) for k in ADV_META_KEYS) if v), None)
+            if adv is not None:
+                data["adv_30d"] = adv
+        if "premarket_volume" not in data and data.get("cum_volume") is not None and to_et(now).time() < REGULAR_OPEN:
+            data["premarket_volume"] = data["cum_volume"]  # before the open, cumulative volume is pre-market volume
+        catalyst, offering = self._catalyst_flags(sym, now)
+        data["catalyst"] = bool(data.get("catalyst")) or catalyst
+        data["catalyst_is_offering"] = bool(data.get("catalyst_is_offering")) or offering
+        if self.degraded_feed:
+            data["degraded_feed"] = True
+        try:
+            return SmallCapSnapshot.model_validate(data)
+        except ValidationError as exc:
+            bad = {str(e["loc"][0]) for e in exc.errors() if e.get("loc")}
+            log.warning("smallcap.snapshot_invalid", symbol=sym, fields=sorted(bad))
+        if bad & _REQUIRED_FIELDS:
+            return None
+        for key in bad:  # forget the unusable meta value so it cannot poison later snapshots
+            data.pop(key, None)
+            q.pop(key, None)
+        try:
+            return SmallCapSnapshot.model_validate(data)
+        except ValidationError:
+            return None
+
+    def assess_event(
+        self, event: Event, held: Iterable[str] = ()
+    ) -> list[tuple[SmallCapSnapshot, SmallCapAssessment]]:
+        """Evaluate every symbol of a `SMALLCAP_EVENT_KINDS` event that has a snapshot and is in the universe.
+        Call `observe(event)` first so the event's own halt / filing / quote is part of the snapshot."""
+        if event.kind not in SMALLCAP_EVENT_KINDS:
+            return []
+        held_set = {s.upper() for s in held}
+        out: list[tuple[SmallCapSnapshot, SmallCapAssessment]] = []
+        for sym in dict.fromkeys(s.upper() for s in event.symbols if s):
+            snap = self.snapshot_for(sym, event.ts_received, held=sym in held_set)
+            if snap is None:
+                continue
+            snap = self.apply_float(snap)
+            a = self.evaluate(snap)
+            if a.eligible_warn:
+                out.append((snap, a))
+        return out
+
+    # ---- memory helpers ------------------------------------------------------------------------------------
+    def _remember_quote(self, event: Event) -> None:
+        if len(event.symbols) != 1 or not event.meta:
+            return  # a multi-symbol event's numbers cannot be attributed to one symbol
+        meta = event.meta
+        fields = {
+            k: v for k, v in meta.items()
+            if k in SmallCapSnapshot.model_fields and k not in _CONTEXT_FIELDS and v is not None
+        }
+        price = next((p for p in (_num(meta.get(k)) for k in PRICE_META_KEYS) if p is not None and p > 0), None)
+        if price is not None:
+            fields["price"] = price
+        gap = _num(meta.get(GAP_META_KEY))
+        if gap is not None:
+            fields[GAP_META_KEY] = gap
+        for key in ADV_META_KEYS:
+            adv = _num(meta.get(key))
+            if adv is not None:
+                fields[key] = adv
+        if fields:
+            self._quotes.setdefault(event.symbols[0].upper(), {}).update(fields)
+
+    def _remember_catalyst(self, event: Event) -> None:
+        if event.kind not in CATALYST_KINDS or not event.symbols or len(event.symbols) > CATALYST_MAX_SYMBOLS:
+            return
+        offering = False
+        catalyst = False
+        if event.kind == "filing":
+            form = str(event.meta.get("form_type", "")).upper()
+            items = [str(i) for i in event.meta.get("items", []) or []]
+            if any(form.startswith(p) for p in DILUTION_FORM_PREFIXES) or UNREGISTERED_SALE_ITEM in items:
+                offering = True
+            elif any(form.startswith(p) for p in CATALYST_FORM_PREFIXES):
+                catalyst = True
+        else:
+            text = f"{event.title} {event.body}".lower()
+            offering = any(k in text for k in OFFERING_KEYWORDS)
+            catalyst = not offering
+        if not (offering or catalyst):
+            return
+        key = "offering" if offering else "catalyst"
+        for sym in event.symbols:
+            mem = self._catalysts.setdefault(sym.upper(), {})
+            prev = mem.get(key)
+            if prev is None or event.ts_source > prev:
+                mem[key] = event.ts_source
+
+    def _catalyst_flags(self, symbol: str, now: datetime) -> tuple[bool, bool]:
+        mem = self._catalysts.get(symbol, {})
+        window = timedelta(hours=CATALYST_WINDOW_H)
+        skew = timedelta(minutes=CATALYST_CLOCK_SKEW_MIN)
+
+        def recent(key: str) -> bool:
+            ts = mem.get(key)
+            return ts is not None and -skew <= now - ts <= window
+
+        return recent("catalyst"), recent("offering")
+
+
+def classify_assessment(a: SmallCapAssessment) -> str:
+    """Which classifier fired, most severe first (ramp-and-dump, bag-holder/toxic, runner, warning, none).
+    Float unknown/stale on its own is not a warning worth an alert (it only blocks longs)."""
+    if a.promoted:
+        return CLASSIFIER_RAMP
+    if a.bagholder_alert or a.toxic:
+        return CLASSIFIER_BAGHOLDER
+    if a.long_alert:
+        return CLASSIFIER_RUNNER
+    if any(w not in FLOAT_WARNINGS for w in a.warnings):
+        return CLASSIFIER_WARNING
+    return CLASSIFIER_NONE
+
+
+def alert_headline(a: SmallCapAssessment, classifier: str, long_cutoff_et: str) -> str:
+    if classifier == CLASSIFIER_RAMP:
+        return "PROMOTED / DO NOT BUY (ramp-and-dump profile)"
+    if classifier == CLASSIFIER_BAGHOLDER:
+        if a.toxic and not a.bagholder_alert:
+            return "TOXIC HALT / DO NOT BUY (no longs this session)"
+        return f"DO NOT HOLD / DO NOT BUY: short watch (bag-holder {a.bagholder_score})"
+    if classifier == CLASSIFIER_RUNNER:
+        return f"RUNNER grade {a.grade}: early window only, expires {long_cutoff_et} ET"
+    if classifier == CLASSIFIER_WARNING:
+        return "small-cap warning: " + next(w for w in a.warnings if w not in FLOAT_WARNINGS)
+    return ""
+
+
+def assessment_meta(s: SmallCapSnapshot, a: SmallCapAssessment, long_cutoff_et: str) -> dict[str, Any]:
+    """JSON-safe dict for ``event.meta["smallcap"]`` (read by `monitor.outcomes`)."""
+    classifier = classify_assessment(a)
+    reasons = list(dict.fromkeys([*a.bagholder_reasons, *a.score_downs, *a.runner_blockers, *a.eligibility_reasons]))
+    return {
+        "symbol": a.symbol,
+        "classifier": classifier,
+        "grade": a.grade,
+        "bagholder_score": a.bagholder_score,
+        "structural_score": a.structural_score,
+        "reasons": reasons,
+        "warnings": list(a.warnings),
+        "float_known": s.float_m is not None,
+        "float_stale": bool(s.float_stale),
+        "long_alert": a.long_alert,
+        "do_not_buy": classifier in DO_NOT_BUY_CLASSIFIERS,
+        "priority": str(a.priority),
+        "headline": alert_headline(a, classifier, long_cutoff_et),
+        "message": a.message,
+        "version": SMALLCAP_VERSION,
+    }
+
+
+def _num(value: Any) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if f == f and f not in (float("inf"), float("-inf")) else None

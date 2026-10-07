@@ -23,7 +23,7 @@ import structlog
 from swing_engine.core.models import Event
 from swing_engine.data.store import Store
 
-from .constants import MARKET_WIDE_HALT_CODES
+from .constants import HALT_STATUSES, MARKET_WIDE_HALT_CODES
 from .hours import ET
 
 log = structlog.get_logger(__name__)
@@ -77,6 +77,9 @@ def record_halt(event: Event, store: Store) -> list[dict[str, Any]]:
     if code in MARKET_WIDE_HALT_CODES:
         return []
     status = str(meta.get("status", STATUS_HALTED)).lower().strip()
+    if status not in HALT_STATUSES:
+        log.debug("halt_log.status_ignored", event_id=event.event_id, status=status, code=code)
+        return []  # only halted/paused open a row and only resumed closes one
     ts = _utc(event.ts_source)
     rows: list[dict[str, Any]] = []
     for symbol in dict.fromkeys(s.upper().strip() for s in event.symbols if s):

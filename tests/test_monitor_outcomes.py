@@ -257,3 +257,14 @@ def test_compute_outcomes_opens_store_and_event_log_from_settings(tmp_path: Path
     assert len(frame) == ALERT_ROWS
     with Store(store_path, read_only=True) as s:
         assert s.count(OUTCOMES_TABLE) == ALERT_ROWS
+
+
+def test_traded_rating_counts_as_rated_and_useful() -> None:
+    from swing_engine.monitor import outcomes as oc
+
+    assert oc._rating({"rating": "Traded"}) == "traded" and oc._rating({"rating": "late"}) is None
+    frame = pd.DataFrame({"rule_hits": ["r1", "r1", "r1"], "rating": ["traded", "noise", None]})
+    for h in oc.HORIZONS:
+        frame[f"ret_{h}_pct"] = [1.0, -1.0, 0.5]
+    row = oc._summarize_group("r1", frame)
+    assert (row["rated"], row["useful"], row["traded"]) == (2, 1, 1) and row["precision_proxy"] == 0.5

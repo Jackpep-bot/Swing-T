@@ -414,6 +414,71 @@ def test_ingest_calls_run_ingest_with_dates_and_store(workdir: Path, monkeypatch
     assert "rows" in result.output and "10" in result.output
 
 
+@pytest.mark.parametrize(("flag", "expected"), [("auto", "auto"), ("grouped", "grouped"), ("per-symbol", "symbols")])
+def test_ingest_passes_mode_and_progress(
+    workdir: Path, monkeypatch: pytest.MonkeyPatch, flag: str, expected: str
+) -> None:
+    seen: dict[str, Any] = {}
+
+    def run_ingest(settings, secrets, provider_name, symbols, start, end, store, *, full=False, mode="auto",
+                   progress=None):
+        seen.update(mode=mode, full=full)
+        progress("estimate: 3 sessions")
+        return {"rows": 1}
+
+    fake_module(monkeypatch, "data.ingest", run_ingest=run_ingest)
+    fake_module(monkeypatch, "data.store", Store=FakeStore)
+    result = runner.invoke(cli.app, ["ingest", "--provider", "sample", "--end", AS_OF, "--mode", flag])
+    assert result.exit_code == 0, result.output
+    assert seen == {"mode": expected, "full": False}
+    assert "estimate: 3 sessions" in result.output
+
+
+def test_ingest_rejects_unknown_mode_and_reports_mode_errors(workdir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def run_ingest(settings, secrets, provider_name, symbols, start, end, store, *, mode="auto"):
+        raise ValueError("mode='grouped' ingests every US ticker per session; drop the symbol list")
+
+    fake_module(monkeypatch, "data.ingest", run_ingest=run_ingest)
+    fake_module(monkeypatch, "data.store", Store=FakeStore)
+    bad = runner.invoke(cli.app, ["ingest", "--provider", "sample", "--mode", "bogus"])
+    assert bad.exit_code == cli.EXIT_USAGE
+    assert "per-symbol" in bad.output
+    clash = runner.invoke(cli.app, ["ingest", "--provider", "sample", "--mode", "grouped", "-s", "AAA"])
+    assert clash.exit_code == cli.EXIT_USAGE
+    assert "drop the symbol list" in clash.output
+
+
+class _FakeRating:
+    def __init__(self, ok: bool, event_id: str, rating: str, reason: str | None = None) -> None:
+        self.ok, self.event_id, self.rating, self.reason = ok, event_id, rating, reason
+
+    def summary(self) -> str:
+        return f"rated {self.event_id} {self.rating}" if self.ok else f"not rated: {self.event_id} ({self.reason})"
+
+
+def test_monitor_rate_calls_rate_cli(workdir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[tuple[str, str]] = []
+
+    def rate_cli(settings, event_id, rating):
+        if rating not in ("useful", "noise", "traded"):
+            raise ValueError(f"rating must be useful|noise|traded, got {rating!r}")
+        seen.append((event_id, rating))
+        if event_id == "missing":
+            return _FakeRating(False, event_id, rating, "unknown_event")
+        return _FakeRating(True, event_id, rating)
+
+    fake_module(monkeypatch, "monitor.rate", rate_cli=rate_cli)
+    ok = runner.invoke(cli.app, ["monitor", "rate", "ev-1", "traded"])
+    assert ok.exit_code == 0, ok.output
+    assert "rated ev-1 traded" in ok.output
+    missing = runner.invoke(cli.app, ["monitor", "rate", "missing", "useful"])
+    assert missing.exit_code == cli.EXIT_NO_DATA
+    assert "unknown_event" in missing.output
+    bad = runner.invoke(cli.app, ["monitor", "rate", "ev-1", "great"])
+    assert bad.exit_code == cli.EXIT_USAGE
+    assert seen == [("ev-1", "traded"), ("missing", "useful")]
+
+
 def test_universe_prints_count(workdir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def build_universe(provider, settings, as_of):
         assert isinstance(provider, FakeProvider) and as_of == AS_OF_DATE
@@ -750,6 +815,39 @@ def test_paper_refuses_live_alpaca_without_override(workdir: Path, monkeypatch: 
     result = runner.invoke(cli.app, ["paper", "--as-of", AS_OF, "--approve", "jane"])
     assert result.exit_code == cli.EXIT_REFUSED
     assert "ALPACA_PAPER" in result.output
+
+
+def test_paper_executes_the_staged_plan_instead_of_the_unfiltered_intents(
+    workdir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live account's staged plan (vetoes + cap applied, exits included) is what `--approve` must send."""
+    from types import SimpleNamespace
+
+    every = [fake_size_signal(make_signal(s, 10.0), EQUITY, load_settings(None).risk, []) for s in ("AAA", "REJ")]
+    write_models(run_file(workdir, "intents"), every)  # the unfiltered sized set
+    run_file(workdir, "pending").parent.mkdir(parents=True, exist_ok=True)
+    run_file(workdir, "pending").write_text("{}")
+    seen: dict[str, Any] = {}
+
+    def load_pending(settings: Any, day: Any) -> Any:
+        return [every[0]], []
+
+    def run_pending(settings: Any, secrets: Any, day: Any, broker: Any, approver: str) -> Any:
+        seen.update(day=day, approver=approver, broker=broker.name)
+        entry = SimpleNamespace(model_dump=lambda mode: {"kind": "entry", "symbol": "AAA", "status": "submitted"})
+        return SimpleNamespace(mode=SimpleNamespace(value="approved"), exits=[], entries=[entry], errors=[])
+
+    _install_execution_fakes(monkeypatch)
+    fake_module(monkeypatch, "execution.autopilot", load_pending=load_pending, run_pending=run_pending)
+    result = runner.invoke(cli.app, ["paper", "--as-of", AS_OF, "--approve", "jane", "--broker", "fake_broker"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"day": AS_OF_DATE, "approver": "jane", "broker": "fake_broker"}
+    assert FakeOrderManager.calls == []  # the intents file was not submitted
+    assert json.loads(run_file(workdir, "fills").read_text()) == [{"kind": "entry", "symbol": "AAA", "status": "submitted"}]
+    forced = runner.invoke(cli.app, ["paper", "--as-of", AS_OF, "--approve", "jane", "--broker", "fake_broker",
+                                     "--from-intents"])
+    assert forced.exit_code == 0, forced.output
+    assert [i.symbol for i, _ in FakeOrderManager.calls] == ["AAA", "REJ"]
 
 
 def test_paper_without_intents_exits_no_data(workdir: Path, monkeypatch: pytest.MonkeyPatch) -> None:

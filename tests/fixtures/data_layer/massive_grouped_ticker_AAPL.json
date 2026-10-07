@@ -1,0 +1,18 @@
+{
+ "results": {
+  "ticker": "AAPL",
+  "name": "Apple Inc.",
+  "market": "stocks",
+  "locale": "us",
+  "primary_exchange": "XNAS",
+  "type": "CS",
+  "active": true,
+  "currency_name": "usd",
+  "list_date": "1980-12-12",
+  "last_updated_utc": "2024-03-01T00:00:00Z",
+  "cik": "0000320193",
+  "market_cap": 3400000000000.0
+ },
+ "status": "OK",
+ "request_id": "req-details-aapl"
+}

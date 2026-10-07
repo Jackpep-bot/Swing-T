@@ -5,6 +5,7 @@ data:
   store_path: data/swing.duckdb
   event_log_path: data/events.sqlite
   calendar: NYSE
+  massive_calls_per_min: null  # paid Massive plan only (e.g. 100); null = Basic's 5/min. Env MASSIVE_CALLS_PER_MIN wins
 
 universe:
   min_price: 5.0
@@ -75,3 +76,18 @@ agent:
   review_model: claude-sonnet-5-5
   lab_model: claude-opus-5-5
   max_candidates_per_day: 20
+
+execution:                     # execution.autopilot / execution.position_manager (paper autopilot)
+  auto_submit_paper: true      # approve automatically ONLY on a paper broker (alpaca paper or paper_sim)
+  auto_submit_live: false      # live also needs env SWING_ALLOW_LIVE=yes; otherwise intents are staged in runs/pending/
+  max_new_orders_per_day: 5
+  require_review_approval: true  # a reject / needs_more_info review vetoes its intent (only when reviews exist)
+  cancel_unfilled_entries_after_sessions: 1
+  breakeven_after_r: 1.0       # move the stop to entry at +1R (close-based)
+  trail_after_r: 2.0           # from +2R trail the stop to the lowest low of trail_lookback_days; never loosened
+  trail_lookback_days: 10
+  earnings_exit_days: 1        # flatten when earnings fall within this many sessions of as_of
+  max_signal_age_days: 3       # `swing autopilot` refuses saved signals older than this (Fri -> Mon = 3)
+  broker: alpaca               # nightly reads equity/positions here; ALPACA_PAPER=true keeps it on paper
+  nightly_execute: true        # nightly runs positions -> execute (never with --dry-run)
+  ledger_file: state/orders.sqlite

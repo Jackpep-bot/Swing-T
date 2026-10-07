@@ -1,5 +1,6 @@
 """ops.nightly: the full pipeline on the sample provider in a tmp tree (no network), plus failure isolation,
-the post-review intent filter, the ranker hand-off and the no-orders guarantee."""
+the post-review intent filter, the ranker hand-off and the guarantee that orders only leave through the
+execute step (execution.autopilot); see tests/test_ops_nightly_execute.py for the execute path."""
 
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ def make_settings(tmp_path: Path, **overrides: Any) -> Settings:
         "data": {"store_path": str(tmp_path / "data" / "swing.duckdb"), "bar_provider": "sample", "history_years": HISTORY_YEARS},
         "universe": {"static_symbols": SYMBOLS},
         "risk": {"kill_switch_file": str(tmp_path / "state" / "KILL"), "limits_state_file": str(tmp_path / "state" / "limits.json")},
+        "execution": {"ledger_file": str(tmp_path / "state" / "orders.sqlite")},
         "strategies": {
             "sr_bounce": {"enabled": True},
             "pullback_trend": {"enabled": True},
@@ -91,9 +93,12 @@ class ReadOnlyBroker:
     def positions(self) -> list[Any]:
         return []
 
+    def open_orders(self) -> list[dict[str, Any]]:
+        return []
+
     def submit(self, intent: OrderIntent) -> dict[str, Any]:
         self.submits += 1
-        raise AssertionError("the nightly pipeline must never submit an order")
+        raise AssertionError("a dry-run nightly must never submit an order")
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -105,9 +110,11 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path) -> None:
 
     assert [s.name for s in report.steps] == list(nightly.STEP_NAMES)
     assert statuses(report) == {
-        "ingest": "ok", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip", "journal": "ok",
+        "ingest": "ok", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
+        "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert report.ok and report.failed == [] and report.dry_run and report.provider == "sample"
+    assert "no broker" in report.step("positions").detail and "dry run" in report.step("execute").detail
     assert all(s.elapsed_s >= 0 for s in report.steps) and report.elapsed_s > 0
     assert "swing rank train" in report.step("rank").detail and "dry run" in report.step("review").detail
 
@@ -271,13 +278,14 @@ def test_failures_are_isolated_and_the_report_is_still_written(tmp_path: Path) -
     with Store(":memory:") as store:
         report = run_nightly(settings, no_secrets(), AS_OF, "no_such_provider", EQUITY, True, store=store, journal_root=tmp_path)
     assert statuses(report) == {
-        "ingest": "fail", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip", "journal": "ok",
+        "ingest": "fail", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
+        "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert "no_such_provider" in report.step("ingest").detail
     assert "no bars" in report.step("features").detail and "no signals" in report.step("size").detail
     assert report.failed == ["ingest", "features", "scan"] and not report.ok
     saved = json.loads(run_file(tmp_path, "nightly").read_text())
-    assert [s["status"] for s in saved["steps"]] == ["fail", "fail", "fail", "skip", "skip", "skip", "ok"]
+    assert [s["status"] for s in saved["steps"]] == ["fail", "fail", "fail", "skip", "skip", "skip", "skip", "skip", "ok"]
 
 
 def test_strategy_failure_is_isolated_inside_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -301,16 +309,20 @@ def test_every_strategy_failing_fails_the_scan_step(tmp_path: Path, monkeypatch:
     assert report.step("size").status is StepStatus.SKIP
 
 
-def test_broker_is_read_only_and_never_asked_to_submit(tmp_path: Path) -> None:
+def test_dry_run_broker_is_read_only_and_never_asked_to_submit(tmp_path: Path) -> None:
     settings = make_settings(tmp_path)
     broker = ReadOnlyBroker(equity=75_000.0)
-    report = run_nightly(settings, no_secrets(), AS_OF, "sample", None, True, broker=broker, journal_root=tmp_path)
+    report = run_nightly(settings, no_secrets(), AS_OF, "sample", None, True, broker=broker, execute=True, journal_root=tmp_path)
     size = report.step("size")
     assert size.status is StepStatus.OK and size.data["equity"] == 75_000.0 and size.data["open_positions"] == 0
+    assert report.step("positions").status is StepStatus.OK and report.step("execute").status is StepStatus.SKIP
     assert broker.submits == 0
-    assert "execution" not in Path(nightly.__file__).read_text().split("from swing_engine.core")[0]
+    imports = [ln for ln in Path(nightly.__file__).read_text().splitlines() if ln.startswith(("import ", "from "))]
+    assert not any("execution" in ln for ln in imports)  # execution is loaded lazily by the execute step only
 
 
-def test_nightly_module_never_imports_execution_or_submits() -> None:
+def test_nightly_module_never_submits_directly() -> None:
+    """Orders leave the nightly only through execution.autopilot (loaded lazily by the execute step)."""
     source = Path(nightly.__file__).read_text()
     assert "swing_engine.execution" not in source and ".submit(" not in source
+    assert "execution.autopilot.run_autopilot" in source

@@ -67,7 +67,10 @@ async def test_held_8k_severe_goes_p3_to_pushover_and_telegram(tmp_path):
     assert p.eventlog.get("f1").priority == Priority.P3
     rows = [json.loads(line) for line in (tmp_path / "alerts.jsonl").read_text().splitlines()]
     assert rows[0]["event_id"] == "f1" and rows[0]["delivered"] == ["pushover", "telegram", "console"]
-    assert p.stats == {"received": 1, "dropped": 0, "classified": 0, "delivered": 1}
+    assert p.stats == {
+        "received": 1, "dropped": 0, "classified": 0, "delivered": 1, "halts_logged": 0, "halt_log_errors": 0,
+        "smallcap_alerts": 0,
+    }
 
 
 async def test_duplicates_are_dropped_before_rules():

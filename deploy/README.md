@@ -5,14 +5,21 @@ units). Both run the same two things:
 
 - `swing monitor run`, always on, restarted on exit (`scripts/run-monitor.sh`);
 - `swing nightly`, 06:30 ET on weekdays (`scripts/run-nightly.sh`; falls back to the step-by-step chain on a
-  checkout without the `nightly` command): ingest -> features -> scan -> rank -> size -> review -> journal.
+  checkout without the `nightly` command): ingest -> features -> scan -> rank -> size -> review -> positions ->
+  execute -> journal.
 
-Neither submits orders. `swing paper --approve` stays a command you type.
+The monitor never submits orders. The nightly does, on the **paper** account only, as shipped
+(`execution.broker: alpaca`, `execution.nightly_execute: true`, `ALPACA_PAPER=true`): its execute step is the
+autopilot (`docs/OPERATIONS.md` section 1.1), approved as `autopilot:paper`, capped at
+`execution.max_new_orders_per_day`, blocked by `state/KILL`. To keep the scheduled run plan-only, set
+`execution.nightly_execute: false` or `SWING_NIGHTLY_ARGS="--no-execute"`. A live account is only auto-traded
+with both `execution.auto_submit_live: true` and `SWING_ALLOW_LIVE=yes` in the unit's environment; do not add
+either before the gates in `docs/gates.md` pass.
 
-The scheduled `nightly` sizes against `risk.account_equity_override` in `config/settings.yaml` (set it to the
-paper equity; it does not read the broker). Alternatively export `SWING_NIGHTLY_ARGS="--equity 100000"` in the
-unit (`Environment=`) or add it to the plist's `EnvironmentVariables`; without either, the size step is skipped
-and the log says so.
+The scheduled `nightly` reads equity and positions from the broker in `execution.broker`. Without a broker it
+sizes against `risk.account_equity_override`, or `SWING_NIGHTLY_ARGS="--equity 100000"` in the unit
+(`Environment=`) / the plist's `EnvironmentVariables`; without any of these the size step is skipped and the
+log says so.
 
 ## Mac vs $6 VPS
 

@@ -110,11 +110,28 @@ MARKET_WIDE_HALT_CODES: frozenset[str] = frozenset({"MWC1", "MWC2", "MWC3", "MWC
 TOXIC_HALT_CODES: frozenset[str] = frozenset({HALT_INFO_REQUESTED, HALT_SEC_SUSPENSION})
 NEWS_HALT_CODES: frozenset[str] = frozenset({HALT_NEWS_PENDING, HALT_NEWS_RELEASED})
 LULD_CODES: frozenset[str] = frozenset({HALT_LULD_PAUSE, "LUDS"})
-# Alpaca `statuses` message status codes (sc) that map to halts vs resumptions.
-ALPACA_STATUS_HALT = "H"
-ALPACA_STATUS_PAUSE = "P"
-ALPACA_STATUS_RESUME = "T"
-ALPACA_STATUS_QUOTE_RESUME = "Q"
+# Alpaca `statuses` message status codes (sc), https://docs.alpaca.markets/docs/real-time-stock-pricing-data
+# ("Status codes"). Tape C/O (UTP) use letters; Tape A/B (CTA: NYSE, NYSE American, Arca) use digits/letters.
+ALPACA_STATUS_HALT = "H"  # UTP trading halt
+ALPACA_STATUS_PAUSE = "P"  # UTP volatility trading pause
+ALPACA_STATUS_RESUME = "T"  # UTP trading resumption
+ALPACA_STATUS_QUOTE_RESUME = "Q"  # UTP quotation resumption
+ALPACA_CTA_STATUS_HALT = "2"  # CTA trading halt
+ALPACA_CTA_STATUS_RESUME = "3"  # CTA resume
+ALPACA_CTA_STATUS_LULD = "F"  # CTA limit up-limit down (treated as a pause)
+ALPACA_CTA_STATUS_SSR = "E"  # CTA short sale restriction -> an `ssr` event, never a halt
+# CTA 5/6 price/trading-range indications, 7/8/9/A imbalances, C/D no imbalance: not halts, dropped
+ALPACA_STATUS_RESUMED_CODES: frozenset[str] = frozenset(
+    {ALPACA_STATUS_RESUME, ALPACA_STATUS_QUOTE_RESUME, ALPACA_CTA_STATUS_RESUME}
+)
+ALPACA_STATUS_PAUSED_CODES: frozenset[str] = frozenset({ALPACA_STATUS_PAUSE, ALPACA_CTA_STATUS_LULD})
+ALPACA_STATUS_HALTED_CODES: frozenset[str] = frozenset({ALPACA_STATUS_HALT, ALPACA_CTA_STATUS_HALT})
+# the only `status` values a halt event may carry (halt_log, smallcap and the halts rule ignore anything else)
+HALT_STATUS_HALTED = "halted"
+HALT_STATUS_PAUSED = "paused"
+HALT_STATUS_RESUMED = "resumed"
+HALT_STATUSES: frozenset[str] = frozenset({HALT_STATUS_HALTED, HALT_STATUS_PAUSED, HALT_STATUS_RESUMED})
+HALT_OPENING_STATUSES: frozenset[str] = frozenset({HALT_STATUS_HALTED, HALT_STATUS_PAUSED})
 
 # ---- SSR / index -----------------------------------------------------------------------------------------
 SSR_TRIGGER_DROP_PCT = 10.0

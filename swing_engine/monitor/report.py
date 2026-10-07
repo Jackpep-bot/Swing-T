@@ -45,7 +45,8 @@ def report(days: float = 1.0, eventlog: EventLog | None = None, path: str | None
         "alert_channels": dict(Counter(c for a in delivered for c in json.loads(a["channels"]))),
         "notable": [
             {"ts": e.ts_received.isoformat(), "priority": str(e.priority), "symbols": e.symbols,
-             "title": e.title[:100], "rule_hits": e.rule_hits}
+             "title": e.title[:100], "rule_hits": e.rule_hits, "event_id": e.event_id,
+             "rating": e.meta.get("rating")}  # event_id: what `swing monitor rate <event_id> <rating>` takes
             for e in notable[:TOP_N]
         ],
     }
@@ -63,5 +64,9 @@ def format_report(r: dict[str, Any]) -> str:
     if r["alert_channels"]:
         lines.append("channels:  " + ", ".join(f"{k}={v}" for k, v in sorted(r["alert_channels"].items())))
     for n in r["notable"]:
-        lines.append(f"  {n['priority']} {n['ts'][:16]} {' '.join(n['symbols'][:3])}: {n['title']} [{','.join(n['rule_hits'])}]")
+        rated = f" rated={n['rating']}" if n.get("rating") else ""
+        lines.append(
+            f"  {n['priority']} {n['ts'][:16]} {' '.join(n['symbols'][:3])}: {n['title']} [{','.join(n['rule_hits'])}]"
+            f" id={n.get('event_id', '?')}{rated}"
+        )
     return "\n".join(lines)

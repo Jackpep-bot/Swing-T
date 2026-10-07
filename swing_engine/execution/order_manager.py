@@ -4,9 +4,15 @@
 validation, or ``LimitState.check`` says no. It is idempotent on ``client_order_id`` through the sqlite ledger: a
 repeat submit returns the stored record with ``status="duplicate"`` and never calls the broker again. Cancels are
 allowed while the kill switch is tripped (they only reduce exposure).
+
+Exits (``close_position``, ``replace_stop``, ``place_stop``, ``cancel_order``) also go through here so every broker
+mutation is approved and logged in one place. Closing is exposure-reducing and allowed under the kill switch like
+a cancel; replacing or placing a stop is a new order/modification and is refused while it is tripped.
+``replace_stop`` never loosens a stop; ``place_stop`` only arms a stop on a position that has none.
 """
 from __future__ import annotations
 
+import inspect
 from pathlib import Path
 from typing import Any, NoReturn
 
@@ -22,6 +28,10 @@ from swing_engine.risk.limits import LimitState
 log = structlog.get_logger(__name__)
 
 DUPLICATE = "duplicate"
+CLOSED = "closed"
+REPLACED = "replaced"
+PLACED = "placed"
+PAPER_SIM_BROKER = "paper_sim"
 FILLED_STATUSES: frozenset[str] = frozenset({OrderStatus.FILLED, OrderStatus.PARTIALLY_FILLED})
 
 
@@ -144,6 +154,112 @@ class OrderManager:
         return {"status": OrderStatus.CANCELED.value, "client_order_id": client_order_id,
                 "broker_order_id": row["broker_order_id"]}
 
+    def cancel_order(self, order_id: str | None, client_order_id: str | None = None) -> dict[str, Any]:
+        """Cancel by broker order id (falls back to the ledger's id for ``client_order_id``); marks the ledger."""
+        row = self.ledger.get(client_order_id) if client_order_id else None
+        boid = order_id or (row or {}).get("broker_order_id")
+        if not boid:
+            self._refuse("no broker order id to cancel", client_order_id)
+        self.broker.cancel(str(boid))
+        if row is not None:
+            self.ledger.update(row["client_order_id"], OrderStatus.CANCELED)
+        log.info("order_canceled", client_order_id=client_order_id, broker_order_id=boid)
+        return {"status": OrderStatus.CANCELED.value, "client_order_id": client_order_id, "broker_order_id": str(boid)}
+
+    def close_position(
+        self, symbol: str, approved_by: str, qty: int | None = None, price: float | None = None, reason: str = ""
+    ) -> dict[str, Any]:
+        """Flatten ``symbol``. ``price`` is only used by brokers that need one to fill (paper_sim)."""
+        self._require_approval(approved_by, symbol)
+        closer = getattr(self.broker, "close_position", None)
+        if not callable(closer):
+            self._refuse(f"broker {self._broker_name()} cannot close positions", symbol)
+        params = inspect.signature(closer).parameters
+        kwargs: dict[str, Any] = {}
+        if "price" in params:
+            if price is None:
+                self._refuse(f"broker {self._broker_name()} needs a reference price to close {symbol}", symbol)
+            kwargs["price"] = float(price)
+        if "qty" in params and qty is not None:
+            kwargs["qty"] = int(qty)
+        if "reason" in params and reason:
+            kwargs["reason"] = reason
+        response = closer(symbol, **kwargs)
+        log.info("position_close", symbol=symbol, qty=qty, reason=reason, approved_by=approved_by.strip(),
+                 broker=self._broker_name())
+        return {"status": CLOSED, "symbol": symbol, "qty": qty, "reason": reason,
+                "approved_by": approved_by.strip(), "broker": response}
+
+    def replace_stop(
+        self, symbol: str, new_stop: float, approved_by: str, order_id: str | None = None
+    ) -> dict[str, Any]:
+        """Tighten the protective stop of ``symbol``; refuses to loosen it or to act under the kill switch."""
+        self._require_approval(approved_by, symbol)
+        if self.kill_switch_tripped():
+            self._refuse("kill switch tripped: stop changes are blocked", symbol)
+        if new_stop <= 0:
+            self._refuse(f"new stop must be positive, got {new_stop}", symbol)
+        replacer = getattr(self.broker, "replace_stop", None)
+        if callable(replacer):
+            extra = {"order_id": order_id} if "order_id" in inspect.signature(replacer).parameters else {}
+            try:
+                response = replacer(symbol, float(new_stop), **extra)
+            except (LookupError, ValueError) as exc:
+                self._refuse(f"replace_stop failed: {exc}", symbol)
+        elif self._broker_name() == PAPER_SIM_BROKER:
+            response = self._sim_replace_stop(symbol, float(new_stop))
+        else:
+            self._refuse(f"broker {self._broker_name()} cannot replace stops", symbol)
+        log.info("stop_replaced", symbol=symbol, new_stop=new_stop, approved_by=approved_by.strip(),
+                 broker=self._broker_name())
+        return {"status": REPLACED, "symbol": symbol, "new_stop": float(new_stop),
+                "approved_by": approved_by.strip(), "broker": response}
+
+    def place_stop(self, symbol: str, stop: float, approved_by: str) -> dict[str, Any]:
+        """Arm a protective stop on ``symbol`` when it has none (an expired GTC leg, a failed close that had
+        already cancelled the legs, legs dropped after a partial fill). Refused under the kill switch."""
+        self._require_approval(approved_by, symbol)
+        if self.kill_switch_tripped():
+            self._refuse("kill switch tripped: stop changes are blocked", symbol)
+        if stop <= 0:
+            self._refuse(f"stop must be positive, got {stop}", symbol)
+        placer = getattr(self.broker, "place_stop", None)
+        if callable(placer):
+            try:
+                response = placer(symbol, float(stop))
+            except (LookupError, ValueError) as exc:
+                self._refuse(f"place_stop failed: {exc}", symbol)
+        elif self._broker_name() == PAPER_SIM_BROKER:
+            response = self._sim_place_stop(symbol, float(stop))
+        else:
+            self._refuse(f"broker {self._broker_name()} cannot place stops", symbol)
+        log.info("stop_placed", symbol=symbol, stop=stop, approved_by=approved_by.strip(), broker=self._broker_name())
+        return {"status": PLACED, "symbol": symbol, "stop": float(stop), "approved_by": approved_by.strip(),
+                "broker": response}
+
+    def _sim_place_stop(self, symbol: str, stop: float) -> dict[str, Any]:
+        for pos in self.broker.positions():
+            if pos.symbol != symbol:
+                continue
+            if pos.stop is not None:
+                self._refuse(f"{symbol} already has a stop at {pos.stop}", symbol)
+            pos.stop = stop
+            return {"symbol": symbol, "stop": stop}
+        self._refuse(f"no open {symbol} position on {PAPER_SIM_BROKER}", symbol)
+
+    def _sim_replace_stop(self, symbol: str, new_stop: float) -> dict[str, Any]:
+        """paper_sim keeps the stop on its Position objects (``positions()`` returns them by reference)."""
+        for pos in self.broker.positions():
+            if pos.symbol != symbol:
+                continue
+            old = pos.stop
+            loosens = old is not None and (new_stop <= old if pos.side == Side.LONG else new_stop >= old)
+            if loosens:
+                self._refuse(f"refusing to loosen or keep the {symbol} stop: {old} -> {new_stop}", symbol)
+            pos.stop = new_stop
+            return {"symbol": symbol, "previous_stop": old, "new_stop": new_stop}
+        self._refuse(f"no open {symbol} position on {PAPER_SIM_BROKER}", symbol)
+
     def reconcile(self) -> dict[str, Any]:
         """Refresh ledger statuses from the broker and flag positions the ledger does not know about."""
         open_orders = {str(o.get("client_order_id")): o for o in self.broker.open_orders()}
@@ -185,6 +301,13 @@ class OrderManager:
         return summary
 
     # ------------------------------------------------------------ helpers
+    def _require_approval(self, approved_by: str, ref: str | None) -> None:
+        if not isinstance(approved_by, str) or not approved_by.strip():
+            self._refuse("approval required: approved_by is empty", ref)
+
+    def _broker_name(self) -> str:
+        return str(getattr(self.broker, "name", type(self.broker).__name__))
+
     def _account_snapshot(self) -> dict[str, Any]:
         account = dict(self.broker.account())
         account["positions"] = self.broker.positions()

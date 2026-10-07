@@ -161,10 +161,45 @@ shows as a warning, an `EDGAR_USER_AGENT` without an e-mail fails before any req
 continuing; the detail column is the vendor's message with secrets redacted. Appendix A has the equivalent
 `curl`s if you want to see raw responses.
 
-### 2.3 `uv run swing ingest --provider massive --symbols ...` (starter universe)
+### 2.3 `uv run swing ingest --provider massive` (grouped backfill, or a starter list)
 
-On Basic, start with 40 liquid names plus `SPY` (the market symbol the regime features need). Pin them in
-`config/settings.yaml` so every later command (`scan`, `nightly`) stays inside the 5-calls/min budget:
+`swing ingest --mode auto|grouped|per-symbol` (default `auto`). **Grouped** fetches one session for the whole
+US market per call (Massive grouped daily), so its cost depends on the number of sessions, not symbols.
+**Per-symbol** makes one call per symbol (chunked). `auto` picks grouped when the provider supports it (Massive)
+and you named no symbols (`--symbols` empty and `universe.static_symbols: []`, the shipped setting); otherwise
+per-symbol. `--mode grouped` together with `--symbols` is refused.
+
+**Grouped, the recommended path** (full screened universe, survivorship-aware):
+
+```bash
+uv run swing ingest --provider massive                 # grouped; prints an estimate first, then progress
+uv run swing ingest --provider massive --start 2024-10-07   # same, capped to Basic's 2-year window
+```
+
+- Free tier (Basic, 5 calls/min = 12 s per call): 2 years is ~500 sessions, so **about 1 h 40 min**, plus a
+  handful of reference-list calls (the common-stock, ETF and delisted lists are paged once and cached 7 days
+  under `data/raw/massive/`). The estimate line counts every session in `data.history_years` (5 years:
+  ~1,250 sessions, "~4 h"); on Basic the walk stops by itself at the plan's 2-year limit (the first HTTP 403
+  on an older session) and remembers it, so the real time is the 2-year figure. `--start` avoids the overstated
+  estimate.
+- Resumable: each session is written as it arrives and recorded in the store table `ingest_grouped_days`.
+  Ctrl-C (or a sleeping laptop) loses at most the session in flight; re-run the same command to continue.
+  Progress prints every 10 sessions.
+- Nightly refresh: one call per new session plus one splits call (names that split get their stored history
+  refetched), i.e. ~2 calls / ~25 s on a normal day. A session that is not published yet (before the close)
+  counts as pending, not as an error. Three failed sessions in a row (e.g. a bad key) stop the run.
+- Paid plan: set `data.massive_calls_per_min` in `config/settings.yaml` (or export `MASSIVE_CALLS_PER_MIN` in
+  the shell, which wins; it is not read from `.env`), e.g. 100, and the same backfill takes minutes.
+- The universe is then screened from the stored bars (no extra bar calls). Known survivorship gap: a common
+  stock that delisted (or changed ticker) before the backfill window and was never seen in an earlier snapshot
+  is missing; the gap shrinks the longer the nightly runs.
+
+Prints `Ingest via massive` with `mode grouped`, `sessions`, `sessions_fetched`, `sessions_present` (already
+stored), `plan_limit_at` (where Basic's history ends), `sessions_remaining` (non-zero after a stopped run),
+`bars_written`, `splits_repaired`, `estimate_s` and `errors`.
+
+**Per-symbol starter list** (when you want a fixed 40-name list instead): pin it in `config/settings.yaml`, which
+also makes `auto` pick per-symbol:
 
 ```yaml
 universe:
@@ -173,16 +208,15 @@ universe:
                    NKE, DIS, BA, CAT, HON, SLB, UBER, PLTR, COIN]
 ```
 
-Then:
-
 ```bash
 uv run swing ingest --provider massive --start 2024-10-01     # ~8 min for 40 symbols at 5 calls/min
 ```
 
-Prints `Ingest via massive` with `symbols_requested 40`, `symbols_with_bars 40`, `bars_written ~20000`,
-`errors []`, `elapsed_s`, `snapshot_date <last trading day>`. Later runs are incremental (only new days,
-with a small overlap), so the nightly refresh is still one call per symbol: 40 symbols = 8 minutes,
-300 symbols = 1 hour. `--symbols AAPL,MSFT` overrides the list for a one-off.
+Keep `SPY` in the list (the regime features need it). Prints `symbols_requested 40`, `symbols_with_bars 40`,
+`bars_written ~20000`, `errors []`. Later runs are incremental but still one call per symbol: 40 symbols =
+8 minutes a night, 300 symbols = 1 hour, which is why grouped mode is the default for a screened universe.
+`--symbols AAPL,MSFT` overrides the list for a one-off (always per-symbol); only names missing from the store's
+`symbols` table cost an extra metadata call.
 
 ### 2.4 `uv run swing features`
 
@@ -227,7 +261,8 @@ Submits the saved intents as bracket orders (entry + stop + target) through `Ord
 when a limit (daily loss, drawdown, open positions, sector) would be breached. Prints
 `Paper submissions via alpaca approved by <name>` (symbol, qty, client_order_id, status/order id or reason)
 and saves `data/runs/fills/<date>.json`. Check the orders in the Alpaca paper dashboard; `--reconcile` pulls
-fills back. Re-running is safe: `client_order_id` makes submission idempotent.
+fills back. Re-running is safe: `client_order_id` makes submission idempotent. This is the manual path; once
+the nightly runs with execution on (2.11) the autopilot does this step on the paper account by itself.
 
 ### 2.10 `uv run swing monitor run`
 
@@ -245,29 +280,65 @@ the staleness watchdog is market-hours aware and will not page you at night. Sen
 liquid name to `monitor.watchlist` and waiting for its next headline, or run `swing monitor replay --days 1`.
 Leave it running in a terminal for the first day; then install it as a service (`deploy/README.md`).
 
-### 2.11 `uv run swing nightly --equity 100000`
+P2 and P3 alerts on Telegram carry three buttons, **Useful / Noise / Traded**. The running monitor long-polls
+the bot for presses, records the rating on the event in `data/events.sqlite` and answers the press (the button
+spinner stops). Only presses from `TELEGRAM_CHAT_ID` count (in a private chat, only from you); anything else is
+logged and ignored. `--dry-run` never polls. From a terminal: `uv run swing monitor rate <event_id> useful|noise|traded`
+(exit 5 when the event id is not in the log). How to use the ratings: `docs/OPERATIONS.md` section 4.
+
+### 2.11 `uv run swing nightly` (and `swing autopilot`)
 
 One command for the chain the scheduler runs each morning, each step timed and isolated: ingest
-(incremental) -> features -> scan -> rank (when `data/ranker.pkl` exists) -> size -> review (Claude; filters
-the intents by decision) -> journal. It never submits orders; `swing paper` stays a human step. Prints
-`Nightly <date> via massive` as a table `step | status | seconds | detail` (`ok`, `fail`, `skip`), then
-`Files written` (signals, intents, reviews, journal and the report `data/runs/nightly/<date>.json`). A failed
-step does not stop the later ones; the exit code is 1 if any failed.
+(incremental) -> features -> scan -> rank (when `data/ranker.pkl` exists) -> size -> review (Claude; vetoes
+entries by decision) -> positions -> execute -> journal. Prints `Nightly <date> via massive, execute via alpaca`
+as a table `step | status | seconds | detail` (`ok`, `fail`, `skip`), then `Files written` (signals, intents,
+reviews, exits, autopilot audit, journal and the report `data/runs/nightly/<date>.json`). A failed step does
+not stop the later ones; the exit code is 1 if any failed.
 
-The size step needs equity: pass `--equity <paper equity>` or set `risk.account_equity_override` in
-`config/settings.yaml` (the scheduled run uses the override; `nightly` does not read the broker, unlike
-`swing size --broker alpaca`), otherwise `size` is `skip`ped. `--dry-run` skips the Claude calls and still
-refreshes the data. Once it runs clean by hand, schedule it: `scripts/install-launchd.sh` on the Mac or the
-systemd units on a VPS (`deploy/README.md`). On a checkout without `nightly`, `scripts/run-nightly.sh` runs
-the same chain step by step.
+**Paper auto-executes by default.** As shipped, `execution.broker: alpaca` and `execution.nightly_execute: true`:
+the nightly reads equity and open positions from the Alpaca account (`ALPACA_PAPER=true`), and the execute step
+hands the sized, reviewed intents and the exit decisions to `execution.autopilot`, which
+
+1. refuses entries, closes and stop changes while `state/KILL` exists (it only cancels resting unfilled entries);
+2. reconciles the order ledger (`state/orders.sqlite`) with the broker;
+3. approves automatically **only on a paper broker** (Alpaca with `ALPACA_PAPER=true`, or `paper_sim`) as
+   `autopilot:paper`. A live account needs both `execution.auto_submit_live: true` in `settings.yaml` **and**
+   `SWING_ALLOW_LIVE=yes` in the environment of the process (the shell or the service unit; it is not read from
+   `.env`); otherwise nothing is sent and the plan is staged to `data/runs/pending/<date>.json`;
+4. drops entries Claude vetoed (`reject` / `needs_more_info`); when the review step **failed**, or a signal was
+   never reviewed while others were, the entry is held, not sent (`require_review_approval: true`). With no
+   `ANTHROPIC_API_KEY` at all the review step is skipped and entries go through unreviewed;
+5. runs exits first (position manager: cancel an entry still unfilled after
+   `cancel_unfilled_entries_after_sessions`, stop to breakeven at +1R, trail from +2R to the lowest low of the
+   last 10 sessions, flatten before earnings once an `earnings` table exists), then entries as GTC bracket
+   orders (entry + stop + target; the legs carry across days, Alpaca cancels GTC after 90 days);
+6. caps new orders at `execution.max_new_orders_per_day` (5) per date, counted across runs, and is idempotent
+   on `client_order_id`, so a re-run reports `duplicate` instead of sending again;
+7. appends an audit to `data/runs/autopilot/<date>.json` (every entry with its outcome: `submitted`, `vetoed`,
+   `capped`, `duplicate`, `refused`, plus the account snapshot and limit state).
+
+Useful switches: `--no-execute` (everything except orders), `--dry-run` (no Claude calls, never executes; data
+still refreshes), `--broker paper_sim` (the in-memory simulator: nothing leaves the machine), `--equity N` (size
+against N instead of the broker's equity). If the broker cannot be opened (keys missing, Alpaca down) the data
+steps still run and the nightly exits non-zero when execution was intended.
+
+`uv run swing autopilot [--dry-run]` runs size -> positions -> execute alone from the latest saved signals and
+their reviews (refuses signals older than `execution.max_signal_age_days`, still manages positions); its report
+is `data/runs/cycle/<date>.json`. Use it to re-plan after a kill-switch incident or a failed execute step.
+
+Once it runs clean by hand, schedule it: `scripts/install-launchd.sh` on the Mac or the systemd units on a VPS
+(`deploy/README.md`). To keep the scheduled run plan-only, set `execution.nightly_execute: false` (or put
+`--no-execute` in `SWING_NIGHTLY_ARGS`) and submit with `swing paper` yourself.
 
 ## 3. Daily loop in one screen
 
 ```
-06:30 ET  nightly (scheduled)      ingest -> features -> scan -> rank -> size -> review -> journal
+06:30 ET  nightly (scheduled)      ingest -> features -> scan -> rank -> size -> review -> positions -> execute -> journal
+                                   (paper: the autopilot submits up to 5 bracket orders and manages stops/exits)
 08:30 ET  P1 digest on Telegram    pre-market gappers, filings overnight, today's candidates
-09:00     you                      read data/journal/<date>.md; `swing paper --broker alpaca --approve "<you>"`
-09:30-16  monitor (always on)      P2/P3 to your phone; rate them (docs/OPERATIONS.md)
+09:00     you                      read data/journal/<date>.md and data/runs/autopilot/<date>.json; cancel in the
+                                   Alpaca dashboard anything you disagree with (or `touch state/KILL` before 06:30)
+09:30-16  monitor (always on)      P2/P3 to your phone; tap Useful / Noise / Traded (docs/OPERATIONS.md)
 15:45 ET  P1 digest                positions, stops, what the ranker likes for tomorrow
 18:30 ET  P1 digest                after-hours filings, next-day calendar
 weekly    you                      `swing monitor report --days 7`, `swing monitor outcomes --days 30` (docs/OPERATIONS.md)
@@ -279,7 +350,7 @@ weekly    you                      `swing monitor report --days 7`, `swing monit
 |---|---|---|
 | `edgar: user_agent must include a contact email` at start-up | `EDGAR_USER_AGENT` has no `@` | `EDGAR_USER_AGENT="swing-engine you@example.com"` |
 | EDGAR feed logs `403` and goes quiet for ~10 min | SEC fair-access limit tripped (no contact in User-Agent, or > 10 req/s from your IP) | fix the User-Agent; the adapter backs off `EDGAR_FORBIDDEN_RETRY_S = 600` s on its own; do not run two monitors from one IP |
-| Massive ingest crawls, `429` in logs, or hours for a few hundred names | Basic tier: 5 calls/min, one call per symbol | shrink `universe.static_symbols` (<= 100 names stays under 20 min), or buy Starter ($29, unlimited); the token bucket already paces calls so 429s mean another client shares the key |
+| Massive ingest crawls, `429` in logs, or hours for a few hundred names | Basic tier: 5 calls/min, and per-symbol mode costs one call per symbol | empty `universe.static_symbols` and no `--symbols` so `auto` uses grouped mode (one call per session, any number of names); or buy Starter ($29, unlimited) and set `data.massive_calls_per_min`; the token bucket already paces calls so 429s mean another client shares the key |
 | `provider massive returned no bars for 2021..` | Basic has 2 years of history | `--start` within the last 2 years, or Starter (5 y) / Developer (10 y) |
 | `alpaca_stocks` logs `405 symbol limit exceeded` or `409 insufficient subscription` | Basic plan: 30 symbols per websocket, no `*` wildcard | set `monitor.watchlist` to <= 30 symbols (held positions first, then candidates); Plus removes the cap |
 | `406 connection limit exceeded` on an Alpaca websocket | a second connection to the same endpoint (another monitor, a notebook, or the nightly) | one Alpaca socket per endpoint: stop the other process; the nightly job uses REST only |
@@ -288,9 +359,19 @@ weekly    you                      `swing monitor report --days 7`, `swing monit
 | `ANTHROPIC_API_KEY is not set; use --dry-run` | key empty | fill it, or run `review --dry-run`; the monitor falls back to rules-only priorities without it and still delivers P3 |
 | `ALPACA_PAPER is false and SWING_ALLOW_LIVE != 'yes'; see docs/gates.md` | you flipped to live keys | put `ALPACA_PAPER=true` back; live requires the gates in section 6 and the explicit env override |
 | `kill switch tripped (…/state/KILL); remove the file to resume` | `state/KILL` exists | intended; `rm state/KILL` only after the incident is understood (docs/OPERATIONS.md) |
+| nightly `execute` shows `killed: entries {'refused': N}` | `state/KILL` exists | intended: the autopilot sends no entries, closes or stop changes, only cancels of resting unfilled entries; your Alpaca bracket legs still protect open positions |
+| `nightly` exits 1 with `broker 'alpaca' unavailable; positions/execute were skipped` | Alpaca keys missing/invalid or the API is down | `swing doctor --live`; the data steps already ran, so `swing autopilot` later is enough; `--no-execute` to run data only |
+| `execute` detail `N entries held (review step failed)` or `N unreviewed entries held` | the Claude review crashed (key, rate limit, outage), or more intents than `agent.max_candidates_per_day` reviews | fail-closed by design; fix the cause, `swing review --as-of <date>`, then `swing autopilot --as-of <date>` |
+| `execute` shows `capped` | `execution.max_new_orders_per_day` already used for that date (counted across runs from the audit file) | intended; raise the cap in `settings.yaml` only on purpose |
+| `execute` shows `duplicate` | that `client_order_id` is already in `state/orders.sqlite` (a re-run) | intended: re-runs never send twice |
+| live account: nothing submitted, `data/runs/pending/<date>.json` written | `ALPACA_PAPER=false` without both `execution.auto_submit_live: true` and `SWING_ALLOW_LIVE=yes` | intended; `swing paper --approve` reads `data/runs/intents/`, not the pending file |
+| `swing ingest --mode grouped`: `drop the symbol list` | grouped mode ingests the whole market | drop `--symbols`, or use `--mode per-symbol` |
+| grouped ingest stops with `plan_limit_at <date>` | Basic serves 2 years | intended; `--full` retries it after a plan upgrade |
+| Telegram rating buttons spin and nothing is recorded | the monitor is not running (it processes presses), it runs with `--dry-run`, or a webhook is set on the bot (`getUpdates` 409) | start `swing monitor run`; `deleteWebhook`; or rate with `swing monitor rate <event_id> <rating>` |
+| `swing monitor rate` exits 5 `not rated: <id> (unknown_event)` | the id is not in `data/events.sqlite` (typo, or another machine's monitor) | copy the id from the alert's last line or from `swing monitor report` |
 | `refusing to submit orders: a human must approve with --approve` | no `--approve NAME` | add it; it is logged with every order |
 | `no saved signals for <date>; run swing scan --as-of <date> first` | `scan` saved under the last trading day, `size` defaulted to today | pass the same `--as-of` to both, or run `nightly` |
-| `account equity unknown: pass --equity, set risk.account_equity_override, or --broker` (or `nightly` shows `size skip`) | sizing without a broker or equity | `swing size --broker alpaca` (reads paper equity), `--equity 100000`, or `risk.account_equity_override` for the scheduled nightly |
+| `account equity unknown: pass --equity, set risk.account_equity_override, or --broker` (or `nightly` shows `size skip`) | sizing without a broker or equity | `swing size --broker alpaca` (reads paper equity), `--equity 100000`, or set `execution.broker: alpaca` (shipped) so the nightly reads the paper account; `risk.account_equity_override` only without a broker |
 | `store data/swing.duckdb does not exist; run swing ingest first` | no ingest yet | section 2.3 |
 | DuckDB `Could not set lock on file` / `IO Error` | two processes writing the store (nightly + manual ingest) | DuckDB is single-writer: wait for the nightly to finish; the monitor only reads at start-up |
 | `lightgbm` import error (`libomp.dylib not found`) | macOS without OpenMP | harmless: ranker uses scikit-learn; `brew install libomp` to enable LightGBM |
@@ -324,7 +405,9 @@ dollar. Alpha Vantage, EDGAR, Nasdaq/FINRA nightly files, healthchecks.io (20 ch
    sales.
 
 Only when all five hold: live keys in `.env` by you (never from a Claude session), `ALPACA_PAPER=false`,
-`SWING_ALLOW_LIVE=yes` in the shell that runs `swing paper`, and a re-read of `docs/OPERATIONS.md`.
+`SWING_ALLOW_LIVE=yes` in the shell that runs `swing paper`, and a re-read of `docs/OPERATIONS.md`. The
+nightly autopilot stays off for live money unless you also set `execution.auto_submit_live: true` and give the
+scheduled job `SWING_ALLOW_LIVE=yes`; without both it stages the plan to `data/runs/pending/<date>.json`.
 
 ## Appendix A: checking each key by hand
 
@@ -342,8 +425,9 @@ curl -s -X POST https://api.pushover.net/1/messages.json -d token="$PUSHOVER_APP
 ## Appendix B: where things live
 
 - Secrets: `.env` (0600, gitignored). Non-secret config: `config/settings.yaml`.
-- Data: `data/swing.duckdb` (bars, panel, reference), `data/events.sqlite` (monitor event log + alerts),
-  `data/trials.jsonl`, `data/ranker.pkl`, `data/runs/{signals,reviews,intents,fills}/<date>.json`,
-  `data/journal/<date>.md`, `data/logs/`.
+- Data: `data/swing.duckdb` (bars, panel, reference, `ingest_grouped_days`), `data/events.sqlite` (monitor
+  event log, alerts, `alert_ratings`), `data/trials.jsonl`, `data/ranker.pkl`,
+  `data/runs/{signals,reviews,intents,fills,exits,autopilot,pending,nightly,cycle}/<date>.json`,
+  `data/journal/<date>.md`, `data/raw/massive/` (reference-list cache), `data/logs/`.
 - State: `state/KILL` (kill switch), `state/orders.sqlite` (order manager), `state/limits.json` (peak equity).
 - Services: `deploy/launchd` (Mac), `deploy/systemd` (VPS), `scripts/*.sh`.

@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Nightly pipeline runner for launchd / systemd. Prefers `swing nightly`; on a build that does not have that
 # command yet it runs the same chain step by step (ingest -> features -> scan -> rank -> size -> review -> journal).
-# It never submits orders: `swing paper` needs a human `--approve` and is run by hand (docs/OPERATIONS.md).
+# `swing nightly` submits orders only through its execute step (execution.autopilot): automatic approval on a paper
+# broker only, capped per day, blocked by state/KILL; `--no-execute` in SWING_NIGHTLY_ARGS or
+# execution.nightly_execute: false makes it plan-only (docs/OPERATIONS.md section 1.1). The step-by-step fallback
+# below never submits orders.
 # Optional environment:
 #   HEALTHCHECKS_URL    healthchecks.io ping URL ("/start" before, "" on success, "/fail" on error)
 #   SWING_NIGHTLY_ARGS  extra arguments passed to `swing nightly` (word-split on purpose)
@@ -33,7 +36,7 @@ fi
 if [ -e state/KILL ]; then
   # The kill switch only blocks orders, but a tripped switch means a human is handling an incident;
   # keep data fresh but say so loudly in the log.
-  echo "run-nightly: state/KILL is present; pipeline runs, no orders are possible" >&2
+  echo "run-nightly: state/KILL is present; pipeline runs, the autopilot refuses every order" >&2
 fi
 
 ping_hc "/start"

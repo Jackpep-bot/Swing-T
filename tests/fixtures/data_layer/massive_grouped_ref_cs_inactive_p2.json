@@ -1,0 +1,21 @@
+{
+ "results": [
+  {
+   "ticker": "ANCIENT",
+   "name": "Ancient Corp",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "XNYS",
+   "type": "CS",
+   "active": false,
+   "currency_name": "usd",
+   "list_date": "1990-01-02",
+   "last_updated_utc": "2024-03-01T00:00:00Z",
+   "delisted_utc": "2019-01-02T00:00:00Z"
+  }
+ ],
+ "status": "OK",
+ "request_id": "req-ref-cs-inactive-2",
+ "count": 1,
+ "next_url": "https://api.massive.com/v3/reference/tickers?cursor=csinactive3"
+}

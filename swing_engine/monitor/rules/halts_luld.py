@@ -7,7 +7,7 @@ from swing_engine.core.interfaces import Rule
 from swing_engine.core.models import Event
 from swing_engine.core.registry import register
 
-from ..constants import LULD_CODES, MARKET_WIDE_HALT_CODES, NEWS_HALT_CODES, TOXIC_HALT_CODES
+from ..constants import HALT_STATUSES, LULD_CODES, MARKET_WIDE_HALT_CODES, NEWS_HALT_CODES, TOXIC_HALT_CODES
 from ._common import P0, P1, P2, P3, tiered
 
 
@@ -28,6 +28,8 @@ class HaltsLuld(Rule):
         status = str(event.meta.get("status", "halted")).lower()
         if code in MARKET_WIDE_HALT_CODES:
             return None  # handled by market_wide_suppression
+        if status not in HALT_STATUSES:
+            return None  # an indication/imbalance/unknown status is not a halt
         if status == "resumed":
             return f"resume:{code or 'na'}", tiered(event, ctx, P2, P1, P0)
         if code in TOXIC_HALT_CODES:

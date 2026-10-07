@@ -1,0 +1,34 @@
+{
+ "results": [
+  {
+   "ticker": "OLDCO",
+   "name": "Old Company",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "XNYS",
+   "type": "CS",
+   "active": false,
+   "currency_name": "usd",
+   "list_date": "1999-01-04",
+   "last_updated_utc": "2024-03-01T00:00:00Z",
+   "delisted_utc": "2024-02-20T00:00:00Z"
+  },
+  {
+   "ticker": "GONE",
+   "name": "Gone Long Ago",
+   "market": "stocks",
+   "locale": "us",
+   "primary_exchange": "XNYS",
+   "type": "CS",
+   "active": false,
+   "currency_name": "usd",
+   "list_date": "2001-01-02",
+   "last_updated_utc": "2024-03-01T00:00:00Z",
+   "delisted_utc": "2021-06-30T00:00:00Z"
+  }
+ ],
+ "status": "OK",
+ "request_id": "req-ref-cs-inactive",
+ "count": 2,
+ "next_url": "https://api.massive.com/v3/reference/tickers?cursor=csinactive2"
+}

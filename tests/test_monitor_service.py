@@ -321,8 +321,10 @@ def test_report_counts():
     assert r["events"] == 8 and r["by_source"]["alpaca_news"] == 3 and r["by_kind"]["halt"] == 2
     assert r["by_priority"]["P3"] == 1 and r["alerts_delivered"] == 1 and r["alert_channels"] == {"pushover": 1, "telegram": 1}
     assert ("held_hit", 1) in r["top_rules"] and r["notable"][0]["symbols"] == ["DOOM"]
+    doom_id = r["notable"][0]["event_id"]
+    assert doom_id and r["notable"][0]["rating"] is None
     text = report_mod.format_report(r)
-    assert "8 events" in text and "P3" in text and "DOOM" in text
+    assert "8 events" in text and "P3" in text and "DOOM" in text and f"id={doom_id}" in text
 
 
 def test_replay_reruns_rules_and_flags_changes():

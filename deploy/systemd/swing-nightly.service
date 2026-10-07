@@ -1,4 +1,5 @@
-# swing-engine nightly pipeline (oneshot), started by swing-nightly.timer. Never submits orders.
+# swing-engine nightly pipeline (oneshot), started by swing-nightly.timer. Submits paper orders only through the
+# autopilot execute step (execution.nightly_execute); add --no-execute to SWING_NIGHTLY_ARGS for plan-only.
 #   systemctl --user enable --now swing-nightly.timer
 #   systemctl --user start swing-nightly.service      # run it right now
 #   journalctl --user -u swing-nightly -n 100         # (if StandardOutput below is changed to journal)

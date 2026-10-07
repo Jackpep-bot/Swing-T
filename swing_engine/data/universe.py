@@ -1,8 +1,21 @@
 """Point-in-time universe construction.
 
-`build_universe(provider, settings, as_of)` applies `UniverseConfig` to the provider's symbol list and to
-the trailing liquidity window ending at `as_of`. Names that were listed at `as_of` stay in the universe
-even if they delisted later (survivorship-bias discipline); names delisted before `as_of` drop out.
+`build_universe(provider, settings, as_of)` applies `UniverseConfig` to reference data and to the trailing
+liquidity window ending at `as_of`. Names that were listed at `as_of` stay in the universe even if they
+delisted later (survivorship-bias discipline); names delisted before `as_of` drop out.
+
+Reference data: a provider with `universe_reference(include_etfs, delisted_since)` (massive) supplies only
+common stock (+ ADRs, + ETFs when allowed), active plus the names delisted since the lookback window began;
+other providers fall back to `list_symbols(include_delisted=True)`. Rows already in the store's `symbols`
+table are added for tickers the provider no longer reports, so a name seen in any earlier snapshot keeps its
+type after it delists. Tickers in the bars with no reference row at all are dropped: that removes the
+preferreds, warrants, units and rights a grouped-daily feed carries, at the cost of also dropping a common
+stock that delisted before the delisted-name paging window and was never seen in a snapshot (or traded
+under a ticker it later changed). That residual survivorship gap is accepted and grows smaller the longer
+the nightly ingest runs.
+
+Liquidity bars, in order of preference: the `bars` argument, the `store` (grouped ingest keeps the whole
+market there), the provider's `grouped_daily` (one call per lookback session), else per-symbol `daily_bars`.
 """
 from __future__ import annotations
 
@@ -14,8 +27,9 @@ import structlog
 from swing_engine.core.config import Settings, UniverseConfig
 from swing_engine.core.interfaces import BarProvider
 
-from ._common import as_date, session_ts
+from ._common import as_date, empty_bars, normalize_symbols, session_ts
 from .calendar import trading_days
+from .store import Store
 
 log = structlog.get_logger(__name__)
 
@@ -26,6 +40,7 @@ LOOKBACK_CALENDAR_PAD_DAYS = 15  # calendar days of slack so the window always h
 COMMON_STOCK_TYPES = frozenset({"CS", "COMMON STOCK", "COMMON", "ADRC", "ADR", "STOCK", "US_EQUITY"})
 ETF_TYPES = frozenset({"ETF", "ETN", "ETV", "ETS", "FUND", "INDEX"})
 OTC_EXCHANGES = frozenset({"OTC", "OTCM", "OTCB", "OTCQ", "OTCQB", "OTCQX", "PINX", "OOTC", "XOTC", "PINK"})
+SYMBOLS_TABLE = "symbols"  # the reference table `data.ingest` maintains
 
 
 def _is_otc(exchange: object) -> bool:
@@ -110,30 +125,84 @@ def _lookback_start(as_of: date) -> date:
     return sessions[-LIQUIDITY_LOOKBACK_SESSIONS] if len(sessions) >= LIQUIDITY_LOOKBACK_SESSIONS else sessions[0]
 
 
+def lookback_window(as_of: date | str) -> tuple[date, date]:
+    """(first, last) session dates of the liquidity window ending at `as_of` (read these bars from a store)."""
+    as_of_d = as_date(as_of)
+    return _lookback_start(as_of_d), as_of_d
+
+
+def _stored_reference(store: Store | None) -> pd.DataFrame:
+    if store is None or not store.has_table(SYMBOLS_TABLE):
+        return pd.DataFrame()
+    try:
+        return store.read_table(SYMBOLS_TABLE)
+    except Exception as exc:  # pragma: no cover - a damaged table must not block the screen
+        log.warning("universe_symbols_table_unreadable", error=str(exc))
+        return pd.DataFrame()
+
+
+def reference_symbols(
+    provider: BarProvider, cfg: UniverseConfig, delisted_since: date, store: Store | None = None
+) -> pd.DataFrame:
+    """Reference rows to screen: the provider's typed universe reference when it has one, else its full
+    listing; plus store `symbols` rows for tickers the provider did not return (provider rows win)."""
+    typed = getattr(provider, "universe_reference", None)
+    if callable(typed):
+        fresh = typed(include_etfs=cfg.include_etfs, delisted_since=delisted_since)
+    else:
+        fresh = provider.list_symbols(include_delisted=True)
+    stored = _stored_reference(store)
+    if stored.empty or "symbol" not in stored.columns:
+        return fresh
+    if fresh is None or len(fresh) == 0:
+        return normalize_symbols(stored)
+    extra = stored[~stored["symbol"].astype(str).str.upper().isin(set(fresh["symbol"].astype(str)))]
+    if extra.empty:
+        return fresh
+    return normalize_symbols(pd.concat([extra, fresh], ignore_index=True))
+
+
+def _window_bars(
+    provider: BarProvider, store: Store | None, names: list[str], start: date, as_of: date
+) -> pd.DataFrame:
+    if store is not None:
+        stored = store.read_bars(None, start, as_of)
+        if not stored.empty:
+            return stored
+        log.warning("universe_store_window_empty", start=str(start), as_of=str(as_of))
+    grouped = getattr(provider, "grouped_daily", None)
+    if callable(grouped):
+        frames = [grouped(d) for d in trading_days(start, as_of)]
+        frames = [f for f in frames if f is not None and not f.empty]
+        return pd.concat(frames, ignore_index=True) if frames else empty_bars()
+    return provider.daily_bars(names, start, as_of)
+
+
 def build_universe(
     provider: BarProvider,
     settings: Settings,
     as_of: date | str,
     *,
     bars: pd.DataFrame | None = None,
+    store: Store | None = None,
 ) -> list[str]:
     """Symbols that pass `settings.universe` at `as_of`, ranked by average dollar volume, capped at
-    `max_symbols`. `static_symbols` overrides the screen. Pass `bars` (e.g. from the store) to avoid
-    re-fetching the liquidity window from the provider."""
+    `max_symbols`. `static_symbols` overrides the screen. Pass `bars` (e.g. a panel) or `store` (a DuckDB
+    store filled by grouped ingest) to screen without fetching the liquidity window from the provider."""
     cfg = settings.universe
     as_of_d = as_date(as_of)
     if cfg.static_symbols:
         return sorted({s.upper() for s in cfg.static_symbols})
-    symbols = provider.list_symbols(include_delisted=True)
+    start = _lookback_start(as_of_d)
+    symbols = reference_symbols(provider, cfg, start, store)
     candidates = filter_symbols(symbols, cfg, as_of_d)
     if candidates.empty:
         log.warning("universe_empty_after_reference_filters", as_of=str(as_of_d))
         return []
     names = sorted(candidates["symbol"].tolist())
     if bars is None:
-        bars = provider.daily_bars(names, _lookback_start(as_of_d), as_of_d)
-    else:
-        bars = bars[bars["symbol"].isin(names)]
+        bars = _window_bars(provider, store, names, start, as_of_d)
+    bars = bars[bars["symbol"].isin(names)]
     stats = liquidity_screen(bars, cfg, as_of_d)
     passed = stats[stats["passes"]].sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])
     universe = passed["symbol"].head(cfg.max_symbols).tolist()

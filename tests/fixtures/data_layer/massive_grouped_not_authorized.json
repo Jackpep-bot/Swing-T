@@ -1,0 +1,5 @@
+{
+ "status": "NOT_AUTHORIZED",
+ "request_id": "req-grouped-403",
+ "message": "Your plan doesn't include this data timeframe. Please upgrade your plan at https://massive.com/pricing"
+}
