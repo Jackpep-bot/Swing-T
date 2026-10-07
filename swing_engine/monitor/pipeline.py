@@ -32,6 +32,7 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
 import structlog
 
 from swing_engine.core.interfaces import Deliverer, Rule
@@ -60,6 +61,8 @@ from .smallcap import (
 )
 
 log = structlog.get_logger(__name__)
+DILUTION_HISTORY_DAYS = 30  # float staleness + bag-holder dilution memory look this far back
+HOURS_PER_DAY = 24
 
 CLASSIFY_KINDS: frozenset[str] = frozenset({"news", "filing", "halt", "social", "bar_trigger"})
 DIGEST_FALLBACK_CHANNELS: tuple[str, ...] = ("telegram", "console")
@@ -199,15 +202,47 @@ class Pipeline:
             return 0
         from swing_engine.data.float_data import load_float_map
 
+        events = self.dilution_events()
         try:
             with self._store_session() as store:
-                fmap = load_float_map(store, today=today or to_et(self.clock()).date())
+                fmap = load_float_map(store, today=today or to_et(self.clock()).date(), events=events)
         except Exception as exc:  # noqa: BLE001 - floats are optional: unknown float => warnings only
             log.warning("smallcap.float_map_unavailable", error=f"{type(exc).__name__}: {exc}"[:200])
             return 0
         setter(fmap)
-        log.info("smallcap.float_map_loaded", symbols=len(fmap))
+        log.info("smallcap.float_map_loaded", symbols=len(fmap), dilution_events=0 if events is None else len(events))
         return len(fmap)
+
+    def dilution_events(self, days: int = DILUTION_HISTORY_DAYS) -> pd.DataFrame | None:
+        """Dilution filings from the event log (last ``days``) as the float module's events frame, and seed the
+        small-cap track's multi-session dilution memory with them. None when there is no event log."""
+        if self.eventlog is None:
+            return None
+        from .smallcap import dilution_label
+
+        try:
+            history = self.eventlog.recent(hours=days * HOURS_PER_DAY, now=self.clock())
+        except Exception as exc:  # noqa: BLE001 - optional input
+            log.warning("smallcap.dilution_history_unavailable", error=f"{type(exc).__name__}: {exc}"[:200])
+            return None
+        rows: list[dict[str, Any]] = []
+        seed: list[tuple[str, datetime, str]] = []
+        for ev in history:
+            if ev.kind != "filing":
+                continue
+            label = dilution_label(ev.meta)
+            if label is None:
+                continue
+            for sym in ev.symbols:
+                rows.append({
+                    "symbol": sym.upper(), "filed_at": ev.ts_source.isoformat(),
+                    "form_type": ev.meta.get("form_type"), "items": ev.meta.get("items"), "kind": "filing",
+                })
+                seed.append((sym, ev.ts_source, label))
+        seeder = getattr(self.smallcap, "seed_dilution", None)
+        if callable(seeder) and seed:
+            seeder(seed)
+        return pd.DataFrame(rows) if rows else None
 
     async def _log_halt(self, event: Event) -> None:
         """Write a single-name halt to ``halt_log``; failures are counted and logged, never raised."""

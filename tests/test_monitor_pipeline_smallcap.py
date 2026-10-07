@@ -223,3 +223,20 @@ async def test_p2_alert_meta_carries_event_id_for_rating_buttons():
     await p.process(pr())
     await p.process(gap_bar())
     assert tg.metas[-1]["event_id"] == "b1"
+
+
+async def test_prior_session_offering_blocks_the_long_and_stales_the_float():
+    """Finding: the session reset wiped yesterday's 424B5, so a gap the next morning could get a runner long."""
+    p, tg, _ = make(store=float_store())
+    filed = T_0800 - timedelta(hours=15)  # 17:00 ET the day before
+    p.eventlog.append(make_event("f1", source="edgar", kind="filing", symbols=["TINY"], ts=filed,
+                                 meta={"form_type": "424B5", "items": []}))
+    p.smallcap.reset_session()  # midnight rollover
+    p.load_float_map()  # what the service does at rollover: re-reads floats with the event log's dilution history
+    info = p.smallcap.float_map["TINY"]
+    assert info.stale and "424B5" in (info.stale_reason or "")
+    await p.process(pr())
+    res = await p.process(gap_bar())
+    sc = res.event.meta["smallcap"]
+    assert sc["classifier"] != "runner_long" and sc.get("grade") in (None, "")
+    assert "dilution_filing_recent" in sc.get("reasons", []) or sc.get("bagholder_score", 0) >= 3

@@ -21,7 +21,7 @@ Every number in a snapshot is read from a feed, a filing or the store; nothing i
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any, Protocol, runtime_checkable
 
 import structlog
@@ -248,6 +248,7 @@ class SmallCapTrack:
         self.float_map: dict[str, FloatRecord] = {}
         self.set_float_map(float_map)
         self.reference: dict[str, dict[str, Any]] = {}
+        self._dilution: dict[str, list[tuple[datetime, str]]] = {}  # survives reset_session
         self.set_reference(reference)
 
     # ---- float lookup hook ---------------------------------------------------------------------------------------
@@ -513,10 +514,10 @@ class SmallCapTrack:
                     self.blocklist.add(sym.upper())
                     self.tainted.add(sym.upper())
             elif event.kind == "filing":
-                form = str(event.meta.get("form_type", "")).upper()
-                items = [str(i) for i in event.meta.get("items", [])]
-                if any(form.startswith(p) for p in DILUTION_FORM_PREFIXES) or "3.02" in items:
+                label = dilution_label(event.meta)
+                if label is not None:
                     st["dilution"] = True
+                    self.remember_dilution(sym, event.ts_source, label)
             elif event.kind == "ssr":
                 st["ssr"] = True
 
@@ -525,10 +526,49 @@ class SmallCapTrack:
         return {k: (sorted(v) if isinstance(v, set) else v) for k, v in st.items()}
 
     def reset_session(self) -> None:
-        """New ET session: forget halts, quotes and the session blocklist (catalysts age out after 24 h)."""
+        """New ET session: forget halts, quotes and the session blocklist (catalysts age out after 24 h).
+        Dilution memory is NOT cleared: it spans ``dilution_lookback_sessions`` and is pruned by age."""
         self._session.clear()
         self._quotes.clear()
         self.blocklist.clear()
+
+    # ---- multi-session dilution memory -----------------------------------------------------------------------
+    def remember_dilution(self, symbol: str, when: datetime, label: str) -> None:
+        """Record a dilution filing (424B*, S-1/S-3/F-1/F-3, 8-K item 3.02) or a reverse split for ``symbol``."""
+        sym = symbol.upper()
+        entries = self._dilution.setdefault(sym, [])
+        if (when, label) not in entries:
+            entries.append((when, label))
+
+    def seed_dilution(self, rows: Iterable[tuple[str, datetime, str]]) -> int:
+        """Load dilution history (symbol, when, label), e.g. from the event log at startup. Returns rows kept."""
+        n = 0
+        for sym, when, label in rows:
+            self.remember_dilution(sym, when, label)
+            n += 1
+        return n
+
+    def dilution_recent(self, symbol: str, now: datetime) -> tuple[int, bool]:
+        """(number of dilution filings within the lookback, reverse split within REVERSE_SPLIT_RECENT_DAYS)."""
+        entries = self._dilution.get(symbol.upper(), [])
+        if not entries:
+            return 0, False
+        today = to_et(now).date()
+        horizon = max(self.t.dilution_lookback_sessions, 1)
+        kept: list[tuple[datetime, str]] = []
+        filings, split = 0, False
+        for when, label in entries:
+            day = to_et(when).date()
+            age_days = (today - day).days
+            if age_days > max(REVERSE_SPLIT_RECENT_DAYS, horizon * CALENDAR_DAYS_PER_SESSION_MAX):
+                continue  # pruned
+            kept.append((when, label))
+            if label == REVERSE_SPLIT_LABEL:
+                split = split or age_days <= REVERSE_SPLIT_RECENT_DAYS
+            elif _sessions_between(day, today) <= horizon:
+                filings += 1
+        self._dilution[symbol.upper()] = kept
+        return filings, split
 
     # ---- live evaluation -----------------------------------------------------------------------------------
     def set_reference(self, reference: Mapping[str, Mapping[str, Any]] | None) -> None:
@@ -560,6 +600,9 @@ class SmallCapTrack:
         if "premarket_volume" not in data and data.get("cum_volume") is not None and to_et(now).time() < REGULAR_OPEN:
             data["premarket_volume"] = data["cum_volume"]  # before the open, cumulative volume is pre-market volume
         catalyst, offering = self._catalyst_flags(sym, now)
+        filings, split = self.dilution_recent(sym, now)
+        data["dilution_filings_recent"] = max(int(data.get("dilution_filings_recent") or 0), filings)
+        data["reverse_split_recent"] = bool(data.get("reverse_split_recent")) or split
         data["catalyst"] = bool(data.get("catalyst")) or catalyst
         data["catalyst_is_offering"] = bool(data.get("catalyst_is_offering")) or offering
         if self.degraded_feed:
@@ -716,3 +759,29 @@ def _num(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return f if f == f and f not in (float("inf"), float("-inf")) else None
+
+
+REVERSE_SPLIT_LABEL = "reverse_split"
+REVERSE_SPLIT_RECENT_DAYS = 30  # docs/smallcap-spec.md: "reverse split in last 30 days"
+CALENDAR_DAYS_PER_SESSION_MAX = 2  # generous pruning bound (weekends, holidays) for the session lookback
+UNREGISTERED_SALE_ITEM = "3.02"
+
+
+def dilution_label(meta: Mapping[str, Any]) -> str | None:
+    """Label for a filing that adds shares (424B*, S-1/S-3/F-1/F-3, 8-K item 3.02), or None."""
+    form = str(meta.get("form_type", "") or "").upper()
+    items = [str(i) for i in (meta.get("items") or [])]
+    if any(form.startswith(p) for p in DILUTION_FORM_PREFIXES):
+        return form
+    if UNREGISTERED_SALE_ITEM in items:
+        return f"{form or '8-K'} {UNREGISTERED_SALE_ITEM}"
+    return None
+
+
+def _sessions_between(start: date, end: date) -> int:
+    """Weekday sessions after ``start`` up to and including ``end`` (holidays ignored: conservative)."""
+    import numpy as np
+
+    if end <= start:
+        return 0
+    return int(np.busday_count(start + timedelta(days=1), end + timedelta(days=1)))

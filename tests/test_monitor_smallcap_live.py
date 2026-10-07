@@ -165,3 +165,24 @@ def test_degraded_feed_flag_reaches_the_message():
     t = track(degraded_feed=True)
     [(snap, a)] = run(t, news(), bar())
     assert snap.degraded_feed and "DEGRADED" in a.message
+
+
+def test_dilution_memory_survives_the_session_reset_and_expires():
+    """Finding: a 424B5 filed Friday 17:00 was forgotten at midnight, so Monday's gap could get a long alert."""
+    from datetime import UTC, datetime
+
+    from swing_engine.monitor.smallcap import SmallCapTrack, dilution_label
+
+    assert dilution_label({"form_type": "424B5"}) == "424B5"
+    assert dilution_label({"form_type": "8-K", "items": ["3.02", "9.01"]}) == "8-K 3.02"
+    assert dilution_label({"form_type": "8-K", "items": ["2.02"]}) is None
+    track = SmallCapTrack()
+    friday = datetime(2026, 10, 2, 21, 0, tzinfo=UTC)  # 17:00 ET
+    track.remember_dilution("tiny", friday, "424B5")
+    track.reset_session()  # weekend rollovers
+    monday = datetime(2026, 10, 5, 12, 0, tzinfo=UTC)  # 08:00 ET
+    assert track.dilution_recent("TINY", monday) == (1, False)
+    later = datetime(2026, 10, 13, 12, 0, tzinfo=UTC)  # 7 sessions later: outside the 5-session lookback
+    assert track.dilution_recent("TINY", later) == (0, False)
+    track.seed_dilution([("TINY", datetime(2026, 9, 20, 14, 0, tzinfo=UTC), "reverse_split")])
+    assert track.dilution_recent("TINY", monday)[1] is True  # reverse split within 30 days
