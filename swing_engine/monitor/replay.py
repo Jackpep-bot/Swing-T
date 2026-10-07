@@ -14,7 +14,12 @@ from swing_engine.core.models import Event
 
 from .constants import PRIORITY_RANK
 from .eventlog import EventLog
-from .rules.market_wide_suppression import CIRCUIT_BREAKER_HIT, SUPPRESSED_HIT
+from .rules.market_wide_suppression import (
+    CIRCUIT_BREAKER_HIT,
+    SUPPRESSED_HIT,
+    expire_suppression,
+    note_circuit_breaker,
+)
 
 DEFAULT_EVENT_LOG = str(ROOT / DataConfig().event_log_path)  # settings.data.event_log_path default, CWD-independent
 
@@ -32,6 +37,7 @@ def evaluate_rules(event: Event, rules: Sequence[Rule], ctx: dict[str, Any]) -> 
     best = "P0"
     suppressed = False
     ctx["now"] = event.ts_received
+    expire_suppression(ctx, event.ts_received)  # a circuit breaker only suppresses for the rest of its session
     for rule in rules:
         out = rule.evaluate(event, ctx)
         if out is None:
@@ -42,7 +48,7 @@ def evaluate_rules(event: Event, rules: Sequence[Rule], ctx: dict[str, Any]) -> 
             suppressed = True
             continue
         if hit == CIRCUIT_BREAKER_HIT:
-            ctx["market_suppressed"] = True
+            note_circuit_breaker(ctx, event.ts_received)
         if PRIORITY_RANK[prio] > PRIORITY_RANK[best]:
             best = prio
     return ("P0" if suppressed else best), hits

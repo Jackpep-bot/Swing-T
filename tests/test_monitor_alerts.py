@@ -48,6 +48,16 @@ def test_cooldown_per_ticker_then_digest():
     assert p.decide(make_event("d", symbols=["ACME"], priority=Priority.P2)).deliver
 
 
+def test_cooldown_applies_to_every_symbol_on_the_event():
+    p, c = policy(cooldown_min=15)
+    assert p.decide(make_event("a", symbols=["ACME", "ZETA"], priority=Priority.P2)).deliver
+    d = p.decide(make_event("b", symbols=["ZETA"], priority=Priority.P2))  # the reprint tagged with the other name
+    assert not d.deliver and d.reason == "cooldown:ZETA" and d.digest
+    assert p.decide(make_event("c", symbols=["OTHR"], priority=Priority.P2)).deliver
+    c.tick(minutes=16)
+    assert p.decide(make_event("d", symbols=["ZETA", "ACME"], priority=Priority.P2)).deliver
+
+
 def test_p3_bypasses_cooldown_and_quiet_hours():
     p, _ = policy(t=NIGHT)
     assert p.decide(make_event("a", symbols=["ACME"], priority=Priority.P3)).deliver

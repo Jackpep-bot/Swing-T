@@ -18,6 +18,7 @@ from swing_engine.agent.strategy_lab import (
     check_code,
     load_staged_strategy,
     make_trial_id,
+    restricted_builtins,
     run,
 )
 from swing_engine.core.config import ROOT, Settings
@@ -73,11 +74,51 @@ def test_check_code_accepts_fixture() -> None:
         ("x = open('/etc/passwd')\n", "forbidden name: open"),
         ("y = eval('1')\n", "forbidden name: eval"),
         ("z = ().__class__\n", "dunder attribute access: __class__"),
+        ('_os = __builtins__["__import__"]("os")\n', "dunder name: __builtins__"),
+        ('_open = __builtins__["open"]\n', "dunder name: __builtins__"),
+        ("_l = __loader__\n", "dunder name: __loader__"),
+        ("df = pd.read_csv('x.csv')\n", "forbidden I/O attribute: read_csv"),
+        ("pd.DataFrame().to_csv('swing_engine/strategies/x.py')\n", "forbidden I/O attribute: to_csv"),
+        ("pd.read_pickle('x.pkl')\n", "forbidden I/O attribute: read_pickle"),
+        ("from pandas import read_csv as rc\n", "import not allowed: from pandas import read_csv"),
+        ("h = pd.io.common.get_handle('x', 'w')\n", "forbidden I/O attribute: io"),
+        ("pd.DataFrame().query('@x')\n", "forbidden I/O attribute: query"),
     ],
 )
 def test_check_code_rejects_escape_hatches(mutation: str, needle: str) -> None:
     issues = check_code(PROPOSAL["code"] + mutation)
     assert any(needle in i for i in issues), issues
+
+
+def test_restricted_builtins_table() -> None:
+    table = restricted_builtins()
+    assert "open" not in table and "exec" not in table and "getattr" not in table
+    assert "__build_class__" in table and table["float"] is float  # class statements and arithmetic still work
+    assert table["__import__"]("math").sqrt(4) == 2.0
+    with pytest.raises(ImportError):
+        table["__import__"]("os")
+    with pytest.raises(ImportError):
+        table["__import__"]("swing_engine.core.registry")
+    with pytest.raises(ImportError):
+        table["__import__"]("models", level=1)
+
+
+def test_staged_module_cannot_import_or_open_even_when_the_gate_is_bypassed(tmp_path: Path) -> None:
+    """The AST gate is advisory: code written straight to the staging dir still runs without I/O builtins."""
+    path = tmp_path / "sneaky.py"
+    path.write_text(PROPOSAL["code"] + "\nimport os\n")
+    with pytest.raises(ImportError, match="may not import"):
+        load_staged_strategy(path, "t2")
+    assert not any(m.startswith("swing_lab_") for m in sys.modules)
+
+    path.write_text(PROPOSAL["code"].replace("out: list[Signal] = []", "open('/etc/passwd')\n        out: list[Signal] = []"))
+    cls = load_staged_strategy(path, "t3")  # loads fine; the call is what reaches for `open`
+    with pytest.raises(NameError):
+        cls().signals(tiny_panel(), TODAY)
+
+    path.write_text(PROPOSAL["code"].replace("out: list[Signal] = []", "getattr(pd, 'read_csv')\n        out: list[Signal] = []"))
+    with pytest.raises(NameError):
+        load_staged_strategy(path, "t4")().signals(tiny_panel(), TODAY)
 
 
 def test_check_code_structural_rules() -> None:

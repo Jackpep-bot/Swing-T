@@ -11,24 +11,39 @@
     prices        dict[str,float]  reference prices for notional checks when the intent has no entry_limit
     as_of         date, optional   day for the daily-loss baseline (defaults to today)
 
-State that must persist across calls (day-start equity, peak equity) lives on the instance; everything else is
-re-read from ``account`` every time so the check never trusts stale positions.
+State that must persist across calls (day-start equity, peak equity) lives on the instance and, when a
+``state_path`` is given, in a small JSON file under ``state/`` so a fresh process (``swing paper`` runs once a
+day) starts from the historical peak instead of re-seeding it with today's equity. Everything else is re-read
+from ``account`` every time so the check never trusts stale positions.
 """
 from __future__ import annotations
 
+import json
+import os
 from collections.abc import Iterable, Mapping
-from datetime import date
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Any
 
 import structlog
 
 from swing_engine.core.config import RiskConfig
 from swing_engine.core.models import OrderIntent, Position
+from swing_engine.risk.killswitch import resolve_state_path
 
 log = structlog.get_logger(__name__)
 
 PCT = 100.0
 OK = "ok"
+DEFAULT_LIMITS_STATE_FILE: str = RiskConfig.model_fields["limits_state_file"].default
+STATE_VERSION = 1
+
+
+def _float_or_none(value: Any) -> float | None:
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def position_notional(position: Position) -> float:
@@ -56,6 +71,7 @@ class LimitState:
         day_start_equity: float | None = None,
         peak_equity: float | None = None,
         as_of: date | None = None,
+        state_path: str | Path | None = None,
     ) -> None:
         self.cfg = risk_cfg
         self.sector_map: dict[str, str] = dict(sector_map or {})
@@ -65,16 +81,69 @@ class LimitState:
         self.last_equity: float | None = None
         self.checks = 0
         self.blocks = 0
+        self.state_path: Path | None = resolve_state_path(state_path) if state_path else None
+        if self.state_path is not None:
+            self._load_state()
+        if risk_cfg.max_sector_pct and not self.sector_map:
+            log.warning(
+                "sector_limit_inactive",
+                max_sector_pct=risk_cfg.max_sector_pct,
+                reason="no sector_map supplied; the sector cap cannot fire",
+            )
+
+    # ----------------------------------------------------------------- persistence
+    def _load_state(self) -> None:
+        """Seed peak / day-start equity from the state file; explicit constructor values win."""
+        assert self.state_path is not None
+        try:
+            data = json.loads(self.state_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as exc:
+            log.warning("limits_state_unreadable", path=str(self.state_path), error=str(exc))
+            return
+        if not isinstance(data, dict):
+            return
+        if self.peak_equity is None:
+            self.peak_equity = _float_or_none(data.get("peak_equity"))
+        if self.day is None and data.get("day"):
+            try:
+                self.day = date.fromisoformat(str(data["day"]))
+            except ValueError:
+                self.day = None
+            if self.day is not None and self.day_start_equity is None:
+                self.day_start_equity = _float_or_none(data.get("day_start_equity"))
+        log.info("limits_state_loaded", path=str(self.state_path), peak_equity=self.peak_equity, day=str(self.day))
+
+    def _save_state(self) -> None:
+        if self.state_path is None:
+            return
+        payload = {
+            "version": STATE_VERSION,
+            "day": self.day.isoformat() if self.day else None,
+            "day_start_equity": self.day_start_equity,
+            "peak_equity": self.peak_equity,
+            "last_equity": self.last_equity,
+            "updated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        try:
+            self.state_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.state_path.with_suffix(self.state_path.suffix + ".tmp")
+            tmp.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+            os.replace(tmp, self.state_path)
+        except OSError as exc:  # never let bookkeeping block or unblock an order
+            log.error("limits_state_write_failed", path=str(self.state_path), error=str(exc))
 
     # ----------------------------------------------------------------- state
     def update_equity(self, equity: float, as_of: date | None = None, last_equity: float | None = None) -> None:
-        """Record equity; starts a new daily baseline on a new day, tracks the running peak."""
+        """Record equity; starts a new daily baseline on a new day, tracks the running peak (persisted)."""
         today = as_of or date.today()
         if self.day != today or self.day_start_equity is None:
             self.day = today
             self.day_start_equity = last_equity if last_equity is not None else equity
         self.peak_equity = equity if self.peak_equity is None else max(self.peak_equity, equity)
         self.last_equity = equity
+        self._save_state()
 
     def daily_pnl_pct(self) -> float | None:
         if self.last_equity is None or not self.day_start_equity:
@@ -96,6 +165,7 @@ class LimitState:
             "drawdown_pct": self.drawdown_pct(),
             "checks": self.checks,
             "blocks": self.blocks,
+            "state_path": str(self.state_path) if self.state_path else None,
         }
 
     # ----------------------------------------------------------------- gate

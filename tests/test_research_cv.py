@@ -55,14 +55,17 @@ def test_walk_forward_validation():
         purged_walk_forward(DATES, n_splits=2, purge=-1)
 
 
-def test_purged_kfold_removes_purge_before_and_embargo_after_test():
+def test_purged_kfold_removes_purge_on_both_sides_and_embargo_after_test():
     splits = purged_kfold(DATES, n_splits=5, purge=PURGE, embargo=EMBARGO)
     assert len(splits) == 5
     for train, test in splits:
         lo, hi = test.min(), test.max()
-        forbidden = np.arange(max(lo - PURGE, 0), min(hi + EMBARGO, N - 1) + 1)
+        forbidden = np.arange(max(lo - PURGE, 0), min(hi + PURGE + EMBARGO, N - 1) + 1)
         assert not np.intersect1d(train, forbidden).size
         assert not np.intersect1d(train, test).size
+        kept_after = train[train > hi]
+        if kept_after.size:
+            assert kept_after.min() == hi + PURGE + EMBARGO + 1  # nothing more than necessary is dropped
     # every observation is tested exactly once
     assert np.array_equal(np.sort(np.concatenate([t for _, t in splits])), np.arange(N))
 
@@ -76,7 +79,22 @@ def test_combinatorial_purged_counts_and_purging():
         assert not np.intersect1d(train, test).size
         for b in blocks:
             if np.intersect1d(b, test).size:
-                assert not np.intersect1d(train, np.arange(b[0] - 3, b[-1] + 2)).size
+                assert not np.intersect1d(train, np.arange(b[0] - 3, b[-1] + 3 + 1 + 1)).size
+
+
+def test_post_block_rows_inside_the_label_horizon_never_train():
+    """A label at t spans t..t+h: training rows hi+1..hi+h hold the prices that define the block's last labels."""
+    h = 10
+    for splits in (
+        purged_kfold(DATES, n_splits=4, purge=h),
+        combinatorial_purged(DATES, n_groups=4, n_test_groups=1, purge=h, embargo=0),
+    ):
+        for train, test in splits:
+            hi = test.max()
+            after = train[train > hi]
+            assert not after.size or after.min() > hi + h
+    with pytest.raises(ValueError):
+        purged_kfold(DATES, n_splits=4, purge=-1)
 
 
 def test_fold_dates_maps_back_to_values():

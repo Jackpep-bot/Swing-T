@@ -1,7 +1,9 @@
 """Alert policy: priority routing (P1 digest / P2 push / P3 emergency), per-ticker cooldown, hourly cap, quiet hours.
 
 P3 bypasses cooldown, cap and quiet hours (a halt on a held position is never throttled). P2 on a held symbol
-bypasses quiet hours only. Everything throttled is demoted to the digest, never dropped.
+bypasses quiet hours only. Everything throttled is demoted to the digest, never dropped. The cooldown applies to
+every symbol on an event (not only the first after sorting), so one story tagged with different symbol sets by two
+feeds cannot push twice.
 """
 from __future__ import annotations
 
@@ -67,11 +69,10 @@ class AlertPolicy:
         if self.in_quiet_hours(now) and not held:
             self.queue_digest(event, now)
             return AlertDecision(False, list(self.routing.get("P1", ())), "quiet_hours", digest=True)
-        key = self._cooldown_key(event)
-        last = self._last_push.get(key)
-        if last is not None and now - last < timedelta(minutes=self.cooldown_min):
+        cooling = self._cooling_key(event, now)
+        if cooling is not None:
             self.queue_digest(event, now)
-            return AlertDecision(False, list(self.routing.get("P1", ())), f"cooldown:{key}", digest=True)
+            return AlertDecision(False, list(self.routing.get("P1", ())), f"cooldown:{cooling}", digest=True)
         self._prune_pushes(now)
         if len(self._push_times) >= self.hourly_cap:
             self.queue_digest(event, now)
@@ -144,11 +145,21 @@ class AlertPolicy:
 
     # ---- internals -------------------------------------------------------------------------------------------
     @staticmethod
-    def _cooldown_key(event: Event) -> str:
-        return event.symbols[0].upper() if event.symbols else f"kind:{event.kind}"
+    def _cooldown_keys(event: Event) -> list[str]:
+        return [s.upper() for s in event.symbols] or [f"kind:{event.kind}"]
+
+    def _cooling_key(self, event: Event, now: datetime) -> str | None:
+        """The first of the event's symbols still inside the cooldown window, or None."""
+        window = timedelta(minutes=self.cooldown_min)
+        for key in self._cooldown_keys(event):
+            last = self._last_push.get(key)
+            if last is not None and now - last < window:
+                return key
+        return None
 
     def _note_push(self, event: Event, now: datetime) -> None:
-        self._last_push[self._cooldown_key(event)] = now
+        for key in self._cooldown_keys(event):
+            self._last_push[key] = now
         self._push_times.append(now)
         self._prune_pushes(now)
 

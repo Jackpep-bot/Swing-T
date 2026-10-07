@@ -41,6 +41,7 @@ class RiskConfig(BaseModel):
     min_reward_risk: float = 2.0
     vol_target_annual_pct: float | None = None  # if set, size = min(fixed-fractional, vol-targeted)
     kill_switch_file: str = "state/KILL"
+    limits_state_file: str = "state/limits.json"  # persisted peak / day-start equity for the drawdown gate
 
 
 class UniverseConfig(BaseModel):

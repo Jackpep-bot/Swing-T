@@ -5,18 +5,25 @@ Guarantees:
   and `config/settings.yaml` is never touched, so a lab strategy can never be enabled by this module.
 - Code passes a static gate (`check_code`) before it is executed: allowed imports only, no I/O,
   process, registry, risk or execution access, exactly one `Strategy` subclass, no decorators.
+- The static gate is advisory (an AST filter cannot prove the absence of I/O through library internals), so
+  `load_staged_strategy` also executes the module with a restricted builtins table: no `open`, `exec`,
+  `eval`, `getattr`/`setattr`, `globals`, and an `__import__` that only resolves the allow-listed modules.
+  This is defence in depth, not a sandbox: running staged code in a separate restricted process is still
+  the right next step before the lab is pointed at untrusted hypotheses.
 - Every run appends a record to the lab ledger (`data/lab/trials.jsonl`) and, when a backtest ran and
   `research.trials` is importable, to the project-wide trial log used for deflated-Sharpe accounting.
 """
 from __future__ import annotations
 
 import ast
+import builtins
 import hashlib
 import importlib
 import importlib.util
 import json
 import re
 import sys
+from collections.abc import Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, Literal
@@ -57,7 +64,29 @@ FORBIDDEN_NAMES = frozenset(
         "globals", "locals", "vars", "getattr", "setattr", "delattr", "register",
     }
 )
+#: pandas / numpy entry points that read or write files, sockets or the clipboard, or evaluate strings.
+FORBIDDEN_IO_NAMES = frozenset(
+    {
+        "read_csv", "read_table", "read_fwf", "read_pickle", "read_parquet", "read_feather", "read_orc",
+        "read_json", "read_html", "read_xml", "read_excel", "read_hdf", "read_sql", "read_sql_query",
+        "read_sql_table", "read_clipboard", "read_stata", "read_sas", "read_spss", "read_gbq",
+        "to_csv", "to_pickle", "to_parquet", "to_feather", "to_orc", "to_json", "to_html", "to_xml",
+        "to_excel", "to_hdf", "to_sql", "to_clipboard", "to_stata", "to_latex", "to_markdown", "to_gbq",
+        "load", "save", "savez", "savez_compressed", "loadtxt", "savetxt", "genfromtxt", "fromfile",
+        "tofile", "memmap", "query",
+        # module namespaces that reach the OS from an allowed package (pd.io, np.ctypeslib, pd.compat.os ...)
+        "io", "ctypeslib", "compat", "os", "sys", "subprocess", "builtins", "importlib", "shutil", "socket",
+    }
+)
+#: builtins removed from the table generated code runs with (``__import__`` is replaced by a guarded one).
+RESTRICTED_BUILTINS = frozenset(
+    {
+        "open", "exec", "eval", "compile", "input", "breakpoint", "globals", "locals", "vars",
+        "getattr", "setattr", "delattr", "__import__", "exit", "quit", "help", "memoryview",
+    }
+)
 STRATEGY_BASE = "Strategy"
+_REAL_IMPORT = builtins.__import__
 
 
 class ParamSpec(BaseModel):
@@ -117,18 +146,29 @@ def check_code(code: str, expected_name: str | None = None) -> list[str]:
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
-                if alias.name.split(".")[0] not in ALLOWED_IMPORT_ROOTS:
+                if not _import_allowed(alias.name):
                     issues.append(f"import not allowed: {alias.name}")
         elif isinstance(node, ast.ImportFrom):
             mod = node.module or ""
-            if node.level or not (mod in ALLOWED_IMPORT_MODULES or mod.split(".")[0] in ALLOWED_IMPORT_ROOTS):
+            if node.level or not _import_allowed(mod):
                 issues.append(f"import not allowed: from {'.' * node.level}{mod}")
-        elif isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
-            issues.append(f"forbidden name: {node.id}")
-        elif isinstance(node, ast.Attribute) and node.attr.startswith("__"):
-            issues.append(f"dunder attribute access: {node.attr}")
-        elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_NAMES:
-            issues.append(f"forbidden attribute: {node.attr}")
+            for alias in node.names:
+                if alias.name in FORBIDDEN_IO_NAMES or alias.name in FORBIDDEN_NAMES:
+                    issues.append(f"import not allowed: from {mod} import {alias.name}")
+        elif isinstance(node, ast.Name):
+            if node.id in FORBIDDEN_NAMES:
+                issues.append(f"forbidden name: {node.id}")
+            elif node.id.startswith("__"):
+                issues.append(f"dunder name: {node.id}")  # __builtins__["open"], __loader__, __spec__ ...
+            elif node.id in FORBIDDEN_IO_NAMES:
+                issues.append(f"forbidden I/O name: {node.id}")
+        elif isinstance(node, ast.Attribute):
+            if node.attr.startswith("__"):
+                issues.append(f"dunder attribute access: {node.attr}")
+            elif node.attr in FORBIDDEN_NAMES:
+                issues.append(f"forbidden attribute: {node.attr}")
+            elif node.attr in FORBIDDEN_IO_NAMES:
+                issues.append(f"forbidden I/O attribute: {node.attr}")
 
     classes = [n for n in tree.body if isinstance(n, ast.ClassDef) and _subclasses_strategy(n)]
     if len(classes) != 1:
@@ -148,6 +188,31 @@ def check_code(code: str, expected_name: str | None = None) -> list[str]:
     elif expected_name and name_value != expected_name:
         issues.append(f"strategy name {name_value!r} != proposal name {expected_name!r}")
     return sorted(set(issues))
+
+
+def _import_allowed(name: str) -> bool:
+    return bool(name) and (name in ALLOWED_IMPORT_MODULES or name.split(".")[0] in ALLOWED_IMPORT_ROOTS)
+
+
+def _guarded_import(
+    name: str,
+    globals: Mapping[str, Any] | None = None,  # noqa: A002 - builtins.__import__ signature
+    locals: Mapping[str, Any] | None = None,  # noqa: A002
+    fromlist: Any = (),
+    level: int = 0,
+) -> Any:
+    """``__import__`` for staged modules: allow-listed absolute imports only."""
+    if level or not _import_allowed(name):
+        raise ImportError(f"lab strategy may not import {'.' * level}{name}")
+    return _REAL_IMPORT(name, globals, locals, fromlist, level)
+
+
+def restricted_builtins() -> dict[str, Any]:
+    """The builtins table a staged module runs with: the real one minus ``RESTRICTED_BUILTINS``, plus a
+    guarded ``__import__``. Class statements still work (``__build_class__`` is kept)."""
+    table = {k: v for k, v in vars(builtins).items() if k not in RESTRICTED_BUILTINS}
+    table["__import__"] = _guarded_import
+    return table
 
 
 def _subclasses_strategy(cls: ast.ClassDef) -> bool:
@@ -266,12 +331,18 @@ def _import_optional(name: str) -> Any | None:
 
 
 def load_staged_strategy(code_path: Path, trial_id: str) -> type[Strategy]:
-    """Import a gated module from the staging dir and return its Strategy subclass. Not registered."""
+    """Import a gated module from the staging dir and return its Strategy subclass. Not registered.
+
+    The module (and every function it defines) runs with :func:`restricted_builtins`: ``open``/``exec``/
+    ``getattr`` and friends are absent and ``__import__`` resolves only the allow-listed modules, so a
+    snippet that slipped past the AST gate still cannot reach the filesystem or the process through builtins.
+    """
     mod_name = f"swing_lab_{re.sub(r'[^0-9a-zA-Z_]', '_', trial_id)}"
     spec = importlib.util.spec_from_file_location(mod_name, code_path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot load {code_path}")
     module = importlib.util.module_from_spec(spec)
+    module.__dict__["__builtins__"] = restricted_builtins()  # exec() honours a pre-set __builtins__
     sys.modules[mod_name] = module
     try:
         spec.loader.exec_module(module)

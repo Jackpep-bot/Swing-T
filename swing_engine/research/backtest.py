@@ -3,8 +3,9 @@
 Timeline for each trading day ``t`` (one bar per symbol):
 
 1. entries queued from signals emitted at the close of ``t-1`` fill at today's open (plus slippage);
-2. every open position is checked against today's bar: gap-through stop at the open, intrabar stop,
-   target (the stop wins when both touch in the same bar), strategy exit rule, time stop;
+2. every open position is checked against today's bar: gap-through stop at the open, gap-through target at
+   the open (a resting limit fills before any intrabar move), intrabar stop, target (the stop wins when both
+   touch in the same bar), time stop, strategy rule exit (``exit_rule`` or ``should_exit``) at the close;
 3. trailing stops ratchet on the close and the book is marked to market;
 4. the strategy sees the panel up to and including ``t`` (point-in-time slice) and emits signals for
    next-open entry.
@@ -18,7 +19,7 @@ from __future__ import annotations
 
 import math
 from collections import Counter
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -167,6 +168,9 @@ class BacktestConfig(BaseModel):
 
 Sizer = Callable[[Signal, float, RiskConfig, list[Position]], OrderIntent | None]
 """Same call shape as ``risk.sizing.size_signal(signal, equity, risk_cfg, open_positions)``."""
+
+UniverseAt = Callable[[date], Collection[str] | None]
+"""``universe_at(as_of)`` -> symbols admissible for signals emitted at that close (None = no restriction)."""
 
 
 def fixed_fractional_sizer(
@@ -361,17 +365,28 @@ class _RegimeLookup:
 
     def __init__(self, market: pd.DataFrame | None, panel: pd.DataFrame):
         self.table: pd.DataFrame | None = None
-        source = market if market is not None and TS in market.columns else panel
-        from_market = source is market
+        sources: list[tuple[pd.DataFrame, bool]] = []
+        if market is not None and TS in market.columns:
+            sources.append((market, True))
+        sources.append((panel, False))
+        # raw SPY bars carry no regime columns: fall back to the panel's market_* columns (built by
+        # features.panel) so the backtest applies the same market gate as `swing scan`.
+        for source, from_market in sources:
+            rename = self._regime_columns(source, from_market)
+            if rename:
+                table = source[[TS, *rename]].drop_duplicates(TS, keep="last").rename(columns=rename)
+                self.table = table.set_index(TS).sort_index()
+                return
+
+    @staticmethod
+    def _regime_columns(source: pd.DataFrame, from_market: bool) -> dict[str, str]:
         rename: dict[str, str] = {}
         for c in source.columns:
             if c in MARKET_REGIME_COLUMNS:
                 rename[c] = c
             elif from_market and c in REGIME_ALIASES and REGIME_ALIASES[c] not in source.columns:
                 rename[c] = REGIME_ALIASES[c]
-        if rename:
-            table = source[[TS, *rename]].drop_duplicates(TS, keep="last").rename(columns=rename)
-            self.table = table.set_index(TS).sort_index()
+        return rename
 
     def __call__(self, day: pd.Timestamp) -> dict[str, Any] | None:
         if self.table is None or day not in self.table.index:
@@ -513,19 +528,21 @@ def _check_exit(
     is_long = pos.is_long
     if (o <= pos.stop) if is_long else (o >= pos.stop):
         return ExitReason.STOP_GAP, o, day
-    stop_hit = lo <= pos.stop if is_long else h >= pos.stop
     tgt = pos.target
+    if tgt is not None and ((o >= tgt) if is_long else (o <= tgt)):
+        # the resting limit at the target fills at the open, before any intrabar move back to the stop
+        return ExitReason.TARGET, o, day
+    stop_hit = lo <= pos.stop if is_long else h >= pos.stop
     target_hit = tgt is not None and ((h >= tgt) if is_long else (lo <= tgt))
     if stop_hit and (config.stop_first_when_both_hit or not target_hit):
         ratcheted = pos.stop > pos.initial_stop if is_long else pos.stop < pos.initial_stop
         return (ExitReason.TRAIL_STOP if ratcheted else ExitReason.STOP), pos.stop, day
     if target_hit and tgt is not None:
-        gapped = (o >= tgt) if is_long else (o <= tgt)
-        return ExitReason.TARGET, (o if gapped else tgt), day
-    if config.exit_rule is not None and config.exit_rule(view.row(i, pos.symbol), pos):
-        return ExitReason.RULE, c, day
+        return ExitReason.TARGET, tgt, day
     if i - pos.entry_idx + 1 >= max_hold:
         return ExitReason.TIME, c, day
+    if config.exit_rule is not None and config.exit_rule(view.row(i, pos.symbol), pos):
+        return ExitReason.RULE, c, day
     return None
 
 
@@ -613,6 +630,22 @@ def _max_hold_for(strategy: Any, config: BacktestConfig) -> int:
     return int(value) if value is not None and int(value) >= 1 else config.max_hold_bars
 
 
+def _strategy_exit_rule(strategy: Any) -> Callable[[Any, Any], bool] | None:
+    """The strategy's rule exit, if it has one.
+
+    Two duck-typed hooks are honoured: ``exit_rule(row, position)`` (the backtester's own shape) and
+    ``should_exit(row, bars_held)``, the hook every ``strategies.PanelStrategy`` implements. Without this
+    adapter a strategy's documented rule exits (``close > sma_10``, ``rsi_2 > 70`` ...) never fire in research.
+    """
+    exit_rule = getattr(strategy, "exit_rule", None)
+    if callable(exit_rule):
+        return exit_rule
+    should_exit = getattr(strategy, "should_exit", None)
+    if callable(should_exit):
+        return lambda row, pos: bool(should_exit(row, pos.bars_held))
+    return None
+
+
 # ----------------------------------------------------------------------------------------------- runner
 
 
@@ -627,18 +660,24 @@ def run_backtest(
     *,
     config: BacktestConfig | None = None,
     sizer: Sizer | None = None,
+    universe_at: UniverseAt | None = None,
 ) -> BacktestResult:
     """Run ``strategy`` over the long feature ``panel`` between ``start`` and ``end`` (inclusive, by date).
 
     The strategy may use panel history before ``start`` for warm-up; signals are generated from ``start``
     and fill at the next open. Everything still open at ``end`` is closed at that day's close.
+    ``universe_at(as_of)`` (optional) returns the symbols admissible on that day: signals for names outside
+    the point-in-time membership are dropped (counted under ``skip_reasons["not_in_universe"]``), so a
+    universe screened on later data cannot admit a name before it would have qualified live.
     """
     risk_cfg = risk_cfg or RiskConfig()
     costs = costs or CostModel()
     config = config or BacktestConfig()
     sizer = sizer or fixed_fractional_sizer
-    if config.exit_rule is None and callable(getattr(strategy, "exit_rule", None)):
-        config = config.model_copy(update={"exit_rule": strategy.exit_rule})
+    if config.exit_rule is None:
+        rule = _strategy_exit_rule(strategy)
+        if rule is not None:
+            config = config.model_copy(update={"exit_rule": rule})
 
     extra = [config.trailing.atr_column] if config.trailing is not None else []
     view = _PanelView(panel, extra)
@@ -694,6 +733,12 @@ def run_backtest(
         if i < i1:
             signals = list(strategy.signals(view.upto(i, config.signal_lookback_bars), day.date(), regime_at(day)))
             n_signals += len(signals)
+            if universe_at is not None:
+                allowed = universe_at(day.date())
+                if allowed is not None:
+                    kept = [s for s in signals if s.symbol in allowed]
+                    skipped["not_in_universe"] += len(signals) - len(kept)
+                    signals = kept
             pending = _select_entries(signals, positions, equity, risk_cfg, sizer, config, skipped)
 
     # forced close at the last close of the window

@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
+from datetime import timedelta
 
-from swing_engine.core.models import Classification, Priority
+from swing_engine.core.models import Classification, Event, Priority
 from swing_engine.monitor.alerts import AlertPolicy
 from swing_engine.monitor.delivery.console import ConsoleDeliverer
 from swing_engine.monitor.eventlog import EventLog
 from swing_engine.monitor.matcher import Matcher
 from swing_engine.monitor.pipeline import Pipeline
 from swing_engine.monitor.replay import load_rules
+from swing_engine.monitor.service import OpsRule
 from swing_engine.monitor.smallcap import SmallCapTrack
 from tests.monitor_helpers import T0, make_event
 
@@ -123,6 +126,66 @@ async def test_market_wide_circuit_breaker_sets_suppression():
     assert r2.priority == "P0" and "market_wide_suppressed" in r2.event.rule_hits and "index_inclusion" in r2.event.rule_hits
     r3 = await p.process(make_event("n2", kind="news", symbols=["HELD"], title="Held co news"))
     assert r3.priority == "P2"
+
+
+async def test_market_wide_suppression_expires_with_the_session_and_spares_ops_events():
+    p, tg, po, _ = make_pipeline(watch={"ACME"})
+    p.rules.append(OpsRule())
+    await p.process(make_event("m1", kind="halt", symbols=["SPY"], meta={"reason_code": "MWC1"}))
+    assert p.ctx["market_suppressed"] is True and p.ctx["market_suppressed_until"] > T0
+    ops = Event(event_id="o1", source="monitor", kind="ops", ts_source=T0, ts_received=T0, title="feed_dead: edgar",
+                meta={"what": "feed_dead"}, priority=Priority.P3, rule_hits=["feed_dead"])
+    r_ops = await p.process(ops)
+    assert r_ops.priority == "P3" and "pushover" in r_ops.delivered
+    assert "market_wide_suppressed" not in r_ops.event.rule_hits and po.sent  # the watchdog alert went out
+    same_day = T0 + timedelta(hours=2)
+    r_same = await p.process(make_event("n1", symbols=["ACME"], title="Acme set to join S&P 500", ts=same_day, received=same_day))
+    assert r_same.priority == "P0"
+    next_day = T0 + timedelta(days=1)
+    r_next = await p.process(make_event("n2", symbols=["ACME"], title="Acme to replace Zeta in the S&P 500", ts=next_day, received=next_day))
+    assert r_next.priority == "P2" and p.ctx["market_suppressed"] is False and "market_suppressed_until" not in p.ctx
+
+
+async def test_account_fills_update_held_positions():
+    p, tg, po, _ = make_pipeline(held={"OLD"})
+    fill = make_event("a1", source="alpaca_account", kind="account", symbols=["NEWP"], title="NEWP order fill buy 10",
+                      meta={"event": "fill", "position_qty": "10"})
+    await p.process(fill)
+    assert p.ctx["held"] == {"OLD", "NEWP"}
+    flat = make_event("a2", source="alpaca_account", kind="account", symbols=["OLD"], title="OLD order fill sell 5",
+                      meta={"event": "fill", "position_qty": 0})
+    await p.process(flat)
+    assert p.ctx["held"] == {"NEWP"}
+    await p.process(make_event("a3", source="alpaca_account", kind="account", symbols=["NEWP"], title="x", meta={"event": "new"}))
+    assert p.ctx["held"] == {"NEWP"}  # no position_qty: unchanged
+    r = await p.process(make_event("h1", kind="halt", symbols=["NEWP"], meta={"reason_code": "T1"}))
+    assert r.priority == "P3" and po.sent[-1][2] == "P3"
+
+
+async def test_p3_delivery_runs_channels_concurrently():
+    class Slow(RecordingDeliverer):
+        async def send(self, title, body, priority, meta=None):
+            await asyncio.sleep(0.2)
+            return await super().send(title, body, priority, meta)
+
+    tg, po, co = Slow("telegram"), Slow("pushover"), Slow("console")
+    p = Pipeline(rules=load_rules(), policy=AlertPolicy(clock=lambda: T0), deliverers=[tg, po, co],
+                 eventlog=EventLog(":memory:"), ctx={"held": {"HELD"}})
+    loop = asyncio.get_running_loop()
+    t0 = loop.time()
+    r = await p.process(make_event("h1", kind="halt", symbols=["HELD"], meta={"reason_code": "T1"}))
+    elapsed = loop.time() - t0
+    assert r.delivered == ["pushover", "telegram", "console"] and elapsed < 0.5  # three sends, one wait
+
+
+async def test_prepare_and_finish_split():
+    p, tg, _, _ = make_pipeline(held={"ACME"})
+    res = p.prepare(make_event("n1", symbols=["ACME"], title="Acme beats"))
+    assert not res.dropped and res.priority == "P2" and res.decision is None and tg.sent == []
+    assert p.eventlog.get("n1").priority == Priority.P2  # rules already logged before the slow half runs
+    await p.finish(res)
+    assert res.decision is not None and res.delivered == ["telegram", "console"]
+    assert p.prepare(make_event("n1", symbols=["ACME"], title="Acme beats")).dropped
 
 
 async def test_rule_exception_is_isolated():

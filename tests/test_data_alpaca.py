@@ -49,3 +49,13 @@ def test_daily_bars_from_stub_client() -> None:
 def test_requires_keys_without_client() -> None:
     with pytest.raises(ValueError):
         AlpacaProvider("", "")
+
+
+def test_trading_client_applies_the_live_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    from swing_engine.execution.alpaca_broker import LIVE_OVERRIDE_ENV, LiveTradingBlocked
+
+    monkeypatch.delenv(LIVE_OVERRIDE_ENV, raising=False)
+    with pytest.raises(LiveTradingBlocked):
+        AlpacaProvider("k", "s", paper=False).trading_client()  # ALPACA_PAPER=false alone never opens a live session
+    stub = object()
+    assert AlpacaProvider("k", "s", paper=False, trading_client=stub).trading_client() is stub  # injected clients pass

@@ -95,9 +95,51 @@ async def test_pushover_emergency_for_p3():
 
 @respx.mock
 async def test_pushover_failure():
-    respx.post("https://api.pushover.net/1/messages.json").mock(return_value=httpx.Response(400, json={"status": 0, "errors": ["bad token"]}))
+    route = respx.post("https://api.pushover.net/1/messages.json").mock(return_value=httpx.Response(400, json={"status": 0, "errors": ["bad token"]}))
     async with httpx.AsyncClient() as client:
-        assert await PushoverDeliverer("u", "a", client=client).send("T", "B", "P2") is False
+        assert await PushoverDeliverer("u", "a", client=client, sleeper=FakeSleep()).send("T", "B", "P2") is False
+    assert route.call_count == 1  # a 4xx other than 429 is final
+
+
+@respx.mock
+async def test_pushover_retries_transient_failures_then_succeeds():
+    sleeper = FakeSleep()
+    route = respx.post("https://api.pushover.net/1/messages.json").mock(
+        side_effect=[
+            httpx.Response(503),
+            httpx.Response(429, headers={"Retry-After": "2"}, json={"status": 0}),
+            httpx.Response(200, json={"status": 1}),
+        ]
+    )
+    async with httpx.AsyncClient() as client:
+        d = PushoverDeliverer("u", "a", client=client, sleeper=sleeper)
+        assert await d.send("Halt", "HELD halted", "P3") is True
+    assert route.call_count == 3 and sleeper.calls == [1.0, 2.0]
+
+
+@respx.mock
+async def test_pushover_gives_up_after_the_retry_budget_and_on_connection_errors():
+    sleeper = FakeSleep()
+    route = respx.post("https://api.pushover.net/1/messages.json").mock(return_value=httpx.Response(500))
+    async with httpx.AsyncClient() as client:
+        assert await PushoverDeliverer("u", "a", client=client, sleeper=sleeper).send("T", "B", "P3") is False
+    assert route.call_count == 3 and len(sleeper.calls) == 2
+    route.mock(side_effect=httpx.ConnectError("down"))
+    async with httpx.AsyncClient() as client:
+        assert await PushoverDeliverer("u", "a", client=client, sleeper=FakeSleep()).send("T", "B", "P3") is False
+    assert route.call_count == 6
+
+
+@respx.mock
+async def test_telegram_does_not_wait_out_a_long_ban():
+    sleeper = FakeSleep()
+    route = respx.post("https://api.telegram.org/bot1:a/sendMessage").mock(
+        return_value=httpx.Response(429, json={"ok": False, "parameters": {"retry_after": 60}})
+    )
+    async with httpx.AsyncClient() as client:
+        d = TelegramDeliverer("1:a", "7", client=client, sleeper=sleeper)
+        assert await d.send("T", "B", "P3") is False
+    assert route.call_count == 1 and 60.0 not in sleeper.calls  # the next channel runs instead
 
 
 @respx.mock

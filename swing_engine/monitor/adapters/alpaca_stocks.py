@@ -16,6 +16,7 @@ from swing_engine.core.registry import register
 
 from ..constants import (
     ADVERSE_MOVE_PCT,
+    ALPACA_HEARTBEAT_SYMBOL,
     ALPACA_STATUS_HALT,
     ALPACA_STATUS_PAUSE,
     ALPACA_STATUS_QUOTE_RESUME,
@@ -80,10 +81,46 @@ def parse_luld(msg: dict[str, Any]) -> Event | None:
     )
 
 
+REFERENCE_COLUMNS: tuple[str, ...] = ("avg_vol_20d", "avg_vol_50d", "high_52w")
+
+
+def reference_from_panel(panel: Any) -> dict[str, dict[str, float]]:
+    """Per-symbol reference dict for :class:`BarTriggerEngine` from the latest row of a feature panel.
+
+    The last stored close is tomorrow's ``prev_close``; ``avg_vol_20d`` / ``avg_vol_50d`` / ``high_52w`` are
+    taken as stored (docs/feature-contract.md). Rows with no usable close are skipped.
+    """
+    out: dict[str, dict[str, float]] = {}
+    if panel is None or len(panel) == 0 or "symbol" not in panel.columns or "close" not in panel.columns:
+        return out
+    frame = panel.sort_values("ts") if "ts" in panel.columns else panel
+    last = frame.groupby("symbol", sort=False).tail(1)
+    for row in last.itertuples(index=False):
+        close = _finite(getattr(row, "close", None))
+        if close is None or close <= 0:
+            continue
+        ref: dict[str, float] = {"prev_close": close}
+        for col in REFERENCE_COLUMNS:
+            val = _finite(getattr(row, col, None))
+            if val is not None:
+                ref[col] = val
+        out[str(row.symbol).upper()] = ref
+    return out
+
+
+def _finite(value: Any) -> float | None:
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if f == f and f not in (float("inf"), float("-inf")) else None
+
+
 class BarTriggerEngine:
     """Turns 1-min bars into bar_trigger events using a reference dict per symbol:
     {prev_close, avg_vol_20d, avg_vol_50d, high_52w}. An optional cumulative-fraction profile
-    (symbol -> list[float] indexed by minute of session) replaces the linear default.
+    (symbol -> list[float] indexed by minute of session) replaces the linear default. ``held`` may be the
+    live set shared with the pipeline context so adverse-move triggers follow fills.
     """
 
     def __init__(
@@ -191,6 +228,7 @@ class AlpacaStocksFeed(WebSocketFeed):
         symbols: list[str] | None = None,
         sip: bool = False,
         engine: BarTriggerEngine | None = None,
+        heartbeat_symbol: str | None = ALPACA_HEARTBEAT_SYMBOL,
         **kw: Any,
     ):
         super().__init__(**kw)
@@ -199,12 +237,16 @@ class AlpacaStocksFeed(WebSocketFeed):
         self.secret_key = secret_key
         self.symbols = symbols or ["*"]
         self.engine = engine
+        self.heartbeat_symbol = heartbeat_symbol
 
     async def _handshake(self, ws: Any) -> None:
         await ws.send(json.dumps({"action": "auth", "key": self.api_key, "secret": self.secret_key}))
         sub: dict[str, Any] = {"action": "subscribe", "statuses": self.symbols, "lulds": self.symbols}
         if self.engine is not None:
             sub["bars"] = self.symbols
+        if self.heartbeat_symbol:
+            # trades of one liquid name: parse_frame ignores them, but every frame proves the socket is alive
+            sub["trades"] = [self.heartbeat_symbol]
         await ws.send(json.dumps(sub))
 
     def _parse_frame(self, raw: str | bytes) -> list[Event]:

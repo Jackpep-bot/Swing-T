@@ -2,9 +2,15 @@
 
 Haiku may only (a) drop a non-held P1/P2 to P0 when it says relevance "none", or (b) lift a P1 to P2 when it says
 relevance "high" with materiality >= 4. It never touches P3 and never adds symbols.
+
+The work is split in two so the service can keep the queue moving: ``prepare`` is synchronous (no network:
+normalize, dedup, event log, rules, small-cap bookkeeping) and ``finish`` awaits the slow parts (classification,
+delivery, audit). ``process`` runs both inline for tests and replay. P3 deliveries go to every channel
+concurrently, so a slow or rate-limited channel never delays the emergency push on another.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
@@ -22,12 +28,18 @@ from .constants import CLASSIFY_UPGRADE_MATERIALITY, PRIORITY_RANK
 from .dedup import Deduper
 from .eventlog import EventLog
 from .matcher import Matcher
-from .rules.market_wide_suppression import CIRCUIT_BREAKER_HIT, SUPPRESSED_HIT
+from .rules.market_wide_suppression import (
+    CIRCUIT_BREAKER_HIT,
+    SUPPRESSED_HIT,
+    expire_suppression,
+    note_circuit_breaker,
+)
 
 log = structlog.get_logger(__name__)
 
 CLASSIFY_KINDS: frozenset[str] = frozenset({"news", "filing", "halt", "social", "bar_trigger"})
 DIGEST_FALLBACK_CHANNELS: tuple[str, ...] = ("telegram", "console")
+POSITION_QTY_KEY = "position_qty"
 
 
 @dataclass
@@ -79,9 +91,19 @@ class Pipeline:
         self.digest_channels = tuple(digest_channels)
         self.clock = clock or (lambda: datetime.now(UTC))
         self.stats: dict[str, int] = {"received": 0, "dropped": 0, "classified": 0, "delivered": 0}
+        #: set by the service during shutdown: skip classification so queued events drain quickly
+        self.draining = False
 
     # ---- main entry ------------------------------------------------------------------------------------------
     async def process(self, event: Event) -> PipelineResult:
+        """Full inline run (tests, replay): ``prepare`` then ``finish``."""
+        res = self.prepare(event)
+        if res.dropped:
+            return res
+        return await self.finish(res)
+
+    def prepare(self, event: Event) -> PipelineResult:
+        """Synchronous stages: normalize, dedup, event log, rules, small-cap memory. Never awaits."""
         self.stats["received"] += 1
         res = PipelineResult(event=event)
         self._normalize(event)
@@ -94,15 +116,20 @@ class Pipeline:
         self._run_rules(event)
         if self.eventlog is not None:
             self.eventlog.update(event)
-        if self._should_classify(event):
-            res.classification = await self._classify(event)
-            if self.eventlog is not None:
-                self.eventlog.update(event)
         if self.smallcap is not None:
             try:
                 self.smallcap.observe(event)
             except Exception:  # noqa: BLE001 - a scorer bug must not stop delivery
                 log.exception("smallcap.observe_failed", event_id=event.event_id)
+        return res
+
+    async def finish(self, res: PipelineResult) -> PipelineResult:
+        """Slow stages: Haiku classification (P1/P2 only), alert decision, delivery, audit."""
+        event = res.event
+        if self._should_classify(event):
+            res.classification = await self._classify(event)
+            if self.eventlog is not None:
+                self.eventlog.update(event)
         res.decision = self.policy.decide(event, self.ctx)
         if res.decision.deliver:
             res.delivered = await self._deliver(event, res.decision)
@@ -136,9 +163,32 @@ class Pipeline:
 
     def _touch_context(self, event: Event) -> None:
         self.ctx["now"] = event.ts_received
+        if expire_suppression(self.ctx, event.ts_received):
+            log.info("market_suppression_expired", at=event.ts_received.isoformat())
         if event.kind in ("news", "filing"):
             for s in event.symbols:
                 self.ctx["news_tagged"][s] = event.ts_received
+        elif event.kind == "account":
+            self._update_held(event)
+
+    def _update_held(self, event: Event) -> None:
+        """Keep ``ctx["held"]`` current from broker trade updates (``position_qty`` after the fill)."""
+        raw = event.meta.get(POSITION_QTY_KEY)
+        if raw is None:
+            return
+        try:
+            qty = float(raw)
+        except (TypeError, ValueError):
+            return
+        held: set[str] = self.ctx["held"]
+        for sym in event.symbols:
+            if qty > 0:
+                if sym not in held:
+                    log.info("held.added", symbol=sym, position_qty=qty)
+                held.add(sym)
+            elif sym in held:
+                log.info("held.removed", symbol=sym)
+                held.discard(sym)
 
     def _run_rules(self, event: Event) -> None:
         hits: list[str] = []
@@ -158,8 +208,7 @@ class Pipeline:
                 suppressed = True
                 continue
             if hit == CIRCUIT_BREAKER_HIT:
-                self.ctx["market_suppressed"] = True
-                self.ctx["suppression_reason"] = "circuit_breaker"
+                note_circuit_breaker(self.ctx, event.ts_received)
             if PRIORITY_RANK[prio] > PRIORITY_RANK[best]:
                 best = prio
         if suppressed:
@@ -168,7 +217,7 @@ class Pipeline:
         event.priority = Priority(best)
 
     def _should_classify(self, event: Event) -> bool:
-        if self.classifier is None or event.kind not in CLASSIFY_KINDS:
+        if self.classifier is None or self.draining or event.kind not in CLASSIFY_KINDS:
             return False
         return PRIORITY_RANK[str(event.priority)] >= self.classify_min and str(event.priority) != Priority.P3
 
@@ -193,20 +242,23 @@ class Pipeline:
             event.rule_hits.append("haiku:upgrade")
         return cls
 
+    async def _send(self, name: str, deliverer: Deliverer, event: Event, title: str, body: str) -> tuple[str, bool]:
+        try:
+            ok = await deliverer.send(title, body, str(event.priority), {"url": event.url, "event_id": event.event_id})
+        except Exception:  # noqa: BLE001 - keep trying the other channels
+            log.exception("deliver.failed", channel=name, event_id=event.event_id)
+            ok = False
+        return name, bool(ok)
+
     async def _deliver(self, event: Event, decision: AlertDecision) -> list[str]:
         title, body = self.policy.format(event)
-        delivered: list[str] = []
-        for name in decision.channels:
-            d = self.deliverers.get(name)
-            if d is None:
-                continue
-            try:
-                ok = await d.send(title, body, str(event.priority), {"url": event.url, "event_id": event.event_id})
-            except Exception:  # noqa: BLE001 - keep trying the other channels
-                log.exception("deliver.failed", channel=name, event_id=event.event_id)
-                ok = False
-            if ok:
-                delivered.append(name)
+        targets = [(name, self.deliverers[name]) for name in decision.channels if name in self.deliverers]
+        if str(event.priority) == Priority.P3 and len(targets) > 1:
+            # emergency: every channel at once; a Telegram 429 must not delay the Pushover emergency push
+            results = await asyncio.gather(*(self._send(n, d, event, title, body) for n, d in targets))
+        else:
+            results = [await self._send(n, d, event, title, body) for n, d in targets]
+        delivered = [name for name, ok in results if ok]
         if delivered:
             self.stats["delivered"] += 1
         if self.eventlog is not None:

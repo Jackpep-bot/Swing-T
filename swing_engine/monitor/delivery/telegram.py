@@ -1,4 +1,6 @@
-"""Telegram Bot API deliverer: 1 msg/s token bucket, honors `retry_after` on 429, HTML-escaped text."""
+"""Telegram Bot API deliverer: 1 msg/s token bucket, honors `retry_after` on 429 (capped at
+`DELIVERY_RETRY_AFTER_MAX_S`, after which the send fails so the next channel is not held up), HTML-escaped text.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +15,9 @@ from swing_engine.core.models import Priority
 from swing_engine.core.registry import register
 
 from ..constants import (
+    DELIVERY_RETRY_AFTER_MAX_S,
     HTTP_TIMEOUT_S,
+    HTTP_TOO_MANY,
     TELEGRAM_API,
     TELEGRAM_MAX_RETRIES,
     TELEGRAM_RATE_PER_S,
@@ -22,7 +26,6 @@ from ..constants import (
 from ._ratelimit import TokenBucket
 
 log = structlog.get_logger(__name__)
-HTTP_TOO_MANY = 429
 
 
 @register("deliverer", "telegram")
@@ -41,6 +44,7 @@ class TelegramDeliverer(Deliverer):
         self.chat_id = chat_id
         self.base_url = base_url.rstrip("/")
         self._client = client
+        self._owns_client = client is None
         self._sleep = sleeper
         self._bucket = TokenBucket(TELEGRAM_RATE_PER_S, capacity=1, sleeper=sleeper)
 
@@ -48,7 +52,13 @@ class TelegramDeliverer(Deliverer):
     def client(self) -> httpx.AsyncClient:
         if self._client is None:
             self._client = httpx.AsyncClient(timeout=HTTP_TIMEOUT_S)
+            self._owns_client = True
         return self._client
+
+    async def aclose(self) -> None:
+        if self._owns_client and self._client is not None:
+            await self._client.aclose()
+            self._client = None
 
     def _url(self) -> str:
         return f"{self.base_url}/bot{self.bot_token}/sendMessage"
@@ -79,6 +89,10 @@ class TelegramDeliverer(Deliverer):
                     retry_after = float(resp.json().get("parameters", {}).get("retry_after", retry_after))
                 except (ValueError, AttributeError):
                     pass
+                if retry_after > DELIVERY_RETRY_AFTER_MAX_S:
+                    # a long ban must not stall the pipeline: give up on this channel, the next one runs
+                    log.warning("telegram.rate_limited_giving_up", retry_after=retry_after, attempt=attempt)
+                    return False
                 log.warning("telegram.rate_limited", retry_after=retry_after, attempt=attempt)
                 await self._sleep(retry_after)
                 continue

@@ -37,6 +37,16 @@ def test_same_title_different_ticker_is_not_a_duplicate():
     assert d.check(make_event("b", symbols=["BBB"], title="Prices $20M Registered Direct Offering")) is None
 
 
+def test_reprint_tagged_with_a_different_symbol_set_is_a_duplicate():
+    d = Deduper()
+    title = "Acme Corp to acquire Zeta Inc in $2 billion all-cash deal"
+    assert d.check(make_event("a", symbols=["ACME", "ZETA"], title=title)) is None
+    assert d.check(make_event("b", source="edgar", symbols=["ZETA"], title=title)).startswith("near_duplicate:a")
+    assert d.check(make_event("c", symbols=["OTHR"], title=title)) is None  # unrelated name, same boilerplate
+    assert d.check(make_event("u1", symbols=[], title="Fed holds rates steady")) is None
+    assert d.check(make_event("u2", symbols=[], title="UPDATE: Fed holds rates steady")).startswith("near_duplicate:u1")
+
+
 def test_window_expiry():
     d = Deduper(window_min=30)
     e1 = make_event("p1", symbols=["ACME"], title="Acme beats estimates and raises guidance")

@@ -4,8 +4,10 @@ import httpx
 import pytest
 import respx
 
-from swing_engine.data._http import Http, RawCache, TokenBucket
+from swing_engine.data._http import Http, RawCache, TokenBucket, redact_secrets, redact_url
 from tests.helpers_data import FakeClock
+
+SECRET = "SECRET-TOKEN-123"
 
 
 def test_token_bucket_bursts_then_paces() -> None:
@@ -58,3 +60,24 @@ def test_http_gives_up_after_retries() -> None:
     http = Http(retries=2, clock=clock, sleep=clock.sleep)
     with pytest.raises(httpx.HTTPStatusError):
         http.get_text("https://api.example.com/down")
+
+
+@respx.mock
+def test_http_status_errors_never_echo_query_string_credentials() -> None:
+    respx.get("https://eodhd.com/api/eod/AAPL.US").mock(return_value=httpx.Response(401, text="unauthorized"))
+    http = Http(retries=0)
+    with pytest.raises(httpx.HTTPStatusError) as info:
+        http.get_text("https://eodhd.com/api/eod/AAPL.US", params={"api_token": SECRET, "fmt": "json"})
+    message = str(info.value)
+    assert SECRET not in message
+    assert "401" in message and "api_token=***" in message and "fmt=json" in message
+    assert info.value.response.status_code == 401  # the response is still attached for callers that inspect it
+
+
+def test_redaction_helpers() -> None:
+    url = f"https://www.alphavantage.co/query?function=X&apikey={SECRET}&horizon=3month"
+    assert redact_url(url) == "https://www.alphavantage.co/query?function=X&apikey=***&horizon=3month"
+    assert redact_url("https://x/y") == "https://x/y"
+    text = f"Client error '401' for url 'https://eodhd.com/api/eod/A.US?api_token={SECRET}&fmt=json' token={SECRET}"
+    redacted = redact_secrets(text)
+    assert SECRET not in redacted and "api_token=***" in redacted and "token=***" in redacted and "fmt=json" in redacted

@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -29,6 +31,37 @@ BACKOFF_MAX_S = 60.0
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
 SECONDS_PER_MINUTE = 60.0
 CACHE_SUFFIX = ".json"
+#: query parameters vendors use for credentials (EODHD `api_token`, AlphaVantage `apikey`, ...); their values
+#: never appear in exception text, logs or ingest results.
+SECRET_QUERY_PARAMS = frozenset({"api_token", "apikey", "api_key", "apiKey", "token", "key", "secret", "access_token"})
+REDACTED = "***"
+_SECRET_IN_TEXT = re.compile(r"(?i)\b(api_token|apikey|api_key|access_token|token|key|secret)=([^&\s'\"]+)")
+
+
+def redact_url(url: str) -> str:
+    """``url`` with the values of :data:`SECRET_QUERY_PARAMS` replaced by ``***``."""
+    parts = urlsplit(str(url))
+    if not parts.query:
+        return str(url)
+    query = [
+        (k, REDACTED if k.lower() in {p.lower() for p in SECRET_QUERY_PARAMS} else v)
+        for k, v in parse_qsl(parts.query, keep_blank_values=True)
+    ]
+    return urlunsplit(parts._replace(query=urlencode(query, safe=REDACTED)))
+
+
+def redact_secrets(text: str) -> str:
+    """Blank credential-looking ``name=value`` pairs in free text (exception messages, log lines)."""
+    return _SECRET_IN_TEXT.sub(lambda m: f"{m.group(1)}={REDACTED}", str(text))
+
+
+def status_error(response: httpx.Response) -> httpx.HTTPStatusError:
+    """``HTTPStatusError`` whose message carries the status and a redacted URL, never the credentials."""
+    kind = "Client" if response.status_code < 500 else "Server"
+    message = (
+        f"{kind} error '{response.status_code} {response.reason_phrase}' for url '{redact_url(str(response.url))}'"
+    )
+    return httpx.HTTPStatusError(message, request=response.request, response=response)
 
 
 class TokenBucket:
@@ -163,7 +196,8 @@ class Http:
                 log.warning("http_retry", url=url, status=response.status_code, attempt=attempt, delay=delay)
                 self._sleep(delay)
                 continue
-            response.raise_for_status()
+            if response.is_error:
+                raise status_error(response)  # raise_for_status() would embed the query string (API key)
             text = response.text
             if cache_key is not None:
                 self.cache.put(cache_key, text, cache_suffix)

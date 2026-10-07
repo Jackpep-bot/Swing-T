@@ -42,6 +42,21 @@ def test_run_ingest_defaults_to_provider_listing_and_static_symbols() -> None:
         assert res["symbols_requested"] == 1 and store.symbols() == ["SPY"]
 
 
+def test_run_ingest_redacts_credentials_in_provider_errors() -> None:
+    secret = "SECRET-TOKEN-123"
+
+    class Broken(SampleProvider):
+        name = "broken"
+
+        def daily_bars(self, symbols, start, end):
+            raise RuntimeError(f"Client error '401' for url 'https://eodhd.com/api/eod/SPY.US?api_token={secret}&fmt=json'")
+
+    with Store(":memory:") as store:
+        res = run_ingest(_settings(), Secrets(_env_file=None), None, ["SPY"], date(2024, 1, 1), date(2024, 1, 10), store, provider=Broken())
+    assert len(res["errors"]) == 1 and res["bars_written"] == 0
+    assert secret not in res["errors"][0]["error"] and "api_token=***" in res["errors"][0]["error"]
+
+
 def test_make_provider_uses_registry_and_from_settings() -> None:
     prov = make_provider("sample", _settings(), Secrets(_env_file=None))
     assert isinstance(prov, SampleProvider)

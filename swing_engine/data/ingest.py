@@ -19,6 +19,7 @@ from swing_engine.core.config import Secrets, Settings
 from swing_engine.core.interfaces import BarProvider
 
 from ._common import as_date, normalize_symbols
+from ._http import redact_secrets
 from .store import Store
 
 log = structlog.get_logger(__name__)
@@ -110,8 +111,9 @@ def run_ingest(
             try:
                 bars = prov.daily_bars(chunk, chunk_start, end_d)
             except Exception as exc:
-                log.error("ingest_chunk_failed", provider=name, symbols=chunk[:3], error=str(exc))
-                errors.append({"symbols": ",".join(chunk), "error": str(exc)})
+                error = redact_secrets(str(exc))  # vendor errors echo the request URL, API key included
+                log.error("ingest_chunk_failed", provider=name, symbols=chunk[:3], error=error)
+                errors.append({"symbols": ",".join(chunk), "error": error})
                 continue
             if bars is None or bars.empty:
                 continue

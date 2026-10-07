@@ -70,10 +70,15 @@ class AlpacaProvider(BarProvider):
         return self._data_client
 
     def trading_client(self) -> Any:
+        """Lazy ``TradingClient`` for the asset list. Same live gate as the broker: a non-paper session needs
+        ``SWING_ALLOW_LIVE=yes`` on top of ``ALPACA_PAPER=false`` or :class:`LiveTradingBlocked` is raised."""
         if self._trading_client is None:
             from alpaca.trading.client import TradingClient
 
-            self._trading_client = TradingClient(self.api_key, self.secret_key, paper=self.paper)
+            from swing_engine.execution.alpaca_broker import resolve_paper_mode
+
+            paper = resolve_paper_mode(self.paper)
+            self._trading_client = TradingClient(self.api_key, self.secret_key, paper=paper)
         return self._trading_client
 
     # ------------------------------------------------------------------ reference

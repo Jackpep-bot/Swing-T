@@ -22,7 +22,8 @@ import logging
 import os
 import pickle
 import sys
-from collections.abc import Iterable
+from bisect import bisect_right
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -79,6 +80,8 @@ NORMAL_KURTOSIS = 3.0  # deflated_sharpe takes raw (non-excess) kurtosis; pandas
 TRIAL_METRIC_KEYS = ("trades", "win_rate", "avg_r", "profit_factor", "cagr", "max_dd", "sharpe")
 EQUITY_ACCOUNT_KEYS = ("equity", "portfolio_value", "last_equity", "cash")
 REGIME_COLUMNS = ("market_trend_state", "market_vol_regime")
+PRODUCTION_SIZER = "risk.sizing.size_signal_detail"  # the sizer `swing size` / paper use; backtests use it too
+RESEARCH_SIZER = "research.backtest.fixed_fractional_sizer"  # fallback when risk.sizing is unavailable
 
 log = structlog.get_logger("swing.cli")
 
@@ -452,6 +455,56 @@ def _universe_window(
     for d in dates:
         found.update(_call_supported(build_universe, provider, settings, d, bars=bars))
     return sorted(found)
+
+
+def _month_anchors(days: Iterable[date], start: date, end: date) -> list[date]:
+    """The first session on/after `start` and the first session of every later month through `end`."""
+    anchors: list[date] = []
+    months: set[tuple[int, int]] = set()
+    for d in sorted({d for d in days if start <= d <= end}):
+        key = (d.year, d.month)
+        if key not in months:
+            anchors.append(d)
+            months.add(key)
+    return anchors or [start]
+
+
+def _universe_memberships(
+    provider: Any, settings: Settings, anchors: Iterable[date], bars: pd.DataFrame | None = None
+) -> dict[date, frozenset[str]] | None:
+    """Point-in-time universe at each anchor (`data.universe.build_universe`), keyed by anchor date.
+
+    A backtest screens membership month by month so a name is only admitted once it passes the price /
+    liquidity screen on data available then (never on its end-of-window success); names that qualified at an
+    earlier anchor and delisted later stay in (CLAUDE.md rule 3). None when the data module is unavailable.
+    """
+    build_universe = _try_load("data.universe.build_universe")
+    if build_universe is None:
+        return None
+    return {d: frozenset(_call_supported(build_universe, provider, settings, d, bars=bars)) for d in anchors}
+
+
+def _membership_lookup(memberships: Mapping[date, frozenset[str]]) -> Callable[[date], frozenset[str]]:
+    """`universe_at(day)`: the membership screened at the latest anchor on or before `day`."""
+    anchors = sorted(memberships)
+
+    def universe_at(day: date) -> frozenset[str]:
+        i = bisect_right(anchors, day)
+        return memberships[anchors[i - 1 if i else 0]]
+
+    return universe_at
+
+
+def _production_sizer(size_detail: Any) -> Any | None:
+    """Adapt `risk.sizing.size_signal_detail` to the backtester's `Sizer` shape (intent only, no logging)."""
+    if size_detail is None:
+        return None
+
+    def sizer(signal: Any, equity: float, risk_cfg: Any, open_positions: Any = None, sector_map: Any = None) -> Any:
+        intent, _reason = size_detail(signal, equity, risk_cfg, open_positions, sector_map)
+        return intent
+
+    return sizer
 
 
 def _restrict_to_universe(panel: pd.DataFrame, universe: list[str] | None, label: str) -> pd.DataFrame:
@@ -913,6 +966,7 @@ def backtest(
     start_d = _parse_date(start, _default_start(settings, end_d))
     overrides = _parse_params(param)
     strat = _make_strategy(strategy, settings, overrides)
+    universe_at: Callable[[date], frozenset[str]] | None = None
 
     if provider:
         panel, market = _panel_from_provider(
@@ -928,8 +982,14 @@ def backtest(
         else:
             listing = _store_listing(store)
             if listing is not None:
-                universe = _universe_window(listing, settings, (start_d, end_d), bars=panel)
-                panel = _restrict_to_universe(panel, universe, f"{start_d}..{end_d}")
+                anchors = _month_anchors(_naive_ts(panel).dt.date, start_d, end_d)
+                memberships = _universe_memberships(listing, settings, anchors, bars=panel)
+                if memberships:
+                    universe = sorted(set().union(*memberships.values()))
+                    panel = _restrict_to_universe(
+                        panel, universe, f"{start_d}..{end_d}, {len(memberships)} monthly anchors"
+                    )
+                    universe_at = _membership_lookup(memberships)
 
     cost_model = _load("research.backtest.CostModel")
     costs = cost_model(**_parse_params(cost))
@@ -938,9 +998,18 @@ def backtest(
     deflated_sharpe = _load("research.metrics.deflated_sharpe")
     log_trial = _load("research.trials.log_trial")
     trial_count = _load("research.trials.trial_count")
+    # the production sizer (reward/risk floor, marketable entry limit) so research counts the trades paper takes
+    size_detail = _try_load(PRODUCTION_SIZER)
+    sizer = _production_sizer(size_detail)
+    sizer_name = PRODUCTION_SIZER if sizer is not None else RESEARCH_SIZER
 
-    log.info("backtest_start", strategy=strategy, start=str(start_d), end=str(end_d), params=strat.params)
-    result = run_backtest(strat, panel, start_d, end_d, settings.risk, costs, market=market)
+    log.info(
+        "backtest_start", strategy=strategy, start=str(start_d), end=str(end_d), params=strat.params, sizer=sizer_name
+    )
+    result = _call_supported(
+        run_backtest, strat, panel, start_d, end_d, settings.risk, costs,
+        market=market, sizer=sizer, universe_at=universe_at,
+    )
     metrics = dict(summarize(result))
     if not no_log:
         log_trial(strategy, dict(strat.params), metrics)
@@ -953,6 +1022,8 @@ def backtest(
         f"Backtest {strategy} {start_d}..{end_d}",
         {
             "params": strat.params,
+            "sizer": sizer_name,
+            "universe": "point-in-time (monthly anchors)" if universe_at is not None else "as given",
             "costs": _compact(
                 costs.model_dump()
                 if hasattr(costs, "model_dump")
@@ -1288,6 +1359,7 @@ def paper(
         cfg=settings.risk,
         config=settings.risk,
         settings=settings,
+        state_path=_resolve(settings.risk.limits_state_file),  # peak equity survives across daily runs
     )
     order_manager = _load("execution.order_manager.OrderManager")
     manager = order_manager(b, limits, str(kill_path))

@@ -1,6 +1,7 @@
 """LimitState: open-position count, pending-order slots, daily loss, drawdown, position/sector/buying-power caps."""
 from __future__ import annotations
 
+import json
 from datetime import date
 
 from swing_engine.core.config import RiskConfig
@@ -64,6 +65,36 @@ def test_drawdown_from_peak_blocks():
     ok, reason = state.check(intent(qty=10), {"equity": 84_000, "as_of": date(2026, 10, 8), "last_equity": 84_000})
     assert not ok and "drawdown -16.00%" in reason
     assert state.snapshot()["peak_equity"] == 100_000
+
+
+def test_drawdown_peak_persists_across_processes(tmp_path):
+    """`swing paper` builds a fresh LimitState every run: the peak must come from disk, not today's equity."""
+    path = tmp_path / "state" / "limits.json"
+    cfg = RiskConfig(max_drawdown_pct=15.0, max_daily_loss_pct=3.0)
+    first = LimitState(cfg, state_path=path)
+    assert first.check(intent(), account(equity=100_000))[0]
+    saved = json.loads(path.read_text())
+    assert saved["peak_equity"] == 100_000 and saved["day"] == AS_OF.isoformat()
+
+    later = LimitState(cfg, state_path=path)  # a new process a month later, equity down 40%
+    ok, reason = later.check(intent(), {"equity": 60_000, "as_of": date(2026, 11, 5)})
+    assert not ok and "drawdown -40.00%" in reason
+    assert later.snapshot()["peak_equity"] == 100_000 and later.snapshot()["state_path"] == str(path)
+
+    same_day = LimitState(cfg, state_path=path)  # the day-start baseline is restored too
+    ok, reason = same_day.check(intent(), {"equity": 58_000, "as_of": date(2026, 11, 5)})
+    assert not ok and "daily loss -3.33%" in reason
+
+    # without persistence the second instance re-seeds the peak at 60k and lets the order through
+    assert LimitState(cfg).check(intent(), {"equity": 60_000, "as_of": date(2026, 11, 5)})[0]
+
+
+def test_unreadable_state_file_is_ignored(tmp_path):
+    path = tmp_path / "limits.json"
+    path.write_text("{not json")
+    state = LimitState(RiskConfig(), state_path=path)
+    assert state.peak_equity is None and state.check(intent(), account())[0]
+    assert json.loads(path.read_text())["peak_equity"] == 50_000  # rewritten cleanly
 
 
 def test_position_pct_cap():

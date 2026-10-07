@@ -156,6 +156,12 @@ REGULAR_OPEN = time(9, 30)
 REGULAR_CLOSE = time(16, 0)
 PREMARKET_OPEN = time(4, 0)
 AFTERHOURS_CLOSE = time(20, 0)
+# NYSE / Nasdaq early-close sessions (day after Thanksgiving, Christmas Eve): 13:00 close, extended hours to 17:00.
+EARLY_REGULAR_CLOSE = time(13, 0)
+EARLY_AFTERHOURS_CLOSE = time(17, 0)
+# EDGAR accepts submissions 06:00-22:00 ET on business days; nothing can arrive outside that window.
+EDGAR_ACCEPTS_FROM_ET = time(6, 0)
+EDGAR_ACCEPTS_UNTIL_ET = time(22, 0)
 
 # ---- alert policy ---------------------------------------------------------------------------------------
 DIGEST_TIMES_ET: tuple[time, ...] = (time(8, 30), time(15, 45), time(18, 30))
@@ -185,10 +191,17 @@ TELEGRAM_API = "https://api.telegram.org"
 TELEGRAM_RATE_PER_S = 1.0
 TELEGRAM_MAX_RETRIES = 3
 TELEGRAM_TEXT_MAX = 4096
+#: a 429 `retry_after` longer than this is not waited for inline: the send fails and the next channel runs.
+DELIVERY_RETRY_AFTER_MAX_S = 10.0
 PUSHOVER_API = "https://api.pushover.net/1/messages.json"
 PUSHOVER_PRIORITY: dict[str, int] = {"P3": 2, "P2": 0, "P1": -1, "P0": -2}
 PUSHOVER_EMERGENCY_RETRY_S = 30
 PUSHOVER_EMERGENCY_EXPIRE_S = 3600
+PUSHOVER_MAX_RETRIES = 2  # short: P3 falls through to Telegram concurrently, so do not sit on a dead API
+PUSHOVER_BACKOFF_BASE_S = 1.0
+HTTP_TOO_MANY = 429
+HTTP_FORBIDDEN = 403
+HTTP_SERVER_ERROR = 500
 NTFY_BASE = "https://ntfy.sh"
 NTFY_PRIORITY: dict[str, str] = {"P3": "5", "P2": "3", "P1": "2", "P0": "1"}
 HTTP_TIMEOUT_S = 10.0
@@ -201,10 +214,15 @@ ALPACA_ACCOUNT_WS_PAPER = "wss://paper-api.alpaca.markets/stream"
 ALPACA_ACCOUNT_WS_LIVE = "wss://api.alpaca.markets/stream"
 ALPACA_NEWS_REST = "https://data.alpaca.markets/v1beta1/news"
 WS_PING_INTERVAL_S = 20
+#: statuses/lulds are silent for most of the day; one liquid symbol's trades make the stocks socket observably
+#: alive (any received frame counts as transport liveness for the watchdog).
+ALPACA_HEARTBEAT_SYMBOL = "SPY"
 EDGAR_CURRENT_URL = "https://www.sec.gov/cgi-bin/browse-edgar"
 EDGAR_POLL_INTERVAL_S = 20
 EDGAR_RATE_PER_S = 10.0
 EDGAR_COUNT = 100
+EDGAR_FORBIDDEN_RETRY_S = 600.0  # sec.gov answers 403 for ~10 min once the fair-access limit is tripped
+POLL_SEEN_MAX = 5000  # ids a polling feed remembers for dedup before forgetting the oldest
 EDGAR_DEFAULT_FORMS: tuple[str, ...] = ("8-K", "4", "SC 13D", "S-3", "424B5", "NT 10-K", "NT 10-Q")
 NASDAQ_HALTS_RSS = "https://www.nasdaqtrader.com/rss.aspx?feed=tradehalts"
 NASDAQ_HALTS_INTERVAL_S = 60
@@ -226,8 +244,18 @@ STALENESS_THRESHOLD_S: dict[str, float] = {
     "file": 1e12,
 }
 STALENESS_DEFAULT_S = 900.0
+#: ET window in which silence from a feed is suspicious. Regular-hours feeds are only judged in the `regular`
+#: phase (so early closes are honoured); EDGAR only while the SEC accepts filings; the rest in extended hours.
+STALENESS_WINDOW_ET: dict[str, tuple[time, time]] = {
+    "alpaca_stocks": (REGULAR_OPEN, REGULAR_CLOSE),
+    "alpaca_account": (REGULAR_OPEN, REGULAR_CLOSE),
+    "edgar": (EDGAR_ACCEPTS_FROM_ET, EDGAR_ACCEPTS_UNTIL_ET),
+}
+STALENESS_WINDOW_DEFAULT_ET: tuple[time, time] = (PREMARKET_OPEN, AFTERHOURS_CLOSE)
 WATCHDOG_INTERVAL_S = 30.0
 QUEUE_MAXSIZE = 10_000
-SHUTDOWN_GRACE_S = 5.0
+SHUTDOWN_GRACE_S = 5.0  # for the consumer to drain the queue (rules only; no network)
+SHUTDOWN_DRAIN_S = 30.0  # for in-flight classification / deliveries to finish before they are cancelled
+PIPELINE_WORKERS = 8  # concurrent classify+deliver tasks for P0-P2; P3 never waits for a slot
 AUDIT_PATH_DEFAULT = "data/alerts.jsonl"
 REPLAY_FILE_DEFAULT = "tests/fixtures/monitor/replay_events.jsonl"

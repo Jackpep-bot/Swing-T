@@ -14,10 +14,12 @@ from swing_engine.research.backtest import (
     CostModel,
     ExitReason,
     TrailingStop,
+    _RegimeLookup,
     fixed_fractional_sizer,
     run_backtest,
 )
 from swing_engine.research.metrics import summarize
+from swing_engine.strategies.rsi2_meanrev import RSI2MeanRev
 from tests.fixtures.research.strategies import FlagStrategy, RecordingStrategy, ScriptedStrategy, long_signal
 from tests.fixtures.research.synthetic_panel import make_bars, make_panel, trading_dates
 
@@ -88,6 +90,15 @@ def test_target_fills_at_target_or_at_gap_open():
     gapped = _run_one([FLAT, FLAT, (112.0, 115.0, 111.0, 113.0), FLAT])
     assert gapped.trades.iloc[0]["exit_reason"] == ExitReason.TARGET
     assert gapped.trades.iloc[0]["exit_price"] == pytest.approx(112.0 * (1 - SLIP_F))
+
+
+def test_gap_through_target_fills_at_open_before_an_intrabar_stop_touch():
+    # open 112 > target 110: the resting sell limit fills at the open; the later low of 94 never reaches us
+    res = _run_one([FLAT, FLAT, (112.0, 115.0, 94.0, 100.0), FLAT])
+    t = res.trades.iloc[0]
+    assert t["exit_reason"] == ExitReason.TARGET
+    assert t["exit_price"] == pytest.approx(112.0 * (1 - SLIP_F))
+    assert t["r_multiple"] > 2.0
 
 
 def test_stop_wins_when_both_touch_unless_configured():
@@ -174,6 +185,27 @@ def test_strategy_exit_rule_attribute_is_picked_up():
     assert t["exit_reason"] == ExitReason.RULE and t["bars_held"] == 2
 
 
+def test_strategy_should_exit_hook_books_a_rule_exit():
+    """rsi2_meanrev's documented exit (rsi_2 > 70) runs through `should_exit`, which the backtester must honour."""
+    rsi = [5.0, 50.0, 80.0, 50.0, 50.0, 50.0, 50.0, 50.0]  # oversold at the first close, recovered two bars later
+    panel = make_bars("AAA", [FLAT] * 8).assign(rsi_2=rsi, sma_200=90.0, sma_10=105.0)
+    strat = RSI2MeanRev()
+    assert not callable(getattr(strat, "exit_rule", None)) and callable(strat.should_exit)
+    res = run_backtest(strat, panel, costs=COSTS)
+    assert len(res.trades) == 1
+    t = res.trades.iloc[0]
+    assert t["entry_ts"] == DAYS[1] and t["target"] == pytest.approx(105.0)  # sma_10 is the reference target
+    assert t["exit_reason"] == ExitReason.RULE and t["exit_ts"] == DAYS[2] and t["bars_held"] == 2
+    assert t["exit_price"] == pytest.approx(100.0 * (1 - SLIP_F))  # at the close, not at the static target
+
+
+def test_should_exit_time_rule_is_reported_as_a_time_stop():
+    panel = make_bars("AAA", [FLAT] * 8).assign(rsi_2=[5.0] + [50.0] * 7, sma_200=90.0, sma_10=105.0)
+    res = run_backtest(RSI2MeanRev({"max_hold_days": 3}), panel, costs=COSTS)
+    t = res.trades.iloc[0]
+    assert t["exit_reason"] == ExitReason.TIME and t["bars_held"] == 3
+
+
 # ----------------------------------------------------------------------------------------------- trailing
 
 
@@ -225,6 +257,31 @@ def test_max_open_positions_caps_entries():
     assert len(res.trades) == 3
     assert set(res.trades["symbol"]) == {"S5", "S4", "S3"}  # highest scores first
     assert res.skip_reasons.get("no_free_slot") == 3
+
+
+def test_universe_at_gates_signals_point_in_time():
+    panel = pd.concat([make_bars("AAA", [FLAT] * 8), make_bars("BBB", [FLAT] * 8)], ignore_index=True)
+    sigs = {
+        d.date(): [long_signal(s, d.date(), FLAT[3], WIDE_STOP, FAR_TARGET) for s in ("AAA", "BBB")]
+        for d in DAYS[:2]
+    }
+    admitted_from = DAYS[1].date()  # BBB only passes the universe screen from the second anchor on
+    res = run_backtest(
+        ScriptedStrategy(sigs, {"max_hold_days": 50}), panel, costs=COSTS,
+        universe_at=lambda d: {"AAA"} if d < admitted_from else {"AAA", "BBB"},
+    )
+    assert res.n_signals == 4 and res.skip_reasons["not_in_universe"] == 1
+    entries = res.trades.set_index("symbol")["entry_ts"]
+    assert entries["AAA"] == DAYS[1] and entries["BBB"] == DAYS[2]  # BBB traded only once it qualified
+
+
+def test_regime_lookup_falls_back_to_panel_market_columns():
+    panel = make_bars("AAA", [FLAT] * 4).assign(market_trend_state=1.0, market_vol_regime=2.0)
+    spy_raw = make_bars("SPY", [FLAT] * 4)  # raw bars from a provider: no regime columns
+    assert _RegimeLookup(spy_raw, panel)(DAYS[0]) == {"market_trend_state": 1.0, "market_vol_regime": 2.0}
+    spy = spy_raw.assign(trend_state=-1.0)  # a market frame with its own regime still wins
+    assert _RegimeLookup(spy, panel)(DAYS[0])["market_trend_state"] == -1.0
+    assert _RegimeLookup(None, make_bars("AAA", [FLAT] * 4))(DAYS[0]) is None
 
 
 def test_custom_sizer_plugs_in():

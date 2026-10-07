@@ -522,6 +522,41 @@ def test_backtest_logs_trial_and_prints_deflated_sharpe(store_file: Path, monkey
     assert "9" in result.output  # total trials
 
 
+def test_backtest_passes_the_production_sizer_and_universe_gate(store_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+
+    def run_backtest(strategy, panel, start, end, risk_cfg, costs, market=None, sizer=None, universe_at=None):
+        seen.update(sizer=sizer, universe_at=universe_at)
+        return FakeBacktestResult()
+
+    fake_module(monkeypatch, "research.backtest", CostModel=lambda **kw: object(), run_backtest=run_backtest)
+    fake_module(monkeypatch, "research.metrics", summarize=lambda r: {"sharpe": 0.5}, deflated_sharpe=lambda *a: 0.1)
+    fake_module(monkeypatch, "research.trials", log_trial=lambda n, p, m, **k: None, trial_count=lambda n=None: 0)
+    result = runner.invoke(cli.app, ["backtest", "fake_strat", "--start", "2026-09-29", "--end", AS_OF, "--no-log"])
+    assert result.exit_code == 0, result.output
+    assert cli.PRODUCTION_SIZER in result.output
+    sizer = seen["sizer"]
+    risk = load_settings(None).risk
+    assert sizer(make_signal("AAA", 10.0), EQUITY, risk, []).qty > 0  # a 2R signal is sized like `swing size`
+    thin = Signal(strategy="s", symbol="AAA", as_of=AS_OF_DATE, entry=10.0, stop=9.0, target=10.5, reward_risk=0.5)
+    assert sizer(thin, EQUITY, risk, []) is None  # below risk.min_reward_risk: paper would reject it, so does research
+    assert seen["universe_at"] is None  # FakeStore has no symbols table, so no point-in-time screen applies
+
+
+def test_month_anchors_and_membership_lookup() -> None:
+    days = pd.bdate_range("2026-01-05", "2026-03-31").date
+    anchors = cli._month_anchors(days, date(2026, 1, 15), date(2026, 3, 31))
+    assert anchors == [date(2026, 1, 15), date(2026, 2, 2), date(2026, 3, 2)]
+    assert cli._month_anchors([], date(2026, 1, 15), date(2026, 3, 31)) == [date(2026, 1, 15)]
+    at = cli._membership_lookup(
+        {anchors[0]: frozenset({"AAA"}), anchors[1]: frozenset({"AAA", "BBB"}), anchors[2]: frozenset({"BBB"})}
+    )
+    assert at(date(2026, 1, 1)) == {"AAA"}  # before the first anchor: the first screen applies
+    assert at(date(2026, 1, 31)) == {"AAA"}
+    assert at(date(2026, 2, 15)) == {"AAA", "BBB"}
+    assert at(date(2026, 3, 2)) == {"BBB"} and at(date(2026, 12, 31)) == {"BBB"}  # AAA delisted: stays out after
+
+
 def test_backtest_no_log_skips_trial(store_file: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     logged: list[str] = []
     fake_module(monkeypatch, "research.backtest", CostModel=lambda **kw: object(), run_backtest=lambda *a, **k: FakeBacktestResult())

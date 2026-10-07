@@ -4,6 +4,11 @@ All functions take a sorted, unique sequence of dates (or any ordered observatio
 ``(train_idx, test_idx)`` pairs of positional index arrays. ``purge`` is the label horizon in observations
 (training labels that would overlap the test window are dropped); ``embargo`` is an extra gap for serial
 correlation (Lopez de Prado, *Advances in Financial Machine Learning*, ch. 7).
+
+Purging is symmetric: a label at ``t`` spans ``t .. t + purge``, so training rows up to ``purge`` observations
+*before* a test block overlap its first labels, and training rows up to ``purge`` observations *after* it
+carry labels that overlap the block's last labels (and features made of the prices inside those label
+windows). Both sides are removed; ``embargo`` is added on top after the block.
 """
 from __future__ import annotations
 
@@ -82,16 +87,18 @@ def purged_kfold(
     purge: int = 0,
     embargo: int = 0,
 ) -> list[Split]:
-    """Purged K-fold: contiguous test blocks; train is everything else minus ``purge`` observations right
-    before the block and ``embargo`` observations right after it."""
+    """Purged K-fold: contiguous test blocks; train is everything else minus ``purge`` observations on
+    either side of the block and ``embargo`` further observations after it."""
     n = _check_dates(dates)
     if n_splits < 2 or n_splits > n:
         raise ValueError("n_splits must be between 2 and the number of observations")
+    if purge < 0 or embargo < 0:
+        raise ValueError("purge and embargo must be >= 0")
     idx = np.arange(n)
     splits: list[Split] = []
     for test in np.array_split(idx, n_splits):
         lo, hi = int(test[0]), int(test[-1])
-        train = idx[(idx < lo - purge) | (idx > hi + embargo)]
+        train = idx[(idx < lo - purge) | (idx > hi + purge + embargo)]
         splits.append((train, test))
     return splits
 
@@ -104,10 +111,12 @@ def combinatorial_purged(
     embargo: int = 0,
 ) -> list[Split]:
     """Combinatorial purged CV: every choice of ``n_test_groups`` of ``n_groups`` contiguous blocks is a test
-    set; train is the rest minus ``purge`` before and ``embargo`` after each test block."""
+    set; train is the rest minus ``purge`` on either side of each test block and ``embargo`` after it."""
     n = _check_dates(dates)
     if not 1 <= n_test_groups < n_groups <= n:
         raise ValueError("need 1 <= n_test_groups < n_groups <= number of observations")
+    if purge < 0 or embargo < 0:
+        raise ValueError("purge and embargo must be >= 0")
     idx = np.arange(n)
     blocks = np.array_split(idx, n_groups)
     splits: list[Split] = []
@@ -116,7 +125,7 @@ def combinatorial_purged(
         keep = np.ones(n, dtype=bool)
         for g in combo:
             lo, hi = int(blocks[g][0]), int(blocks[g][-1])
-            keep &= (idx < lo - purge) | (idx > hi + embargo)
+            keep &= (idx < lo - purge) | (idx > hi + purge + embargo)
         splits.append((idx[keep], test))
     return splits
 

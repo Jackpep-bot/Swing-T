@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import json
 import random
+import time
 from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -14,9 +15,19 @@ import structlog
 from swing_engine.core.interfaces import Feed
 from swing_engine.core.models import Event
 
-from ..constants import BACKOFF_BASE_S, BACKOFF_FACTOR, BACKOFF_JITTER, BACKOFF_MAX_S, WS_PING_INTERVAL_S
+from ..constants import (
+    BACKOFF_BASE_S,
+    BACKOFF_FACTOR,
+    BACKOFF_JITTER,
+    BACKOFF_MAX_S,
+    HTTP_FORBIDDEN,
+    POLL_SEEN_MAX,
+    WS_PING_INTERVAL_S,
+)
 
 log = structlog.get_logger(__name__)
+#: a failed session that stayed up at least this long counts as healthy: the backoff schedule restarts.
+HEALTHY_SESSION_S = BACKOFF_MAX_S
 
 
 def backoff_delays(
@@ -69,7 +80,13 @@ def now_utc() -> datetime:
 
 
 class ReconnectingFeed(Feed):
-    """Runs `_session()` forever with backoff between failures. Subclasses push events into `self._emit`."""
+    """Runs `_session()` forever with backoff between failures. Subclasses push events into `self._emit`.
+
+    Liveness is tracked separately from data: `last_activity_at` moves on every received frame or completed
+    poll (even when nothing new was emitted), which is what the service watchdog should judge a feed by.
+    The backoff schedule restarts after any session that was healthy (saw activity, or lived at least
+    `HEALTHY_SESSION_S`), not only after a clean return: websocket drops always raise.
+    """
 
     name = "base"
 
@@ -79,19 +96,31 @@ class ReconnectingFeed(Feed):
         self._queue: asyncio.Queue[Event | None] = asyncio.Queue()
         self.sessions = 0
         self.last_event_at: datetime | None = None
+        self.last_activity_at: datetime | None = None
         self.last_error: str | None = None
         self.stopped = False
+        self._session_healthy = False
 
     async def _session(self) -> None:  # pragma: no cover - abstract
         raise NotImplementedError
 
+    def _note_activity(self) -> None:
+        """Transport is alive: a frame arrived or a poll completed (with or without new events)."""
+        self.last_activity_at = now_utc()
+        self._session_healthy = True
+
     async def _emit(self, event: Event) -> None:
         self.last_event_at = now_utc()
+        self._note_activity()
         await self._queue.put(event)
 
     def stop(self) -> None:
         self.stopped = True
         self._queue.put_nowait(None)
+
+    def _retry_floor(self, exc: BaseException) -> float:
+        """Minimum delay before the next session after `exc` (polling feeds honour their interval)."""
+        return 0.0
 
     async def _runner(self) -> None:
         delays = backoff_delays()
@@ -99,6 +128,8 @@ class ReconnectingFeed(Feed):
             if self._max_sessions is not None and self.sessions >= self._max_sessions:
                 break
             self.sessions += 1
+            self._session_healthy = False
+            started = time.monotonic()
             try:
                 await self._session()
                 delays = backoff_delays()  # a clean session end resets the schedule
@@ -106,7 +137,9 @@ class ReconnectingFeed(Feed):
                 raise
             except Exception as e:  # noqa: BLE001 - any feed error => reconnect with backoff
                 self.last_error = f"{type(e).__name__}: {e}"[:200]
-                delay = next(delays)
+                if self._session_healthy or time.monotonic() - started >= HEALTHY_SESSION_S:
+                    delays = backoff_delays()  # the session that just died was healthy: do not ratchet
+                delay = max(next(delays), self._retry_floor(e))
                 log.warning("feed.reconnect", feed=self.name, error=self.last_error, delay_s=round(delay, 2))
                 await self._sleep(delay)
         await self._queue.put(None)
@@ -159,6 +192,7 @@ class WebSocketFeed(ReconnectingFeed):
         async with self._connect(self.url) as ws:
             await self._handshake(ws)
             async for raw in ws:
+                self._note_activity()  # subscription acks, heartbeat trades and empty frames all count
                 for ev in self._parse_frame(raw):
                     await self._emit(ev)
 
@@ -170,19 +204,49 @@ def decode_frame(raw: str | bytes) -> Any:
 
 
 class PollingFeed(ReconnectingFeed):
-    """Poll `_poll()` every `interval_s`; emits only events whose ids were not seen before."""
+    """Poll `_poll()` every `interval_s`; emits only events whose ids were not seen before.
+
+    A failed poll never re-polls faster than `interval_s` (vendors publish a cadence: Nasdaq 60 s, SEC fair
+    access), honours `Retry-After` on 429/503, and waits `forbidden_retry_s` after a 403 when set.
+    """
 
     name = "poll"
+    forbidden_retry_s: float | None = None
 
     def __init__(self, interval_s: float, max_polls: int | None = None, **kw: Any):
         super().__init__(**kw)
         self.interval_s = interval_s
         self._max_polls = max_polls
         self.polls = 0
-        self._seen: set[str] = set()
+        self._seen: dict[str, None] = {}  # insertion-ordered set, pruned to POLL_SEEN_MAX
 
     async def _poll(self) -> list[Event]:  # pragma: no cover - abstract
         raise NotImplementedError
+
+    def _remember(self, event_id: str) -> bool:
+        """True when `event_id` is new. Keeps at most POLL_SEEN_MAX ids (oldest forgotten first)."""
+        if event_id in self._seen:
+            return False
+        self._seen[event_id] = None
+        while len(self._seen) > POLL_SEEN_MAX:
+            del self._seen[next(iter(self._seen))]
+        return True
+
+    def _retry_floor(self, exc: BaseException) -> float:
+        floor = float(self.interval_s)
+        response = getattr(exc, "response", None)
+        if response is None:
+            return floor
+        headers = getattr(response, "headers", None)
+        retry_after = headers.get("Retry-After") if headers is not None and hasattr(headers, "get") else None
+        if retry_after:
+            try:
+                floor = max(floor, float(retry_after))
+            except ValueError:
+                pass
+        if getattr(response, "status_code", None) == HTTP_FORBIDDEN and self.forbidden_retry_s is not None:
+            floor = max(floor, float(self.forbidden_retry_s))
+        return floor
 
     async def _session(self) -> None:
         while not self.stopped:
@@ -190,9 +254,9 @@ class PollingFeed(ReconnectingFeed):
                 self.stopped = True
                 return
             self.polls += 1
-            for ev in await self._poll():
-                if ev.event_id in self._seen:
-                    continue
-                self._seen.add(ev.event_id)
-                await self._emit(ev)
+            events = await self._poll()
+            self._note_activity()  # a successful poll with nothing new is still a live transport
+            for ev in events:
+                if self._remember(ev.event_id):
+                    await self._emit(ev)
             await self._sleep(self.interval_s)

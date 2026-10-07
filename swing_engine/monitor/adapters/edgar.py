@@ -1,14 +1,17 @@
 """EDGAR current-filings Atom poller (`browse-edgar?action=getcurrent&type=8-K&owner=exclude&count=100&output=atom`).
 
 Rules: identify with a User-Agent ("App contact@email"), stay under 10 req/s (token bucket), poll every 15-30 s,
-cursor = newest accession number seen. Entry titles look like "8-K - ACME CORP (0001234567) (Filer)"; the HTML
-summary carries Filed / AccNo / Items lines. CIK -> ticker is resolved through an injected map (SEC company_tickers).
+cursor = newest `ts_source` seen (ISO-8601; accession numbers sort by filer-agent CIK, not by time). Entry titles
+look like "8-K - ACME CORP (0001234567) (Filer)"; the HTML summary carries Filed / AccNo / Items lines. CIK ->
+ticker is resolved through an injected map (SEC company_tickers). A 403 from sec.gov means the fair-access
+limit tripped: the next poll waits `EDGAR_FORBIDDEN_RETRY_S`.
 """
 from __future__ import annotations
 
 import html
 import re
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 import feedparser
@@ -22,6 +25,7 @@ from ..constants import (
     EDGAR_COUNT,
     EDGAR_CURRENT_URL,
     EDGAR_DEFAULT_FORMS,
+    EDGAR_FORBIDDEN_RETRY_S,
     EDGAR_POLL_INTERVAL_S,
     EDGAR_RATE_PER_S,
     HTTP_TIMEOUT_S,
@@ -97,6 +101,7 @@ def parse_atom(text: str, cik_map: Mapping[str, str] | None = None, received: An
 @register("feed", SOURCE)
 class EdgarFeed(PollingFeed):
     name = SOURCE
+    forbidden_retry_s = EDGAR_FORBIDDEN_RETRY_S
 
     def __init__(
         self,
@@ -137,11 +142,18 @@ class EdgarFeed(PollingFeed):
             events.extend(parse_atom(resp.text, self.cik_map))
         events.sort(key=lambda e: e.ts_source)
         if events:
-            self.cursor = events[-1].meta["accession"]
+            self.cursor = events[-1].ts_source.astimezone(UTC).isoformat()  # UTC so cursors sort as strings
         return events
 
     async def catch_up(self, since_event_id: str | None) -> list[Event]:
+        """Filings newer than the cursor (an ISO `ts_source`; a legacy accession cursor is ignored)."""
         fresh = await self._poll()
-        if since_event_id is None:
+        if not since_event_id:
             return fresh
-        return [e for e in fresh if e.event_id > since_event_id]
+        try:
+            since = datetime.fromisoformat(since_event_id.replace("Z", "+00:00"))
+        except ValueError:  # an accession number or garbage: not time-ordered, so do not filter on it
+            return fresh
+        if since.tzinfo is None:
+            since = since.replace(tzinfo=UTC)
+        return [e for e in fresh if e.ts_source > since]

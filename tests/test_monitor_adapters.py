@@ -19,8 +19,9 @@ from swing_engine.monitor.adapters import (
     nasdaq_halts,
     nyse_halts,
 )
-from swing_engine.monitor.adapters._base import backoff_delays, parse_ts
+from swing_engine.monitor.adapters._base import PollingFeed, backoff_delays, parse_ts
 from swing_engine.monitor.adapters.file_feed import FileFeed, read_events, write_events
+from swing_engine.monitor.constants import BACKOFF_BASE_S, BACKOFF_JITTER, EDGAR_FORBIDDEN_RETRY_S
 from tests.monitor_helpers import FIXTURES, fixture_json, fixture_text, make_event
 
 
@@ -94,6 +95,43 @@ def test_bar_engine_uses_profile_and_ignores_unknown_symbols():
     assert out[0].meta["rvol"] == pytest.approx(2.0)
 
 
+def test_reference_from_panel_takes_the_last_row_per_symbol():
+    import pandas as pd
+
+    panel = pd.DataFrame(
+        {
+            "symbol": ["A", "A", "B", "C"],
+            "ts": pd.to_datetime(["2026-10-05", "2026-10-06", "2026-10-06", "2026-10-06"]),
+            "close": [9.0, 10.0, 20.0, float("nan")],
+            "avg_vol_20d": [900.0, 1000.0, 2000.0, 1.0],
+            "avg_vol_50d": [950.0, 1050.0, float("nan"), 1.0],
+            "high_52w": [11.0, 12.0, 25.0, 1.0],
+        }
+    )
+    ref = alpaca_stocks.reference_from_panel(panel)
+    assert ref["A"] == {"prev_close": 10.0, "avg_vol_20d": 1000.0, "avg_vol_50d": 1050.0, "high_52w": 12.0}
+    assert ref["B"] == {"prev_close": 20.0, "avg_vol_20d": 2000.0, "high_52w": 25.0}
+    assert "C" not in ref and alpaca_stocks.reference_from_panel(None) == {}
+
+
+async def test_stocks_handshake_subscribes_bars_and_a_heartbeat_symbol():
+    class WS:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, msg: str) -> None:
+            self.sent.append(msg)
+
+    ws = WS()
+    engine = alpaca_stocks.BarTriggerEngine(reference={"ACME": {"prev_close": 50.0}})
+    await alpaca_stocks.AlpacaStocksFeed("k", "s", symbols=["ACME"], engine=engine)._handshake(ws)
+    sub = json.loads(ws.sent[1])
+    assert sub["statuses"] == ["ACME"] and sub["bars"] == ["ACME"] and sub["trades"] == ["SPY"]
+    ws2 = WS()
+    await alpaca_stocks.AlpacaStocksFeed("k", "s", heartbeat_symbol=None)._handshake(ws2)
+    assert "trades" not in json.loads(ws2.sent[1]) and "bars" not in json.loads(ws2.sent[1])
+
+
 # ---- Alpaca account -----------------------------------------------------------------------------------------
 def test_alpaca_account_frames():
     frames = fixture_json("alpaca_account_frames.json")
@@ -152,6 +190,75 @@ async def test_ws_feed_reconnects_with_backoff():
     assert feed.sessions == 2 and len(sleeps) == 1 and sleeps[0] > 0
     assert json.loads(opened[0].sent[0])["action"] == "auth" and json.loads(opened[1].sent[1])["news"] == ["*"]
     assert "ConnectionResetError" in feed.last_error
+    assert feed.last_activity_at is not None and feed.last_event_at is not None
+
+
+async def _run_ws_sessions(sessions: list[FakeWS]) -> list[float]:
+    @asynccontextmanager
+    async def connector(url):
+        yield sessions.pop(0)
+
+    sleeps: list[float] = []
+
+    async def sleeper(s):
+        sleeps.append(s)
+
+    n = len(sessions)
+    feed = alpaca_news.AlpacaNewsFeed("k", "s", connector=connector, max_sessions=n, sleeper=sleeper)
+    _ = [e async for e in feed.events()]
+    return sleeps
+
+
+async def test_backoff_restarts_after_a_healthy_session_but_ratchets_on_dead_ones():
+    frames = fixture_json("alpaca_news_frames.json")
+    # every session receives a frame before the socket drops: each reconnect waits about the base delay
+    healthy = await _run_ws_sessions([FakeWS(frames[:1], fail_after=True) for _ in range(4)])
+    assert len(healthy) == 4
+    assert all(s <= BACKOFF_BASE_S * (1 + BACKOFF_JITTER) for s in healthy), healthy
+    # sockets that die before any frame keep ratcheting towards the cap
+    dead = await _run_ws_sessions([FakeWS([], fail_after=True) for _ in range(4)])
+    assert len(dead) == 4 and dead[2] > dead[0] and dead[3] > dead[1]
+
+
+async def test_polling_feed_never_repolls_faster_than_its_interval_after_an_error():
+    class Flaky(PollingFeed):
+        name = "flaky"
+
+        async def _poll(self):
+            raise RuntimeError("503 from the vendor")
+
+    sleeps: list[float] = []
+
+    async def sleeper(s):
+        sleeps.append(s)
+
+    feed = Flaky(interval_s=60, max_sessions=3, sleeper=sleeper)
+    assert [e async for e in feed.events()] == []
+    assert len(sleeps) == 3 and all(s >= 60 for s in sleeps), sleeps
+    assert feed.last_activity_at is None  # never completed a poll
+
+
+def test_polling_retry_floor_honours_retry_after_and_sec_403():
+    def status_error(code: int, **headers: str) -> httpx.HTTPStatusError:
+        req = httpx.Request("GET", "https://www.sec.gov/cgi-bin/browse-edgar")
+        resp = httpx.Response(code, headers=headers, request=req)
+        return httpx.HTTPStatusError(str(code), request=req, response=resp)
+
+    feed = edgar.EdgarFeed("ua test@example.com", interval_s=20)
+    assert feed._retry_floor(RuntimeError("x")) == 20
+    assert feed._retry_floor(status_error(503)) == 20
+    assert feed._retry_floor(status_error(503, **{"Retry-After": "90"})) == 90
+    assert feed._retry_floor(status_error(403)) == EDGAR_FORBIDDEN_RETRY_S
+    assert feed._retry_floor(status_error(429, **{"Retry-After": "garbage"})) == 20
+
+
+def test_polling_feed_forgets_the_oldest_seen_ids():
+    feed = PollingFeed(interval_s=1)
+    feed._seen = {}
+    from swing_engine.monitor.adapters import _base
+
+    assert all(feed._remember(f"id{i}") for i in range(_base.POLL_SEEN_MAX + 5))
+    assert len(feed._seen) == _base.POLL_SEEN_MAX and not feed._remember("id10") and feed._remember("id0")
 
 
 # ---- EDGAR --------------------------------------------------------------------------------------------------
@@ -194,8 +301,26 @@ async def test_edgar_feed_polls_with_user_agent_and_cursor():
     assert "type=8-K" in str(req.url) and "owner=exclude" in str(req.url) and "output=atom" in str(req.url)
     assert "owner=only" in str(route.calls[1].request.url)
     assert len(events) == 5  # second poll is fully deduped
-    assert feed.cursor == "0005556667-26-000002"
+    # the cursor is the newest ts_source (UTC ISO), not an accession number (those sort by filer-agent CIK)
+    assert feed.cursor == max(e.ts_source for e in events).astimezone(UTC).isoformat()
+    assert feed.cursor.endswith("+00:00")
     assert 20 in sleeps
+    assert feed.last_activity_at is not None  # a completed poll counts as transport liveness
+
+
+@respx.mock
+async def test_edgar_catch_up_filters_by_ts_source_not_accession():
+    respx.get("https://www.sec.gov/cgi-bin/browse-edgar").mock(return_value=httpx.Response(200, text=fixture_text("edgar_current.atom")))
+    async with httpx.AsyncClient() as client:
+        feed = edgar.EdgarFeed("ua test@example.com", form_types=["8-K"], client=client, interval_s=20)
+        fresh = await feed.catch_up(None)
+        since = fresh[1].ts_source
+        newer = await feed.catch_up(since.isoformat())
+        legacy = await feed.catch_up("0001213900-26-000010")  # an old accession cursor must not drop anything
+    assert len(fresh) == 5
+    assert [e.event_id for e in newer] == [e.event_id for e in fresh if e.ts_source > since]
+    assert 0 < len(newer) < len(fresh)
+    assert len(legacy) == len(fresh)
 
 
 # ---- Nasdaq halts -------------------------------------------------------------------------------------------
