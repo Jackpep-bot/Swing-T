@@ -1,49 +1,44 @@
 # swing-engine
 
 A personal swing-trading engine: nightly data ingest and feature pipeline, pluggable strategies, walk-forward
-backtests, a LightGBM ranking model, a Claude analyst layer that reviews candidates and writes the journal, an
-always-on live monitor (news, SEC filings, halts, bar triggers, social) that pushes alerts to your phone, and a
-paper-trading executor on Alpaca with hard risk limits.
+backtests with trial-count-aware (deflated) Sharpe, a ranking model, a Claude analyst layer that reviews
+candidates and writes the journal, an always-on live monitor (news, SEC filings, halts, bar triggers, a small-cap
+runner track) that pushes alerts to your phone, and a paper-trading executor on Alpaca with hard risk limits.
 
-Status: integrated. All modules land, `uv run pytest` is green and the sample-provider flow below runs end to end
-with no keys. See `CLAUDE.md` for rules and layout, `docs/` for the research behind the design.
+Hard rule everywhere: the language model never produces a number that reaches an order. See `CLAUDE.md`.
 
-## Quick start (sample data, no keys)
+## Quick start (no API keys needed)
 ```bash
-cp .env.example .env                 # optional: fill keys you have; everything degrades gracefully without them
+cp .env.example .env                       # fill in keys you have; everything degrades gracefully without them
 uv sync --extra dev
-uv run swing status                  # configured keys, store counts, kill switch, registered plugins
-
-# 1. data -> features
-uv run swing ingest --provider sample            # synthetic GBM bars for 60 names (2021-10 .. 2026-09-30)
-uv run swing features                           # caches the 64-column feature panel to the store table `panel`
-
-# 2. research
+uv run swing status                        # configured providers/keys, store counts, registered plugins
+uv run swing ingest --provider sample      # ~60 synthetic symbols, 5 years, instant
+uv run swing features                      # build the 64-column feature panel into DuckDB
+uv run swing scan --as-of 2026-09-30       # run enabled strategies, save signals
 uv run swing backtest pullback_trend --provider sample --start 2022-01-01
-uv run swing backtest sr_breakout   --provider sample --start 2022-01-01
-uv run swing trials                             # every logged run; the count feeds deflated Sharpe
-
-# 3. daily loop (point-in-time; the sample data ends 2026-09-30)
-uv run swing scan   --as-of 2026-09-30                       # screened universe -> Signals -> runs/signals/<date>.json
-uv run swing review --as-of 2026-09-30 --dry-run             # prints the Claude prompt; the real call needs ANTHROPIC_API_KEY
-uv run swing size   --as-of 2026-09-30 --equity 50000        # Signals -> OrderIntents (risk.sizing); reviews only filter
-uv run swing paper  --as-of 2026-09-30 --broker paper_sim --approve "<your name>"   # refuses without --approve
-uv run swing journal --as-of 2026-09-30                      # tables-only without a key
-
-# 4. live monitor
-uv run swing monitor run --dry-run              # replays tests/fixtures/monitor/replay_events.jsonl to the console and exits
-uv run swing monitor report --days 7
-uv run swing monitor replay --days 7
+uv run swing backtest rsi2_meanrev   --provider sample --start 2022-01-01
+uv run swing rank train                    # cross-sectional ranker (LightGBM, or scikit-learn fallback)
+uv run swing size --as-of 2026-09-30 --equity 50000          # 1% risk sizing + reward:risk floor + caps
+uv run swing paper --broker paper_sim --as-of 2026-09-30 --approve "your name"   # refuses without --approve
+uv run swing monitor run --dry-run         # replays a fixture feed through rules -> alerts, then exits
+uv run swing review --dry-run              # prints the Claude review prompt without calling the API
+uv run pytest -q                           # 597 tests, no network
 ```
+Create `state/KILL` to block every order path; delete it to resume.
 
-Notes
-- Commands that chain through `runs/<kind>/<date>.json` (`review`, `size`, `paper`, `journal`) default `--as-of` to today;
-  pass the scan date explicitly. A missing file lists the dates that do exist.
-- `scan` screens the stored names with `settings.universe` as of `--as-of` (ETFs, OTC and names delisted before the date drop
-  out); `backtest` keeps every name that passed the screen at either `--start` or `--end`, so delistings inside the window
-  are traded and exited, not erased.
-- `ingest` defaults to `history_years` before today; for backtests that start in 2022 pass `--start 2020-10-01` so the
-  252-bar features are warm from day one.
-- Paper only: `paper --broker alpaca` needs `ALPACA_API_KEY`/`ALPACA_SECRET_KEY` and refuses when `ALPACA_PAPER=false`
-  unless `SWING_ALLOW_LIVE=yes` is also set (`docs/gates.md`). `touch state/KILL` blocks every order; `swing status` shows it.
-- Real providers: set `data.bar_provider` in `config/settings.yaml` (`massive` | `eodhd` | `alpaca`) and the matching key in `.env`.
+## Going live with real data (paper account)
+1. Massive (ex-Polygon) free key -> `MASSIVE_API_KEY`; `swing ingest --provider massive --symbols AAPL,MSFT,...`.
+2. Alpaca paper keys -> `ALPACA_API_KEY/SECRET`, keep `ALPACA_PAPER=true`; `swing paper --broker alpaca ...`.
+   Live trading additionally requires `SWING_ALLOW_LIVE=yes` and is blocked until the gates in `docs/gates.md` pass.
+3. Telegram bot token + chat id (and optionally Pushover) for alerts; `swing monitor run`.
+4. `ANTHROPIC_API_KEY` for `swing review` (Sonnet), the monitor's Haiku classifier, and the strategy lab.
+
+## Extending it with Claude Code
+Open this folder in Claude Code and use the skills in `.claude/skills/`: `add-strategy`, `backtest`, `add-feed`,
+`tune-monitor`, `research-loop`. Every strategy, data provider, feed, rule, broker and deliverer is a plugin
+registered through `swing_engine/core/registry.py`; see `docs/api-contract.md` and `docs/feature-contract.md`.
+
+## Docs
+`docs/research-architecture.md` (vendors, prices, methodology), `docs/research-monitor.md` (feeds, rules, alert
+policy), `docs/smallcap-spec.md` (runner / pump track), `docs/sources-schwab-massive.md`, `docs/methods.md`
+(swing-methods work-up), `docs/gates.md` (what must be true before live money), `docs/STATUS.md`.

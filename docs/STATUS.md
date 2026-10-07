@@ -1,17 +1,20 @@
-# Project status: PAUSED (2026-10-06, usage limit reached)
+# Project status (2026-10-06)
 
-## Done
-- Scaffold, contracts (`core/`), config, CLAUDE.md, skills, research docs (`docs/research-*.md`, `docs/sources-schwab-massive.md`).
-- Research complete and saved under `docs/research-raw/`: architecture.json, live-monitor.json, smallcap-pump.json
-  (fact-check stage of the small-cap pass did not run), and four of six swing-methods sweeps
-  (`methods-sweeps/`: youtube, fintwit, books_blogs, evidence). Reddit and 2025-26 events sweeps, deep dives and synthesis did NOT run.
-- Parallel implementation was started and stopped mid-way; whatever landed in `swing_engine/` is uncommitted WIP from eight agents and is
-  NOT integrated or tested.
+## Built and verified
+- All modules implemented and integrated; 597 tests pass, ruff clean. End-to-end CLI flow verified on the sample
+  provider (ingest, features, scan, backtest x3, rank train, size, paper via paper_sim with approval and kill switch,
+  Alpaca live refusal, review --dry-run, monitor dry-run replay).
+- Adversarial review found 26 issues (6 high); all high and medium fixed with regression tests (see git log).
+- Per-strategy reward:risk floor so rule-exit strategies (RSI-2) are not rejected by the 2:1 portfolio floor.
 
-## Resume plan
-1. `git status`; review WIP files; run `uv run pytest -q` and `uv run ruff check .` to see what is broken.
-2. Re-run the build workflow (script at ~/.claude/projects/.../workflows/scripts/build-swing-engine-wf_1023289f-d60.js) or
-   re-launch per module from docs/api-contract.md; then integrate, review, fix.
-3. Re-run the swing-methods workup for reddit + events sweeps, deep dives, synthesis; write docs/methods.md.
-4. Fill `monitor.smallcap` thresholds from smallcap-pump.json (see signals: pre-market gap >= 50% for pump universe, RVOL >= 5x,
-   float < 10-20M, 46.6% of highs by 9:45, 67% close below open, offering/424B5 same day = dump flag).
+## Research
+- docs/research-raw/: architecture, live-monitor, small-cap pump (its fact-check stage did not run), methods sweeps.
+- docs/methods.md: written by the methods workup when it completes (reddit + events sweeps, deep dives, synthesis).
+
+## Not yet done / next
+1. Run with real keys: Massive free tier ingest on a real universe; Alpaca paper; verify the news/stock WebSocket
+   adapters against live payloads (built from documented schemas and fixtures only).
+2. Float data source for the small-cap track (not in Alpaca/Massive): FMP, sec-api, or an EDGAR cover-page parser.
+3. Calibrate monitor thresholds after a two-week paper run (`swing monitor report`, `swing monitor replay`).
+4. `brew install libomp` to enable LightGBM (scikit-learn fallback is used otherwise).
+5. Optional: local web dashboard over DuckDB; VPS deployment unit for the monitor (see docs/research-monitor.md Ops).
