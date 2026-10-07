@@ -79,8 +79,29 @@ SECONDS_PER_HOUR = 3600.0
 Progress = Callable[[str], None]
 
 
+def _now_et() -> pd.Timestamp:
+    return pd.Timestamp.now(tz=TZ)
+
+
 def _today() -> date:
-    return date.today()
+    """Today's date in America/New_York (a Pacific-time Mac must not think the session is over at 21:00 ET)."""
+    return _now_et().date()
+
+
+SESSION_FINAL_ET = (20, 15)  # after-hours ends 20:00 ET; daily aggregates are treated as final 15 minutes later
+
+
+def session_is_final(d: date) -> bool:
+    """True when session ``d`` is over and its daily bar will not change. Today's session counts as final only
+    after SESSION_FINAL_ET on today's ET clock; a partial bar is written but never ledgered, so the next run
+    re-fetches it (finding: a mid-session ingest froze a truncated close and volume forever)."""
+    today = _today()
+    if d < today:
+        return True
+    if d > today:
+        return False
+    now = _now_et()
+    return now.date() == today and (now.hour, now.minute) >= SESSION_FINAL_ET
 
 
 def _provider_class(provider_name: str) -> type[BarProvider]:
@@ -224,7 +245,7 @@ def grouped_days_present(st: Store, start: date, end: date) -> set[date]:
         )
         if not dense.empty:
             present.update(pd.to_datetime(dense["ts"], utc=True).dt.tz_convert(TZ).dt.date)
-    return present
+    return {d for d in present if session_is_final(d)}  # an unfinished session is never "present"
 
 
 def _ledger_first_fetch(st: Store, provider: str) -> date | None:
@@ -421,7 +442,10 @@ def _ingest_grouped(
             bars_written += st.write_bars(bars)
             day_symbols = set(bars["symbol"].unique().tolist())
             tickers.update(day_symbols)
-            _record_session(st, d, len(day_symbols), name, today)
+            if session_is_final(d):
+                _record_session(st, d, len(day_symbols), name, today)
+            else:
+                log.info("ingest_grouped_partial_session", session=d.isoformat(), note="written, not ledgered")
             fetched += 1
         if i % GROUPED_PROGRESS_EVERY_DAYS == 0 and i < len(todo):
             left = len(todo) - i

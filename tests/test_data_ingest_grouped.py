@@ -298,3 +298,20 @@ def test_grouped_run_refreshes_the_symbols_reference_table(tmp_path, today: Day)
         calls = route.call_count
         _run(prov, store, date(2024, 1, 2), date(2024, 1, 4), reference=True)
         assert route.call_count == calls  # reference served from the 7-day disk cache
+
+
+def test_session_finality_uses_the_et_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Finding: an ingest at 11:00 ET (or 06:30 Pacific) ledgered today's in-progress bars forever."""
+    import pandas as pd
+
+    def at(ts: str) -> None:
+        now = pd.Timestamp(ts, tz="America/New_York")
+        monkeypatch.setattr(ingest, "_now_et", lambda: now)
+        monkeypatch.setattr(ingest, "_today", lambda: now.date())
+
+    at("2026-10-06 11:00")
+    assert ingest.session_is_final(date(2026, 10, 5)) and not ingest.session_is_final(date(2026, 10, 6))
+    at("2026-10-06 20:14")
+    assert not ingest.session_is_final(date(2026, 10, 6))
+    at("2026-10-06 20:15")
+    assert ingest.session_is_final(date(2026, 10, 6)) and not ingest.session_is_final(date(2026, 10, 7))
