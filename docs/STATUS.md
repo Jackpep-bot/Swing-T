@@ -9,8 +9,13 @@
 - Real data: data/market.duckdb holds Massive grouped daily bars for every US ticker, 2024-10-07..2026-10-06
   (501 sessions, 16,027 tickers, splits table). scripts/extend_history_alpaca.py adds Alpaca SIP split-adjusted
   daily bars 2016-01-04..2024-10-06 for 4,770 liquid names + index/sector ETFs (survivorship bias before
-  2024-10-07; recorded in ingest_meta 'alpaca_extension'). Check data/logs/extend-alpaca.log; re-run if it did
-  not finish (it refetches everything with full=True; harmless).
+  2024-10-07; recorded in ingest_meta 'alpaca_extension'). DONE 2026-10-07: 7,354,836 bars for 4,326 symbols,
+  0 errors. Store now spans 2016-01-04..2026-10-06.
+- GitHub: https://github.com/Jackpep-bot/Swing-T (public; origin/main). .env, data/ never committed.
+- Claude Code add-ons (new sessions): ponytail plugin (enabled in ~/.claude/settings.json), graphify skill
+  (`/graphify .`; CLI `graphify`), Anthropic Agent Skills already synced. OmniRoute NOT installed (gateway, not a
+  plugin; user has not decided).
+- caffeinate was left running at the user's request; stop with `pkill caffeinate` when done.
 
 ## Stopped mid-way (resume these)
 1. Dashboard (swing_engine/dashboard/, uncommitted): built, integrated, reviewed; the final fix pass was
