@@ -1,0 +1,18 @@
+{
+  "asset_id": "b0b6dd9d-8b9b-48a9-ba46-b9d54906e415",
+  "symbol": "AAPL",
+  "exchange": "NASDAQ",
+  "asset_class": "us_equity",
+  "avg_entry_price": "10.05",
+  "qty": "250",
+  "side": "long",
+  "market_value": "2600",
+  "cost_basis": "2512.5",
+  "unrealized_pl": "87.5",
+  "unrealized_plpc": "0.0348",
+  "unrealized_intraday_pl": "0",
+  "unrealized_intraday_plpc": "0",
+  "current_price": "10.4",
+  "lastday_price": "10.2",
+  "change_today": "0.0196"
+}

@@ -1,0 +1,5 @@
+Symbol|Security Name|Market Category|Trigger Time
+ABCD|Abcd Holdings Inc. - Common Stock|Q|09:45:12
+EFGH|Efgh Therapeutics - Common Stock|G|10:02:33
+ijkl|Ijkl Energy Corp. - Class A|N|14:17:05
+File Creation Time: 1002202418:00

@@ -1,0 +1,4 @@
+Symbol|Security Name|Market Category|Reg SHO Threshold Flag|Rule 3210
+ABCD|Abcd Holdings Inc. - Common Stock|Q|Y|N
+MNOP|Mnop Biotech Inc. - Common Stock|S|Y|Y
+File Creation Time: 1002202423:00

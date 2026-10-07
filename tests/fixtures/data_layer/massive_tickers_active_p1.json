@@ -1,0 +1,10 @@
+{
+  "results": [
+    {"ticker": "AAPL", "name": "Apple Inc.", "market": "stocks", "locale": "us", "primary_exchange": "XNAS", "type": "CS", "active": true, "currency_name": "usd", "cik": "0000320193", "composite_figi": "BBG000B9XRY4", "share_class_figi": "BBG001S5N8V8", "list_date": "1980-12-12", "last_updated_utc": "2024-10-01T00:00:00Z"},
+    {"ticker": "MSFT", "name": "Microsoft Corp", "market": "stocks", "locale": "us", "primary_exchange": "XNAS", "type": "CS", "active": true, "currency_name": "usd", "cik": "0000789019", "list_date": "1986-03-13", "last_updated_utc": "2024-10-01T00:00:00Z"}
+  ],
+  "status": "OK",
+  "request_id": "req-1",
+  "count": 2,
+  "next_url": "https://api.massive.com/v3/reference/tickers?cursor=page2"
+}

@@ -1,0 +1,4 @@
+[
+  {"Representative": "Nancy Pelosi", "BioGuideID": "P000197", "ReportDate": "2024-07-03", "TransactionDate": "2024-06-24", "Ticker": "NVDA", "Transaction": "Purchase", "Range": "$1,000,001 - $5,000,000", "Amount": 1000001.0, "House": "Representatives", "Party": "D", "District": "CA11", "last_modified": "2024-07-05", "TickerType": "ST", "Description": "NVIDIA call options exercised", "ExcessReturn": 12.5, "PriceChange": 15.2, "SPYChange": 2.7},
+  {"Representative": "Tommy Tuberville", "BioGuideID": "T000278", "ReportDate": null, "TransactionDate": "2024-06-10", "Ticker": "AAPL", "Transaction": "Sale", "Range": "$15,001 - $50,000", "Amount": 15001.0, "House": "Senate", "Party": "R", "District": "", "last_modified": "2024-07-01", "TickerType": "ST", "Description": "", "ExcessReturn": 1.0, "PriceChange": 1.0, "SPYChange": 1.0}
+]

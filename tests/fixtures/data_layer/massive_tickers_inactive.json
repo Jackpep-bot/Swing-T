@@ -1,0 +1,8 @@
+{
+  "results": [
+    {"ticker": "SIVB", "name": "SVB Financial Group", "market": "stocks", "locale": "us", "primary_exchange": "XNAS", "type": "CS", "active": false, "currency_name": "usd", "cik": "0000719739", "list_date": "1987-10-23", "delisted_utc": "2023-03-28T00:00:00Z", "last_updated_utc": "2023-03-28T00:00:00Z"}
+  ],
+  "status": "OK",
+  "request_id": "req-3",
+  "count": 1
+}

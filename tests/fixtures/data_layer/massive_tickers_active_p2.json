@@ -1,0 +1,9 @@
+{
+  "results": [
+    {"ticker": "SPY", "name": "SPDR S&P 500 ETF Trust", "market": "stocks", "locale": "us", "primary_exchange": "ARCX", "type": "ETF", "active": true, "currency_name": "usd", "list_date": "1993-01-29", "last_updated_utc": "2024-10-01T00:00:00Z"},
+    {"ticker": "PNKX", "name": "Pink Sheet Co", "market": "otc", "locale": "us", "primary_exchange": "OTCM", "type": "CS", "active": true, "currency_name": "usd", "list_date": "2010-01-04", "last_updated_utc": "2024-10-01T00:00:00Z"}
+  ],
+  "status": "OK",
+  "request_id": "req-2",
+  "count": 2
+}

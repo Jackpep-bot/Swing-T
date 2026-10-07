@@ -1,0 +1,14 @@
+{
+  "ticker": "AAPL",
+  "queryCount": 3,
+  "resultsCount": 2,
+  "adjusted": true,
+  "results": [
+    {"v": 82488700, "vw": 185.9465, "o": 187.15, "c": 185.64, "h": 188.44, "l": 183.885, "t": 1704171600000, "n": 1008871},
+    {"v": 58414500, "vw": 184.3226, "o": 184.22, "c": 184.25, "h": 185.88, "l": 183.43, "t": 1704258000000, "n": 656853}
+  ],
+  "status": "OK",
+  "request_id": "req-aggs-1",
+  "count": 2,
+  "next_url": "https://api.massive.com/v2/aggs/ticker/AAPL/range/1/day/2024-01-02/2024-01-04?cursor=aggs2"
+}

@@ -1,0 +1,24 @@
+{
+  "thesis": "Pullback to the rising 50-day in an uptrend with a raised-guidance print behind it; stop sits under the swing low described by the strategy. Nothing in the news contradicts the long.",
+  "catalyst_within_hold_window": true,
+  "event_risk_flags": [
+    "earnings"
+  ],
+  "news_contradicts_setup": false,
+  "insider_or_congress_signal": "insider_buying",
+  "liquidity_concern": false,
+  "rubric": {
+    "setup_quality": "good",
+    "catalyst": "strong",
+    "news_alignment": "good",
+    "liquidity": "strong",
+    "event_risk": "fair",
+    "evidence": "good"
+  },
+  "decision": "approve_for_risk_check",
+  "evidence": [
+    "news 2026-10-03: guidance raised",
+    "form4: CFO open-market buy",
+    "earnings calendar: report inside window"
+  ]
+}

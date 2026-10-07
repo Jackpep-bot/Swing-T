@@ -1,0 +1,51 @@
+{
+  "name": "sma_pullback_lab",
+  "summary": "Buy shallow pullbacks to a rising 50-day average in uptrending liquid names.",
+  "universe_filter": "Close above sma_50; liquid names per the universe config.",
+  "regime_filter": "trend_state == 1 when available (not enforced in this draft).",
+  "entry_trigger": "rsi_14 below rsi_max while close remains above sma_50.",
+  "stop_rule": "entry minus atr_stop_mult times atr_14.",
+  "target_rule": "entry plus atr_target_mult times atr_14.",
+  "holding_period": "Up to 10 trading days or stop/target.",
+  "params": [
+    {
+      "name": "rsi_max",
+      "description": "RSI(14) ceiling for the pullback",
+      "default": "40.0",
+      "grid": [
+        "30.0",
+        "35.0",
+        "40.0"
+      ]
+    },
+    {
+      "name": "atr_stop_mult",
+      "description": "ATR multiple below entry for the stop",
+      "default": "1.5",
+      "grid": [
+        "1.0",
+        "1.5",
+        "2.0"
+      ]
+    },
+    {
+      "name": "atr_target_mult",
+      "description": "ATR multiple above entry for the target",
+      "default": "3.0",
+      "grid": [
+        "2.0",
+        "3.0"
+      ]
+    }
+  ],
+  "required_features": [
+    "close",
+    "sma_50",
+    "rsi_14",
+    "atr_14"
+  ],
+  "code": "\"\"\"Lab strategy: buy a shallow pullback to the 50-day in an uptrend (staged, not registered).\"\"\"\nfrom __future__ import annotations\n\nfrom datetime import date\nfrom typing import Any\n\nimport pandas as pd\n\nfrom swing_engine.core.interfaces import Strategy\nfrom swing_engine.core.models import Side, Signal\n\n\nclass SmaPullbackLab(Strategy):\n    name = \"sma_pullback_lab\"\n    description = \"Close above sma_50 with rsi_14 below a threshold; ATR stop and target.\"\n    default_params: dict[str, Any] = {\"rsi_max\": 40.0, \"atr_stop_mult\": 1.5, \"atr_target_mult\": 3.0}\n\n    def required_features(self) -> list[str]:\n        return [\"close\", \"sma_50\", \"rsi_14\", \"atr_14\"]\n\n    def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:\n        out: list[Signal] = []\n        rows = panel[panel[\"ts\"].dt.date <= as_of]\n        last = rows.sort_values(\"ts\").groupby(\"symbol\").tail(1)\n        for _, r in last.sort_values(\"symbol\").iterrows():\n            if pd.isna(r[\"sma_50\"]) or pd.isna(r[\"rsi_14\"]) or pd.isna(r[\"atr_14\"]):\n                continue\n            if r[\"close\"] <= r[\"sma_50\"] or r[\"rsi_14\"] >= self.params[\"rsi_max\"]:\n                continue\n            entry = float(r[\"close\"])\n            stop = entry - float(r[\"atr_14\"]) * self.params[\"atr_stop_mult\"]\n            target = entry + float(r[\"atr_14\"]) * self.params[\"atr_target_mult\"]\n            risk = entry - stop\n            if risk <= 0:\n                continue\n            out.append(\n                Signal(\n                    strategy=self.name,\n                    symbol=str(r[\"symbol\"]),\n                    side=Side.LONG,\n                    as_of=as_of,\n                    entry=entry,\n                    stop=stop,\n                    target=target,\n                    reward_risk=(target - entry) / risk,\n                    score=float(self.params[\"rsi_max\"] - r[\"rsi_14\"]),\n                    features={\"rsi_14\": float(r[\"rsi_14\"]), \"atr_14\": float(r[\"atr_14\"])},\n                )\n            )\n        return out\n",
+  "caveats": [
+    "Mean-reversion entries fail in trend breaks; falsified if deflated Sharpe < 0 on the grid."
+  ]
+}

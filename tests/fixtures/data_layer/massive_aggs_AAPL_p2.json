@@ -1,0 +1,12 @@
+{
+  "ticker": "AAPL",
+  "queryCount": 3,
+  "resultsCount": 1,
+  "adjusted": true,
+  "results": [
+    {"v": 71983600, "vw": 182.0183, "o": 182.15, "c": 181.91, "h": 183.0872, "l": 180.88, "t": 1704344400000, "n": 712692}
+  ],
+  "status": "OK",
+  "request_id": "req-aggs-2",
+  "count": 1
+}

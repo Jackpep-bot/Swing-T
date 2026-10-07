@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:ndaq="http://www.nasdaqtrader.com/">
+<channel>
+<title>Trading Halts</title>
+<ttl>1</ttl>
+<item>
+<title>PUMP</title>
+<pubDate>Tue, 06 Oct 2026 13:31:00 GMT</pubDate>
+<ndaq:IssueSymbol>PUMP</ndaq:IssueSymbol>
+<ndaq:IssueName>Pump Industries, Inc. - Common Stock</ndaq:IssueName>
+<ndaq:Market>NASDAQ</ndaq:Market>
+<ndaq:ReasonCode>T1</ndaq:ReasonCode>
+<ndaq:PauseThresholdPrice></ndaq:PauseThresholdPrice>
+<ndaq:HaltDate>10/06/2026</ndaq:HaltDate>
+<ndaq:HaltTime>09:31:00</ndaq:HaltTime>
+<ndaq:ResumptionDate>10/06/2026</ndaq:ResumptionDate>
+<ndaq:ResumptionQuoteTime>09:40:00</ndaq:ResumptionQuoteTime>
+<ndaq:ResumptionTradeTime>09:45:00</ndaq:ResumptionTradeTime>
+</item>
+<item>
+<title>TINY</title>
+<pubDate>Tue, 06 Oct 2026 14:02:00 GMT</pubDate>
+<ndaq:IssueSymbol>TINY</ndaq:IssueSymbol>
+<ndaq:IssueName>Tiny Biotech Inc. - Common Stock</ndaq:IssueName>
+<ndaq:Market>NASDAQ</ndaq:Market>
+<ndaq:ReasonCode>LUDP</ndaq:ReasonCode>
+<ndaq:PauseThresholdPrice>5.50</ndaq:PauseThresholdPrice>
+<ndaq:HaltDate>10/06/2026</ndaq:HaltDate>
+<ndaq:HaltTime>10:02:00</ndaq:HaltTime>
+<ndaq:ResumptionDate>10/06/2026</ndaq:ResumptionDate>
+<ndaq:ResumptionQuoteTime>10:07:00</ndaq:ResumptionQuoteTime>
+<ndaq:ResumptionTradeTime>10:07:00</ndaq:ResumptionTradeTime>
+</item>
+<item>
+<title>SCAM</title>
+<pubDate>Tue, 06 Oct 2026 14:30:00 GMT</pubDate>
+<ndaq:IssueSymbol>SCAM</ndaq:IssueSymbol>
+<ndaq:IssueName>Scam Holdings Ltd - Ordinary Shares</ndaq:IssueName>
+<ndaq:Market>NASDAQ</ndaq:Market>
+<ndaq:ReasonCode>T12</ndaq:ReasonCode>
+<ndaq:PauseThresholdPrice></ndaq:PauseThresholdPrice>
+<ndaq:HaltDate>10/06/2026</ndaq:HaltDate>
+<ndaq:HaltTime>10:30:00</ndaq:HaltTime>
+<ndaq:ResumptionDate></ndaq:ResumptionDate>
+<ndaq:ResumptionQuoteTime></ndaq:ResumptionQuoteTime>
+<ndaq:ResumptionTradeTime></ndaq:ResumptionTradeTime>
+</item>
+</channel>
+</rss>

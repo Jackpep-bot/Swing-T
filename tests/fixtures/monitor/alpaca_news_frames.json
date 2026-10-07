@@ -1,0 +1,8 @@
+[
+  "[{\"T\":\"success\",\"msg\":\"connected\"}]",
+  "[{\"T\":\"success\",\"msg\":\"authenticated\"}]",
+  "[{\"T\":\"subscription\",\"news\":[\"*\"]}]",
+  "[{\"T\":\"n\",\"id\":41234567,\"headline\":\"Acme Corp Reports Q3 EPS $1.20 vs $1.00 Est, Raises FY26 Guidance\",\"summary\":\"Acme Corp (NASDAQ: ACME) reported third-quarter results above consensus and raised full-year guidance.\",\"author\":\"Benzinga Newsdesk\",\"created_at\":\"2026-10-06T20:05:12.123456789Z\",\"updated_at\":\"2026-10-06T20:05:12.123456789Z\",\"url\":\"https://www.benzinga.com/news/26/10/41234567/acme-q3\",\"content\":\"<p>Full text</p>\",\"symbols\":[\"ACME\"],\"source\":\"benzinga\"}]",
+  "[{\"T\":\"n\",\"id\":41234568,\"headline\":\"Tiny Biotech Prices $25M Registered Direct Offering\",\"summary\":\"Tiny Biotech Inc. (NASDAQ: TINY) announced the pricing of a registered direct offering.\",\"author\":\"Benzinga Newsdesk\",\"created_at\":\"2026-10-06T20:06:00Z\",\"updated_at\":\"2026-10-06T20:06:00Z\",\"url\":\"https://www.benzinga.com/news/26/10/41234568/tiny-offering\",\"content\":\"\",\"symbols\":[\"TINY\"],\"source\":\"benzinga\"},{\"T\":\"n\",\"id\":41234569,\"headline\":\"Mega Industries Set To Join S&P 500\",\"summary\":\"S&P Dow Jones Indices announced Mega Industries will replace Old Co in the S&P 500 effective prior to the open on October 10.\",\"author\":\"Benzinga Newsdesk\",\"created_at\":\"2026-10-06T21:15:00Z\",\"updated_at\":\"2026-10-06T21:15:00Z\",\"url\":\"https://www.benzinga.com/news/26/10/41234569/mega-sp500\",\"content\":\"\",\"symbols\":[\"MEGA\",\"OLDC\"],\"source\":\"benzinga\"}]",
+  "[{\"T\":\"error\",\"code\":406,\"msg\":\"connection limit exceeded\"}]"
+]

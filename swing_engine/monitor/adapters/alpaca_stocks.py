@@ -1,0 +1,211 @@
+"""Alpaca stock websocket (`/v2/iex` Basic or `/v2/sip` Plus): statuses (halts), lulds and bars.
+
+Statuses `T="s"` carry sc/sm (status code/message) and rc/rm (reason code/message). LULD `T="l"` carries u/d/i.
+Bars `T="b"` are turned into `bar_trigger` events by `BarTriggerEngine` when reference data is available.
+"""
+from __future__ import annotations
+
+import json
+from datetime import date
+from typing import Any
+
+import structlog
+
+from swing_engine.core.models import Event
+from swing_engine.core.registry import register
+
+from ..constants import (
+    ADVERSE_MOVE_PCT,
+    ALPACA_STATUS_HALT,
+    ALPACA_STATUS_PAUSE,
+    ALPACA_STATUS_QUOTE_RESUME,
+    ALPACA_STATUS_RESUME,
+    ALPACA_STOCKS_WS_IEX,
+    ALPACA_STOCKS_WS_SIP,
+    BREAKOUT_VOL_RATIO,
+    MINUTES_IN_SESSION,
+    TRIGGER_ADVERSE,
+    TRIGGER_BREAKOUT_52W,
+    TRIGGER_GAP,
+)
+from ..hours import minute_of_session, to_et
+from ._base import WebSocketFeed, decode_frame, now_utc, parse_ts, stable_id
+
+log = structlog.get_logger(__name__)
+SOURCE = "alpaca_stocks"
+PCT = 100.0
+
+
+def parse_status(msg: dict[str, Any]) -> Event | None:
+    if msg.get("T") != "s":
+        return None
+    sym = str(msg.get("S", "")).upper()
+    sc = str(msg.get("sc", "")).upper()
+    rc = str(msg.get("rc", "")).upper()
+    ts = parse_ts(msg.get("t"))
+    if sc in (ALPACA_STATUS_RESUME, ALPACA_STATUS_QUOTE_RESUME):
+        status = "resumed"
+    elif sc == ALPACA_STATUS_PAUSE:
+        status = "paused"
+    elif sc == ALPACA_STATUS_HALT:
+        status = "halted"
+    else:
+        status = sc.lower() or "unknown"
+    return Event(
+        event_id=stable_id(SOURCE, "status", sym, sc, rc, ts.isoformat()),
+        source=SOURCE,
+        kind="halt",
+        ts_source=ts,
+        ts_received=now_utc(),
+        symbols=[sym],
+        title=f"{sym} {msg.get('sm') or status} {rc} {msg.get('rm') or ''}".strip(),
+        meta={"status": status, "status_code": sc, "reason_code": rc, "reason": msg.get("rm"), "tape": msg.get("z")},
+    )
+
+
+def parse_luld(msg: dict[str, Any]) -> Event | None:
+    if msg.get("T") != "l":
+        return None
+    sym = str(msg.get("S", "")).upper()
+    ts = parse_ts(msg.get("t"))
+    return Event(
+        event_id=stable_id(SOURCE, "luld", sym, msg.get("u"), msg.get("d"), ts.isoformat()),
+        source=SOURCE,
+        kind="luld",
+        ts_source=ts,
+        ts_received=now_utc(),
+        symbols=[sym],
+        title=f"{sym} LULD band {msg.get('d')}-{msg.get('u')} ({msg.get('i')})",
+        meta={"up": msg.get("u"), "down": msg.get("d"), "indicator": msg.get("i"), "tape": msg.get("z")},
+    )
+
+
+class BarTriggerEngine:
+    """Turns 1-min bars into bar_trigger events using a reference dict per symbol:
+    {prev_close, avg_vol_20d, avg_vol_50d, high_52w}. An optional cumulative-fraction profile
+    (symbol -> list[float] indexed by minute of session) replaces the linear default.
+    """
+
+    def __init__(
+        self,
+        reference: dict[str, dict[str, float]] | None = None,
+        profile: dict[str, list[float]] | None = None,
+        held: set[str] | None = None,
+    ):
+        self.reference = reference or {}
+        self.profile = profile or {}
+        self.held = held or set()
+        self._cum: dict[tuple[str, date], float] = {}
+        self._fired: set[tuple[str, date, str]] = set()
+
+    def expected_fraction(self, sym: str, minute: int) -> float:
+        prof = self.profile.get(sym)
+        if prof:
+            idx = min(len(prof) - 1, max(0, minute))
+            return max(prof[idx], 1.0 / MINUTES_IN_SESSION)
+        return max(1, minute) / MINUTES_IN_SESSION
+
+    def on_bar(self, msg: dict[str, Any]) -> list[Event]:
+        if msg.get("T") != "b":
+            return []
+        sym = str(msg.get("S", "")).upper()
+        ref = self.reference.get(sym)
+        if not ref:
+            return []
+        ts = parse_ts(msg.get("t"))
+        day = to_et(ts).date()
+        key = (sym, day)
+        self._cum[key] = self._cum.get(key, 0.0) + float(msg.get("v", 0.0))
+        cum = self._cum[key]
+        minute = minute_of_session(ts)
+        avg20 = float(ref.get("avg_vol_20d") or 0.0)
+        rvol = cum / (avg20 * self.expected_fraction(sym, minute)) if avg20 > 0 else 0.0
+        prev_close = float(ref.get("prev_close") or 0.0)
+        close = float(msg.get("c", 0.0))
+        out: list[Event] = []
+        if prev_close > 0:
+            gap = (float(msg.get("o", close)) / prev_close - 1.0) * PCT
+            if (sym, day, TRIGGER_GAP) not in self._fired:
+                self._fired.add((sym, day, TRIGGER_GAP))
+                out.append(self._event(sym, ts, TRIGGER_GAP, {"gap_pct": gap, "rvol": rvol, "cum_volume": cum}))
+            pct = (close / prev_close - 1.0) * PCT
+            if sym in self.held and pct <= -ADVERSE_MOVE_PCT and (sym, day, TRIGGER_ADVERSE) not in self._fired:
+                self._fired.add((sym, day, TRIGGER_ADVERSE))
+                out.append(self._event(sym, ts, TRIGGER_ADVERSE, {"pct": pct, "rvol": rvol}))
+        high52 = float(ref.get("high_52w") or 0.0)
+        avg50 = float(ref.get("avg_vol_50d") or 0.0)
+        if high52 > 0 and close > high52 and (sym, day, TRIGGER_BREAKOUT_52W) not in self._fired:
+            vol_ratio = cum / (avg50 * self.expected_fraction(sym, minute)) if avg50 > 0 else 0.0
+            if vol_ratio >= BREAKOUT_VOL_RATIO:
+                self._fired.add((sym, day, TRIGGER_BREAKOUT_52W))
+                out.append(
+                    self._event(sym, ts, TRIGGER_BREAKOUT_52W, {"rvol": rvol, "vol_ratio": vol_ratio, "close": close})
+                )
+        return out
+
+    @staticmethod
+    def _event(sym: str, ts: Any, trigger: str, meta: dict[str, Any]) -> Event:
+        return Event(
+            event_id=stable_id(SOURCE, trigger, sym, to_et(ts).date().isoformat()),
+            source=SOURCE,
+            kind="bar_trigger",
+            ts_source=ts,
+            ts_received=now_utc(),
+            symbols=[sym],
+            title=f"{sym} {trigger} " + " ".join(f"{k}={v:.2f}" for k, v in meta.items() if isinstance(v, float)),
+            meta={"trigger": trigger, **meta},
+        )
+
+
+def parse_frame(raw: str | bytes, engine: BarTriggerEngine | None = None) -> list[Event]:
+    data = decode_frame(raw)
+    msgs = data if isinstance(data, list) else [data]
+    out: list[Event] = []
+    for m in msgs:
+        if not isinstance(m, dict):
+            continue
+        t = m.get("T")
+        if t == "error":
+            raise ConnectionError(f"alpaca stocks error {m.get('code')}: {m.get('msg')}")
+        if t == "s":
+            ev = parse_status(m)
+            if ev is not None:
+                out.append(ev)
+        elif t == "l":
+            ev = parse_luld(m)
+            if ev is not None:
+                out.append(ev)
+        elif t == "b" and engine is not None:
+            out.extend(engine.on_bar(m))
+    return out
+
+
+@register("feed", SOURCE)
+class AlpacaStocksFeed(WebSocketFeed):
+    name = SOURCE
+
+    def __init__(
+        self,
+        api_key: str,
+        secret_key: str,
+        symbols: list[str] | None = None,
+        sip: bool = False,
+        engine: BarTriggerEngine | None = None,
+        **kw: Any,
+    ):
+        super().__init__(**kw)
+        self.url = ALPACA_STOCKS_WS_SIP if sip else ALPACA_STOCKS_WS_IEX
+        self.api_key = api_key
+        self.secret_key = secret_key
+        self.symbols = symbols or ["*"]
+        self.engine = engine
+
+    async def _handshake(self, ws: Any) -> None:
+        await ws.send(json.dumps({"action": "auth", "key": self.api_key, "secret": self.secret_key}))
+        sub: dict[str, Any] = {"action": "subscribe", "statuses": self.symbols, "lulds": self.symbols}
+        if self.engine is not None:
+            sub["bars"] = self.symbols
+        await ws.send(json.dumps(sub))
+
+    def _parse_frame(self, raw: str | bytes) -> list[Event]:
+        return parse_frame(raw, self.engine)
