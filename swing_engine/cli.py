@@ -1703,6 +1703,22 @@ def _status_text(value: Any, styles: dict[str, str]) -> Text:
 
 
 @app.command()
+def dashboard(
+    ctx: typer.Context,
+    port: Annotated[int, typer.Option("--port", min=0, max=65535, help="port on 127.0.0.1")] = 8765,
+    demo: Annotated[bool, typer.Option("--demo", help="serve deterministic fake data (no keys, no files)")] = False,
+    open_browser: Annotated[bool, typer.Option("--open", help="open the default browser")] = False,
+) -> None:
+    """Local read-only dashboard on http://127.0.0.1:<port>/ (swing_engine.dashboard; never places orders)."""
+    serve = _load("dashboard.serve")
+    path = _state(ctx).settings_path
+    try:
+        serve(settings_path=str(path) if path else None, port=port, demo=demo, open_browser=open_browser)
+    except OSError as exc:
+        _fail(f"could not start the dashboard on 127.0.0.1:{port}: {exc}")
+
+
+@app.command()
 def doctor(
     ctx: typer.Context,
     live: Annotated[

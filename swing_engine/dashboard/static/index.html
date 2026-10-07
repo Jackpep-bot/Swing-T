@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Swing Engine</title>
+  <meta name="description" content="Local, read-only dashboard for the swing-engine paper trading system.">
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6fde'/%3E%3Cpath d='M6 21l6-7 5 4 9-10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <script>
+    // Apply the saved theme before first paint (no flash). Storage can throw in private windows.
+    (function () {
+      try {
+        var t = localStorage.getItem("swing.theme");
+        if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+      } catch (e) { /* ignore */ }
+    })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"
+          onerror="window.__lwcFailed = true"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- Full-width alerts that sit above everything -->
+  <div id="kill-banner" class="kill-banner" role="alert" hidden>
+    <strong class="kill-banner__title">KILL SWITCH TRIPPED</strong>
+    <span>Every order path is blocked: no entries, exits or stop changes. Resting bracket legs at the broker stay active.</span>
+    <span id="kill-banner-reason" class="kill-banner__how" hidden></span>
+    <span class="kill-banner__how">Clear it on the computer, after journaling the cause: <code id="kill-banner-path">rm state/KILL</code></span>
+  </div>
+  <div id="conn-banner" class="conn-banner" role="status" hidden></div>
+  <div id="demo-banner" class="conn-banner demo-banner" role="status" hidden>
+    <strong>Demo mode.</strong> Everything on this page is sample data, not your account.
+  </div>
+  <div id="lib-banner" class="lib-banner" role="status" hidden>
+    The chart library could not be loaded from unpkg.com (no internet?). Tables and numbers still work; charts are hidden.
+  </div>
+
+  <header class="topbar" aria-label="Account and system status">
+    <div class="topbar__brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="22" height="22"><rect width="32" height="32" rx="7" fill="currentColor"/><path d="M6 21l6-7 5 4 9-10" fill="none" stroke="var(--logo-ink)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <span class="brand-name">Swing Engine</span>
+      <span id="mode-badge" class="mode-badge mode-badge--loading" title="Account mode">&nbsp;</span>
+      <a id="kill-chip" class="mode-badge mode-badge--live" href="#settings" title="The kill switch is tripped: every order path is blocked" hidden>KILL SWITCH ON</a>
+    </div>
+
+    <dl class="topbar__metrics" id="metrics">
+      <div class="metric"><dt>Equity</dt><dd id="m-equity" class="num skel-text">&nbsp;</dd></div>
+      <div class="metric"><dt>Today</dt><dd id="m-daypl" class="num skel-text">&nbsp;</dd></div>
+      <div class="metric"><dt>Cash</dt><dd id="m-cash" class="num skel-text">&nbsp;</dd></div>
+      <div class="metric"><dt>Buying power</dt><dd id="m-bp" class="num skel-text">&nbsp;</dd></div>
+    </dl>
+
+    <div class="topbar__status">
+      <div class="status-item" id="clock-box">
+        <span class="status-label">Market</span>
+        <span id="clock" class="status-value skel-text">&nbsp;</span>
+      </div>
+
+      <div class="status-item popover-host">
+        <span class="status-label">Nightly</span>
+        <button type="button" id="nightly-btn" class="status-btn" aria-expanded="false" aria-controls="nightly-pop">
+          <span id="nightly-text" class="skel-text">&nbsp;</span>
+        </button>
+        <div id="nightly-pop" class="popover" role="dialog" aria-label="Nightly run steps" hidden></div>
+      </div>
+
+      <div class="status-item popover-host">
+        <span class="status-label">Monitor</span>
+        <button type="button" id="monitor-btn" class="status-btn" aria-expanded="false" aria-controls="monitor-pop">
+          <span id="monitor-text" class="skel-text">&nbsp;</span>
+        </button>
+        <div id="monitor-pop" class="popover" role="dialog" aria-label="Monitor feeds" hidden></div>
+      </div>
+
+      <div class="topbar__tools">
+        <span id="updated" class="updated" aria-live="polite"></span>
+        <button type="button" id="refresh-btn" class="icon-btn" title="Refresh now" aria-label="Refresh now">
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" id="theme-btn" class="icon-btn" title="Toggle light / dark" aria-label="Toggle light or dark theme">
+          <svg class="i-sun" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <svg class="i-moon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Dashboard sections">
+    <div role="tablist" id="tablist" aria-orientation="horizontal">
+      <button role="tab" id="tab-overview" aria-controls="panel-overview" aria-selected="true" tabindex="0" data-tab="overview">Overview</button>
+      <button role="tab" id="tab-charts" aria-controls="panel-charts" aria-selected="false" tabindex="-1" data-tab="charts">Positions &amp; charts</button>
+      <button role="tab" id="tab-signals" aria-controls="panel-signals" aria-selected="false" tabindex="-1" data-tab="signals">Signals</button>
+      <button role="tab" id="tab-shadow" aria-controls="panel-shadow" aria-selected="false" tabindex="-1" data-tab="shadow">Shadow ledger</button>
+      <button role="tab" id="tab-alerts" aria-controls="panel-alerts" aria-selected="false" tabindex="-1" data-tab="alerts">Alerts <span id="alerts-count" class="tab-count" hidden></span></button>
+      <button role="tab" id="tab-journal" aria-controls="panel-journal" aria-selected="false" tabindex="-1" data-tab="journal">Journal</button>
+      <button role="tab" id="tab-replay" aria-controls="panel-replay" aria-selected="false" tabindex="-1" data-tab="replay">Replay</button>
+      <button role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1" data-tab="settings">Safety &amp; settings</button>
+    </div>
+  </nav>
+
+  <main id="main">
+    <!-- ===================== OVERVIEW ===================== -->
+    <section role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" tabindex="0" class="panel">
+      <div class="grid-overview">
+        <article class="card card--equity" aria-labelledby="eq-title">
+          <header class="card__head">
+            <h2 id="eq-title">Equity vs SPY</h2>
+            <div class="card__tools">
+              <div class="seg" role="group" aria-label="Equity scale" id="eq-mode">
+                <button type="button" data-mode="rebased" aria-pressed="true">Rebased</button>
+                <button type="button" data-mode="dollars" aria-pressed="false">Equity $</button>
+              </div>
+              <div class="seg" role="group" aria-label="Period" id="eq-period">
+                <button type="button" data-period="1M" aria-pressed="false">1M</button>
+                <button type="button" data-period="3M" aria-pressed="true">3M</button>
+                <button type="button" data-period="6M" aria-pressed="false">6M</button>
+                <button type="button" data-period="1Y" aria-pressed="false">1Y</button>
+                <button type="button" data-period="ALL" aria-pressed="false">ALL</button>
+              </div>
+            </div>
+          </header>
+          <div id="eq-stats" class="stat-row"></div>
+          <p id="eq-note" class="data-note" hidden></p>
+          <div class="chart-wrap">
+            <div id="eq-legend" class="chart-legend" aria-hidden="true"></div>
+            <div id="eq-chart" class="chart chart--equity" role="img" aria-label="Account equity compared with SPY"></div>
+          </div>
+        </article>
+
+        <article class="card card--regime" aria-labelledby="rg-title">
+          <header class="card__head">
+            <h2 id="rg-title">Market regime</h2>
+            <span id="rg-asof" class="card__meta"></span>
+          </header>
+          <p id="rg-note" class="data-note" hidden></p>
+          <div id="regime-body" class="card__body"></div>
+        </article>
+
+        <article class="card card--positions" aria-labelledby="pos-title">
+          <header class="card__head">
+            <h2 id="pos-title">Open positions</h2>
+            <span id="pos-meta" class="card__meta"></span>
+          </header>
+          <div id="pos-summary" class="stat-row stat-row--compact"></div>
+          <p id="pos-note" class="data-note" hidden></p>
+          <div id="positions-body" class="table-wrap"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===================== POSITIONS & CHARTS ===================== -->
+    <section role="tabpanel" id="panel-charts" aria-labelledby="tab-charts" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="ch-title">
+        <header class="card__head card__head--wrap">
+          <h2 id="ch-title"><span id="ch-symbol">Chart</span> <span id="ch-sub" class="card__meta"></span></h2>
+          <div class="card__tools">
+            <div id="ch-symbols" class="symbol-chips" role="group" aria-label="Open positions"></div>
+            <form id="ch-form" class="symbol-form" autocomplete="off">
+              <label class="sr-only" for="ch-input">Symbol</label>
+              <input id="ch-input" type="text" inputmode="text" spellcheck="false" maxlength="10" placeholder="Symbol" list="ch-datalist">
+              <datalist id="ch-datalist"></datalist>
+              <button type="submit" class="btn btn--small">Go</button>
+            </form>
+            <div class="seg" role="group" aria-label="Chart range" id="ch-days">
+              <button type="button" data-days="90" aria-pressed="false">3M</button>
+              <button type="button" data-days="180" aria-pressed="true">6M</button>
+              <button type="button" data-days="365" aria-pressed="false">1Y</button>
+            </div>
+          </div>
+        </header>
+        <div class="chart-layout">
+          <div class="chart-wrap">
+            <div id="ch-legend" class="chart-legend" aria-hidden="true"></div>
+            <div id="ch-chart" class="chart chart--price" role="img" aria-label="Price chart"></div>
+          </div>
+          <aside id="ch-side" class="chart-side" aria-label="Position levels"></aside>
+        </div>
+        <div class="chart-key" aria-hidden="true">
+          <span class="key key--sma20">SMA 20</span>
+          <span class="key key--sma50">SMA 50</span>
+          <span class="key key--entry">Entry</span>
+          <span class="key key--stop">Stop</span>
+          <span class="key key--trail">Trailing stop</span>
+          <span class="key key--target">Target</span>
+        </div>
+        <p id="ch-note" class="data-note" hidden></p>
+      </article>
+
+      <article class="card" aria-labelledby="ord-title">
+        <header class="card__head">
+          <h2 id="ord-title">Orders</h2>
+          <div class="card__tools">
+            <div class="seg" role="group" aria-label="Order status" id="ord-status">
+              <button type="button" data-status="open" aria-pressed="true">Open</button>
+              <button type="button" data-status="closed" aria-pressed="false">Recent closed</button>
+            </div>
+          </div>
+        </header>
+        <p id="ord-note" class="data-note" hidden></p>
+        <div id="orders-body" class="table-wrap"></div>
+      </article>
+    </section>
+
+    <!-- ===================== SIGNALS ===================== -->
+    <section role="tabpanel" id="panel-signals" aria-labelledby="tab-signals" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="sg-title">
+        <header class="card__head card__head--wrap">
+          <h2 id="sg-title">Signals <span id="sg-date-label" class="card__meta"></span></h2>
+          <div class="card__tools filters">
+            <label class="field"><span>Date</span><input type="date" id="sg-date"></label>
+            <label class="field"><span>Strategy</span><select id="sg-strategy"><option value="">All strategies</option></select></label>
+            <div class="seg" role="group" aria-label="Taken or skipped" id="sg-taken">
+              <button type="button" data-taken="all" aria-pressed="true">All</button>
+              <button type="button" data-taken="taken" aria-pressed="false">Taken</button>
+              <button type="button" data-taken="skipped" aria-pressed="false">Skipped</button>
+            </div>
+          </div>
+        </header>
+        <p class="card__intro">Every idea the strategies produced, including the ones the system did not trade, with the reason it skipped them and Claude's review. Numbers come from the strategy code; the review only gates whether an entry goes ahead.</p>
+        <div id="sg-summary" class="stat-row stat-row--compact"></div>
+        <p id="sg-note" class="data-note" hidden></p>
+        <div id="signals-body" class="table-wrap"></div>
+      </article>
+    </section>
+
+    <!-- ===================== SHADOW LEDGER ===================== -->
+    <section role="tabpanel" id="panel-shadow" aria-labelledby="tab-shadow" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="sh-title">
+        <header class="card__head">
+          <h2 id="sh-title">Shadow ledger</h2>
+          <span id="sh-updated" class="card__meta"></span>
+        </header>
+        <p class="card__intro">The shadow ledger grades <em>every</em> signal, taken or not, against the bars that followed (next-day open entry, first touch of stop or target), so you can see which strategies actually work without waiting for real trades. Results are in R: 1R is the planned risk per share.</p>
+        <p id="sh-note" class="data-note" hidden></p>
+        <div class="grid-2 grid-2--wide">
+          <section aria-labelledby="sh-strat-title">
+            <h3 id="sh-strat-title" class="subhead">By strategy</h3>
+            <div id="shadow-strategy" class="table-wrap"></div>
+          </section>
+          <section aria-labelledby="sh-reg-title">
+            <h3 id="sh-reg-title" class="subhead">By market regime</h3>
+            <div id="shadow-regime" class="table-wrap"></div>
+          </section>
+        </div>
+        <p class="footnote">n = graded signals (taken and not taken alike). Expectancy = average R per graded signal. Profit factor = gross wins / gross losses. Rows with fewer than 20 graded signals are dimmed: too few to judge. Pending = not resolved yet. Taken = sized into an order intent that survived Claude's review (the daily order cap can still stop it; the Signals tab shows what was actually sent).</p>
+      </article>
+    </section>
+
+    <!-- ===================== ALERTS ===================== -->
+    <section role="tabpanel" id="panel-alerts" aria-labelledby="tab-alerts" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="al-title">
+        <header class="card__head card__head--wrap">
+          <h2 id="al-title">Alerts</h2>
+          <div class="card__tools filters">
+            <div class="seg" role="group" aria-label="Priority" id="al-prio">
+              <button type="button" data-prio="all" aria-pressed="true">All</button>
+              <button type="button" data-prio="P3" aria-pressed="false">P3</button>
+              <button type="button" data-prio="P2" aria-pressed="false">P2</button>
+              <button type="button" data-prio="P1" aria-pressed="false">P1</button>
+            </div>
+            <label class="field"><span>Window</span>
+              <select id="al-hours">
+                <option value="24">24 hours</option>
+                <option value="48" selected>48 hours</option>
+                <option value="168">7 days</option>
+              </select>
+            </label>
+          </div>
+        </header>
+        <p class="card__intro">Rate P2 and P3 alerts the same day: <strong>Useful</strong> = right to know, <strong>Noise</strong> = should not have been sent, <strong>Traded</strong> = you acted on it. Ratings tune the monitor's rules. Titles come from the internet; links open the original source.</p>
+        <div id="alerts-body"></div>
+      </article>
+    </section>
+
+    <!-- ===================== JOURNAL ===================== -->
+    <section role="tabpanel" id="panel-journal" aria-labelledby="tab-journal" tabindex="0" class="panel" hidden>
+      <article class="card card--journal" aria-labelledby="jr-title">
+        <header class="card__head">
+          <h2 id="jr-title">Journal</h2>
+          <div class="card__tools">
+            <button type="button" class="icon-btn" id="jr-prev" aria-label="Previous entry" title="Previous entry">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <label class="sr-only" for="jr-date">Journal date</label>
+            <select id="jr-date"></select>
+            <button type="button" class="icon-btn" id="jr-next" aria-label="Next entry" title="Next entry">
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+          </div>
+        </header>
+        <div id="journal-body" class="markdown"></div>
+      </article>
+    </section>
+
+    <!-- ===================== REPLAY ===================== -->
+    <section role="tabpanel" id="panel-replay" aria-labelledby="tab-replay" tabindex="0" class="panel" hidden>
+      <div class="grid-replay">
+        <article class="card" aria-labelledby="rp-title">
+          <header class="card__head">
+            <h2 id="rp-title">Latest replay</h2>
+            <span id="rp-meta" class="card__meta"></span>
+          </header>
+          <div id="rp-summary" class="kv-grid"></div>
+          <div class="chart-wrap">
+            <div id="rp-chart" class="chart chart--replay" role="img" aria-label="Replay equity curve"></div>
+          </div>
+        </article>
+        <article class="card" aria-labelledby="rp-runs-title">
+          <header class="card__head"><h2 id="rp-runs-title">Past runs</h2></header>
+          <div id="rp-runs" class="table-wrap"></div>
+        </article>
+        <article class="card card--span" aria-labelledby="rp-strat-title">
+          <header class="card__head"><h2 id="rp-strat-title">By strategy</h2></header>
+          <div id="rp-strategy" class="table-wrap"></div>
+        </article>
+        <article class="card card--span" aria-labelledby="rp-reg-title">
+          <header class="card__head"><h2 id="rp-reg-title">By regime</h2></header>
+          <div id="rp-regime" class="table-wrap"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ===================== SAFETY & SETTINGS ===================== -->
+    <section role="tabpanel" id="panel-settings" aria-labelledby="tab-settings" tabindex="0" class="panel" hidden>
+      <div class="grid-2">
+        <article class="card card--danger" aria-labelledby="ks-title">
+          <header class="card__head"><h2 id="ks-title">Kill switch</h2><span id="ks-state" class="chip"></span></header>
+          <div class="card__body">
+            <p>Tripping the kill switch creates <code id="ks-path">state/KILL</code>. While it exists the autopilot refuses every new entry, close and stop change. The only thing it still does is cancel resting unfilled entries. Stop and target legs already at the broker keep protecting your positions; the monitor and the nightly data jobs keep running.</p>
+            <p><strong>Trip it when</strong> you do not understand a fill, the equity is not what the journal says, a feed is dead during market hours while you hold positions, or you are travelling.</p>
+            <p class="muted"><strong>Clearing it is deliberately not possible from here.</strong> Write the cause in the journal, then on the computer run <code>rm state/KILL</code> followed by <code>uv run swing autopilot --dry-run</code>.</p>
+            <button type="button" id="ks-trip" class="btn btn--danger">Trip kill switch&hellip;</button>
+            <p id="ks-msg" class="form-msg" role="status"></p>
+          </div>
+        </article>
+        <article class="card" aria-labelledby="sys-title">
+          <header class="card__head"><h2 id="sys-title">System</h2></header>
+          <div class="card__body">
+            <div id="sys-body" class="kv-grid kv-grid--stack"></div>
+            <h3 class="subhead">Appearance</h3>
+            <div class="seg" role="group" aria-label="Theme" id="theme-seg">
+              <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+              <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+              <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+            </div>
+            <h3 class="subhead">Refresh</h3>
+            <p class="muted">Account, positions and alerts refresh every 30 seconds and charts every 5 minutes while this tab is visible. Refreshing pauses when the tab is hidden. This page is read-only toward the broker: it never places or cancels orders.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="ks-dialog" class="dialog" aria-labelledby="ks-dialog-title">
+    <form method="dialog" id="ks-form">
+      <h2 id="ks-dialog-title">Trip the kill switch?</h2>
+      <p>This blocks every order path until someone removes <code>state/KILL</code> on the computer. It cannot be undone from this page.</p>
+      <label class="field field--block" for="ks-input"><span>Type <strong>TRIP</strong> to confirm</span>
+        <input id="ks-input" type="text" autocomplete="off" spellcheck="false" autocapitalize="characters" maxlength="8">
+      </label>
+      <p id="ks-dialog-msg" class="form-msg" role="status"></p>
+      <div class="dialog__actions">
+        <button type="button" class="btn" id="ks-cancel" value="cancel">Cancel</button>
+        <button type="submit" class="btn btn--danger" id="ks-confirm" value="trip" disabled>Trip kill switch</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

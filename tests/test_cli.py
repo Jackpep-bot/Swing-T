@@ -926,3 +926,15 @@ def test_size_never_reads_numbers_from_reviews(workdir: Path, monkeypatch: pytes
     assert intent["stop"] == signal.stop and intent["target"] == signal.target
     assert intent["qty"] == int(EQUITY * 0.01 / signal.risk_per_share())
     assert intent["side"] == Side.LONG.value
+
+
+def test_dashboard_passes_settings_and_flags(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import swing_engine.dashboard as dash
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(dash, "serve", lambda **kw: seen.update(kw))
+    settings = tmp_path / "s.yaml"
+    settings.write_text("{}\n")
+    result = runner.invoke(cli.app, ["--settings", str(settings), "dashboard", "--port", "8801", "--demo"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"settings_path": str(settings), "port": 8801, "demo": True, "open_browser": False}
