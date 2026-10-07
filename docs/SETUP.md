@@ -80,7 +80,7 @@ Starter ($29, unlimited calls, flat files) when you want the full screen or more
 ### 1.3 Telegram: bot token and chat id
 
 1. In Telegram open https://t.me/botfather and send `/newbot`. BotFather asks for a display name and a username
-   ending in `bot`, then replies with a token shaped like `110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw`
+   ending in `bot`, then replies with a token shaped like `<bot id digits>:<35-character secret>`
    (verify: https://core.telegram.org/bots/features#botfather). Put it in `TELEGRAM_BOT_TOKEN=`.
 2. Open the chat with your new bot and send it any message (`/start` is fine). The bot cannot message you first.
 3. Get the chat id with `getUpdates` (verify: https://core.telegram.org/bots/api#getupdates):
