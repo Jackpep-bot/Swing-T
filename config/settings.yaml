@@ -32,7 +32,7 @@ strategies:                    # name -> {enabled, params}; names come from swin
   pullback_trend:   {enabled: true}
   breakout_52w:     {enabled: true}
   momentum_burst:   {enabled: false}   # logged as a feature; weak standalone evidence
-  rsi2_meanrev:     {enabled: true}
+  rsi2_meanrev:     {enabled: true, min_reward_risk: 0.0}   # rule exit (close > sma_10 / rsi_2 > 70), no fixed target: skip the 2:1 floor
   insider_cluster:  {enabled: false}   # needs EDGAR Form 4 ingest
 
 monitor:

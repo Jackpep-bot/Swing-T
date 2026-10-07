@@ -88,9 +88,15 @@ def size_signal_detail(
     risk_cfg: RiskConfig,
     open_positions: Iterable[Position] | None = None,
     sector_map: Mapping[str, str] | None = None,
+    min_reward_risk: float | None = None,
 ) -> tuple[OrderIntent | None, str]:
-    """Like :func:`size_signal` but also returns the reason (useful for the CLI and the journal)."""
+    """Like :func:`size_signal` but also returns the reason (useful for the CLI and the journal).
+
+    ``min_reward_risk`` overrides ``risk_cfg.min_reward_risk`` for this signal; strategies that exit on a rule
+    rather than a fixed target (e.g. RSI-2 mean reversion) declare a lower floor in ``settings.strategies``.
+    """
     positions = list(open_positions or [])
+    rr_floor = risk_cfg.min_reward_risk if min_reward_risk is None else float(min_reward_risk)
     if equity <= 0:
         return None, f"equity not positive: {equity}"
     err = _geometry_error(signal)
@@ -102,8 +108,8 @@ def size_signal_detail(
     rr = reward_risk_for(signal)
     if rr is None:
         return None, "reward_risk unknown (signal has neither reward_risk nor target)"
-    if rr < risk_cfg.min_reward_risk:
-        return None, f"reward_risk {rr:.2f} below min {risk_cfg.min_reward_risk}"
+    if rr < rr_floor:
+        return None, f"reward_risk {rr:.2f} below min {rr_floor}"
     if any(p.symbol == signal.symbol for p in positions):
         return None, f"{signal.symbol} already has an open position"
     if len(positions) >= risk_cfg.max_open_positions:
@@ -150,15 +156,23 @@ def size_signal_detail(
     return intent, "ok"
 
 
+def strategy_min_reward_risk(strategies_cfg: Mapping[str, Mapping[str, object]] | None, strategy: str) -> float | None:
+    """Per-strategy ``min_reward_risk`` from ``settings.strategies[<name>]``, or None to use the portfolio floor."""
+    cfg = (strategies_cfg or {}).get(strategy) or {}
+    value = cfg.get("min_reward_risk")
+    return None if value is None else float(value)  # type: ignore[arg-type]
+
+
 def size_signal(
     signal: Signal,
     equity: float,
     risk_cfg: RiskConfig,
     open_positions: Iterable[Position] | None = None,
     sector_map: Mapping[str, str] | None = None,
+    min_reward_risk: float | None = None,
 ) -> OrderIntent | None:
     """Turn a Signal into an OrderIntent, or None (reason logged) when the signal fails a risk rule."""
-    intent, reason = size_signal_detail(signal, equity, risk_cfg, open_positions, sector_map)
+    intent, reason = size_signal_detail(signal, equity, risk_cfg, open_positions, sector_map, min_reward_risk)
     if intent is None:
         log.info("signal_rejected", symbol=signal.symbol, strategy=signal.strategy, reason=reason)
     else:

@@ -495,13 +495,23 @@ def _membership_lookup(memberships: Mapping[date, frozenset[str]]) -> Callable[[
     return universe_at
 
 
-def _production_sizer(size_detail: Any) -> Any | None:
+def _strategy_rr_floor(settings: Settings, strategy: str) -> float | None:
+    """Per-strategy reward:risk floor from settings.strategies[<name>].min_reward_risk (None = portfolio floor)."""
+    helper = _try_load("risk.sizing.strategy_min_reward_risk")
+    if helper is None:
+        return None
+    return helper(settings.strategies, strategy)
+
+
+def _production_sizer(size_detail: Any, settings: Settings | None = None) -> Any | None:
     """Adapt `risk.sizing.size_signal_detail` to the backtester's `Sizer` shape (intent only, no logging)."""
     if size_detail is None:
         return None
 
     def sizer(signal: Any, equity: float, risk_cfg: Any, open_positions: Any = None, sector_map: Any = None) -> Any:
-        intent, _reason = size_detail(signal, equity, risk_cfg, open_positions, sector_map)
+        floor = _strategy_rr_floor(settings, signal.strategy) if settings is not None else None
+        extra = {"min_reward_risk": floor} if floor is not None else {}
+        intent, _reason = size_detail(signal, equity, risk_cfg, open_positions, sector_map, **extra)
         return intent
 
     return sizer
@@ -1000,7 +1010,7 @@ def backtest(
     trial_count = _load("research.trials.trial_count")
     # the production sizer (reward/risk floor, marketable entry limit) so research counts the trades paper takes
     size_detail = _try_load(PRODUCTION_SIZER)
-    sizer = _production_sizer(size_detail)
+    sizer = _production_sizer(size_detail, settings)
     sizer_name = PRODUCTION_SIZER if sizer is not None else RESEARCH_SIZER
 
     log.info(
@@ -1260,7 +1270,9 @@ def size(
     skipped: list[tuple[Signal, str]] = []
     for s in signals:
         if size_detail is not None:
-            intent, reason = size_detail(s, equity_value, settings.risk, positions)
+            floor = _strategy_rr_floor(settings, s.strategy)
+            extra = {"min_reward_risk": floor} if floor is not None else {}
+            intent, reason = size_detail(s, equity_value, settings.risk, positions, **extra)
         else:
             intent, reason = size_signal(s, equity_value, settings.risk, positions), "rejected by risk.sizing"
         if intent is not None:

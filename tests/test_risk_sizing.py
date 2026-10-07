@@ -118,3 +118,21 @@ def test_client_order_id_is_stable_and_bounded():
 def test_effective_equity_override():
     assert effective_equity(EQUITY, RiskConfig(account_equity_override=25_000)) == 25_000
     assert effective_equity(EQUITY, RiskConfig()) == EQUITY
+
+
+def test_per_strategy_min_reward_risk_override_admits_rule_exit_strategies():
+    """RSI-2 style signals have small fixed targets; a per-strategy floor of 0 admits them, the default rejects."""
+    from swing_engine.core.config import RiskConfig
+    from swing_engine.core.models import Signal
+    from swing_engine.risk.sizing import size_signal_detail, strategy_min_reward_risk
+
+    sig = Signal(strategy="rsi2_meanrev", symbol="ABC", as_of=__import__("datetime").date(2026, 9, 30),
+                 entry=100.0, stop=96.0, target=101.0)
+    cfg = RiskConfig(min_reward_risk=2.0, max_position_pct=100.0)
+    rejected, reason = size_signal_detail(sig, 50_000, cfg)
+    assert rejected is None and "below min 2.0" in reason
+    floor = strategy_min_reward_risk({"rsi2_meanrev": {"enabled": True, "min_reward_risk": 0.0}}, "rsi2_meanrev")
+    assert floor == 0.0
+    intent, reason = size_signal_detail(sig, 50_000, cfg, min_reward_risk=floor)
+    assert intent is not None and intent.qty == 125  # 50,000 x 1% = 500 / 4 risk per share
+    assert strategy_min_reward_risk({"other": {}}, "rsi2_meanrev") is None
