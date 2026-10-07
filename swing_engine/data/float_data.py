@@ -296,9 +296,19 @@ def stale_reason(
     return None
 
 
+STALE_UNDATED = "undated_reference"  # a share count with no date can never prove the float is fresh
+
+
+def _staleness(info: FloatInfo, today: date, events: pd.DataFrame | None, stale_after_days: int) -> str | None:
+    """Staleness reason for `info`: undated reference counts are always stale (warnings only, never a long)."""
+    if info.float_estimate_method == METHOD_MASSIVE_SHARES:
+        return STALE_UNDATED
+    return stale_reason(info.as_of, today, info.symbol, events, stale_after_days=stale_after_days)
+
+
 def restamp(info: FloatInfo, today: date, events: pd.DataFrame | None = None, *, stale_after_days: int = STALE_AFTER_DAYS) -> FloatInfo:
     """Copy of `info` with `stale`/`stale_reason` recomputed for `today`."""
-    reason = stale_reason(info.as_of, today, info.symbol, events, stale_after_days=stale_after_days)
+    reason = _staleness(info, today, events, stale_after_days)
     return info.model_copy(update={"stale": reason is not None, "stale_reason": reason})
 
 
@@ -554,14 +564,18 @@ class FloatSource:
         if facts is not None:
             self._apply_edgar(info, facts, cutoff, price)
         massive_shares = self._massive_shares(ref)
-        if info.shares_outstanding is None and massive_shares is not None:
-            info.shares_outstanding = massive_shares
+        if cutoff is not None:
+            massive_shares_for_float = None  # current reference data must never describe a historical date
+        else:
+            massive_shares_for_float = massive_shares
+        if info.shares_outstanding is None and massive_shares_for_float is not None:
+            info.shares_outstanding = massive_shares_for_float
             info.source = SOURCE_MASSIVE
             info.cross_check = CROSS_CHECK_SKIPPED
             if info.float_shares is None:
-                info.float_shares = massive_shares
+                info.float_shares = massive_shares_for_float
                 info.float_estimate_method = METHOD_MASSIVE_SHARES
-                info.as_of = today if cutoff is None else cutoff  # reference data carries no date
+                info.as_of = today  # reference data carries no date; always stale for the long gate (below)
         elif info.shares_outstanding is not None:
             info.cross_check = self._cross_check(sym, info.shares_outstanding, massive_shares)
         vendor = self._vendor_float(sym) if cutoff is None else None
@@ -577,7 +591,7 @@ class FloatSource:
             # the vendor float is dated by the vendor, never by a newer EDGAR cover page
             if vendor.as_of is not None:
                 info.as_of = vendor.as_of
-        reason = stale_reason(info.as_of, today, sym, events, stale_after_days=self.stale_after_days)
+        reason = _staleness(info, today, events, self.stale_after_days)
         info.stale, info.stale_reason = reason is not None, reason
         log.debug(
             "float_lookup", symbol=sym, method=info.float_estimate_method, source=info.source,

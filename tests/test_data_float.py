@@ -218,7 +218,12 @@ def test_massive_fallback_when_edgar_has_nothing(tmp_path) -> None:
     info = _source(tmp_path, massive_api_key="test-key").lookup("ORPH")
     assert info.cik is None and info.source == SOURCE_MASSIVE and info.cross_check == "skipped"
     assert info.shares_outstanding == 8_000_000 and info.float_shares == 8_000_000  # weighted_shares_outstanding
-    assert info.float_estimate_method == METHOD_MASSIVE_SHARES and info.as_of == TODAY and not info.stale
+    # an undated reference count can never prove the float is fresh: warnings only (finding: it passed the long gate)
+    assert info.float_estimate_method == METHOD_MASSIVE_SHARES and info.as_of == TODAY
+    assert info.stale and info.stale_reason == "undated_reference"
+    # and it is never stamped onto a historical date
+    past = _source(tmp_path, massive_api_key="test-key").lookup("ORPH", as_of=date(2024, 1, 2))
+    assert past.float_shares is None and not past.known
 
 
 @respx.mock
