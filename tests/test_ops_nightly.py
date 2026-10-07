@@ -110,7 +110,7 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path) -> None:
 
     assert [s.name for s in report.steps] == list(nightly.STEP_NAMES)
     assert statuses(report) == {
-        "ingest": "ok", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
+        "ingest": "ok", "float": "skip", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
         "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert report.ok and report.failed == [] and report.dry_run and report.provider == "sample"
@@ -278,14 +278,14 @@ def test_failures_are_isolated_and_the_report_is_still_written(tmp_path: Path) -
     with Store(":memory:") as store:
         report = run_nightly(settings, no_secrets(), AS_OF, "no_such_provider", EQUITY, True, store=store, journal_root=tmp_path)
     assert statuses(report) == {
-        "ingest": "fail", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
+        "ingest": "fail", "float": "skip", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
         "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert "no_such_provider" in report.step("ingest").detail
     assert "no bars" in report.step("features").detail and "no signals" in report.step("size").detail
     assert report.failed == ["ingest", "features", "scan"] and not report.ok
     saved = json.loads(run_file(tmp_path, "nightly").read_text())
-    assert [s["status"] for s in saved["steps"]] == ["fail", "fail", "fail", "skip", "skip", "skip", "skip", "skip", "ok"]
+    assert [s["status"] for s in saved["steps"]] == ["fail", "skip", "fail", "fail", "skip", "skip", "skip", "skip", "skip", "ok"]
 
 
 def test_strategy_failure_is_isolated_inside_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -326,3 +326,41 @@ def test_nightly_module_never_submits_directly() -> None:
     source = Path(nightly.__file__).read_text()
     assert "swing_engine.execution" not in source and ".submit(" not in source
     assert "execution.autopilot.run_autopilot" in source
+
+
+def test_float_step_refreshes_small_cap_candidates_incrementally(tmp_path: Path, monkeypatch) -> None:
+    """Finding: nothing in production ran FloatSource.refresh, so every live float was unknown."""
+    import pandas as pd
+
+    from swing_engine.ops import nightly
+
+    calls: list[list[str]] = []
+
+    class FakeSource:
+        @classmethod
+        def from_settings(cls, settings, secrets):
+            return cls()
+
+        def refresh(self, symbols, store, as_of=None):
+            calls.append(list(symbols))
+            return {"written": len(symbols), "unknown": [], "errors": {}}
+
+    monkeypatch.setattr(nightly, "_load", lambda dotted: FakeSource if dotted.endswith("FloatSource") else None)
+    settings = make_settings(tmp_path)
+    rows = []
+    for d in pd.bdate_range("2026-09-10", "2026-09-30"):
+        rows += [
+            {"symbol": "TINY", "ts": d, "open": 4, "high": 4, "low": 4, "close": 4.0, "volume": 1_000_000},   # $4M/day
+            {"symbol": "BIGG", "ts": d, "open": 90, "high": 90, "low": 90, "close": 90.0, "volume": 1_000_000},  # > $20
+            {"symbol": "DUST", "ts": d, "open": 2, "high": 2, "low": 2, "close": 2.0, "volume": 1_000},  # illiquid
+        ]
+    with Store(":memory:") as store:
+        store.write_bars(pd.DataFrame(rows))
+        from datetime import UTC, datetime
+
+        report = nightly.NightlyReport(as_of=AS_OF, provider="sample", dry_run=False, started_at=datetime.now(UTC))
+        ctx = nightly._Context(settings=settings, secrets=no_secrets(), as_of=AS_OF, provider="sample", equity=None,
+                               dry_run=False, store=store, broker=None, review_client=None, journal_client=None,
+                               journal_root=tmp_path, report=report)
+        detail, data = nightly._step_float(ctx)
+        assert calls == [["TINY"]] and data["written"] == 1, detail

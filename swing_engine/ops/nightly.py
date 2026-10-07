@@ -72,7 +72,7 @@ PANEL_WARMUP_CALENDAR_DAYS = 400  # covers sma_200 / mom_12_1 before the first s
 REGIME_COLUMNS = ("market_trend_state", "market_vol_regime")
 ERROR_PREVIEW_CHARS = 200
 
-STEP_NAMES = ("ingest", "features", "scan", "rank", "size", "review", "positions", "execute", "journal")
+STEP_NAMES = ("ingest", "float", "features", "scan", "rank", "size", "review", "positions", "execute", "journal")
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
 ABORTED_MODE = "aborted"  # execution.autopilot.AutopilotMode.ABORTED
@@ -679,8 +679,53 @@ def _step_journal(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"entry written ({'prose' if narrative else 'tables only'}){f' to {path}' if path else ''}", data
 
 
+FLOAT_REFRESH_MIN_AGE_DAYS = 7  # a float row refreshed this recently is left alone
+FLOAT_REFRESH_MAX_PER_NIGHT = 600  # EDGAR companyfacts at <=10 req/s: ~1-2 minutes; the rest roll to later nights
+FLOAT_CANDIDATE_MIN_DOLLAR_VOL = 1_000_000.0  # 20-day average dollar volume; illiquid shells are not candidates
+FLOAT_CANDIDATE_LOOKBACK_DAYS = 30
+
+
+def _step_float(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """Refresh float/shares data from SEC filings for the small-cap track's candidates (docs/smallcap-spec.md):
+    last close inside [min_price, max_price] with real liquidity, missing or older than
+    FLOAT_REFRESH_MIN_AGE_DAYS, at most FLOAT_REFRESH_MAX_PER_NIGHT per run. Without it every live snapshot has
+    an unknown float and the runner track can only warn."""
+    sc = dict(getattr(ctx.settings.monitor, "smallcap", {}) or {})
+    if not sc.get("enabled", True):
+        raise Skip("small-cap track disabled")
+    if ctx.dry_run:
+        raise Skip("dry run")
+    lo, hi = float(sc.get("min_price", 1.0)), float(sc.get("max_price", 20.0))
+    bars = ctx.store.read_bars(None, ctx.as_of - timedelta(days=FLOAT_CANDIDATE_LOOKBACK_DAYS), ctx.as_of)
+    if bars is None or len(bars) == 0:
+        raise Skip("no recent bars")
+    bars = bars.sort_values("ts")
+    last = bars.groupby("symbol").tail(1).set_index("symbol")["close"]
+    dvol = (bars["close"] * bars["volume"]).groupby(bars["symbol"]).mean()
+    cands = sorted(s for s in last.index if lo <= float(last[s]) <= hi and float(dvol.get(s, 0.0)) >= FLOAT_CANDIDATE_MIN_DOLLAR_VOL)
+    fresh: set[str] = set()
+    if ctx.store.has_table("float"):
+        tbl = ctx.store.read_table("float")
+        if "refreshed_on" in tbl.columns and len(tbl):
+            ref = pd.to_datetime(tbl["refreshed_on"], errors="coerce").dt.date
+            recent = tbl[ref >= ctx.as_of - timedelta(days=FLOAT_REFRESH_MIN_AGE_DAYS)]
+            fresh = set(recent["symbol"].astype(str).str.upper())
+    todo = [s for s in cands if s.upper() not in fresh][:FLOAT_REFRESH_MAX_PER_NIGHT]
+    if not todo:
+        return f"{len(cands)} candidates, all refreshed within {FLOAT_REFRESH_MIN_AGE_DAYS} days", {"candidates": len(cands), "refreshed": 0}
+    FloatSource = _load("data.float_data.FloatSource")
+    src = FloatSource.from_settings(ctx.settings, ctx.secrets)
+    result = dict(src.refresh(todo, ctx.store, as_of=ctx.as_of) or {})
+    data = {"candidates": len(cands), "attempted": len(todo), "written": int(result.get("written", 0)),
+            "unknown": len(result.get("unknown") or []), "errors": len(result.get("errors") or {})}
+    left = max(0, len(cands) - len(fresh & set(cands)) - len(todo))
+    return (f"{data['written']} floats refreshed of {len(todo)} attempted ({data['unknown']} unknown, "
+            f"{data['errors']} errors); {left} candidates left for later nights"), data
+
+
 STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] = (
     ("ingest", _step_ingest),
+    ("float", _step_float),
     ("features", _step_features),
     ("scan", _step_scan),
     ("rank", _step_rank),
