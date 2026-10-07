@@ -270,6 +270,7 @@ STALENESS_WINDOW_ET: dict[str, tuple[time, time]] = {
 }
 STALENESS_WINDOW_DEFAULT_ET: tuple[time, time] = (PREMARKET_OPEN, AFTERHOURS_CLOSE)
 WATCHDOG_INTERVAL_S = 30.0
+REFERENCE_REFRESH_S = 900.0  # reload prev_close/avg volume/52w-high reference from the nightly panel
 QUEUE_MAXSIZE = 10_000
 SHUTDOWN_GRACE_S = 5.0  # for the consumer to drain the queue (rules only; no network)
 SHUTDOWN_DRAIN_S = 30.0  # for in-flight classification / deliveries to finish before they are cancelled

@@ -354,3 +354,50 @@ def test_run_monitor_signature_matches_contract():
 
     params = list(inspect.signature(service_mod.run_monitor).parameters)
     assert params == ["settings", "secrets", "dry_run", "feeds"]
+
+
+def test_reference_reloads_on_rollover_and_keeps_old_on_failure():
+    """Finding: the bar reference was loaded once, so prev_close went stale from the second session on."""
+    from datetime import UTC, datetime, timedelta
+
+    from swing_engine.monitor.adapters.alpaca_stocks import BarTriggerEngine
+    from swing_engine.monitor.service import MonitorService
+
+    class _Feed:
+        name = "alpaca_stocks"
+
+        def __init__(self):
+            self.engine = BarTriggerEngine(reference={"AAA": {"prev_close": 2.0}})
+
+    class _Track:
+        def __init__(self):
+            self.reference = {}
+
+        def set_reference(self, ref):
+            self.reference = dict(ref)
+
+    class _Pipe:
+        smallcap = _Track()
+        eventlog = None
+
+    loads = [{"AAA": {"prev_close": 4.0}}, RuntimeError("store locked"), {}]
+
+    def loader():
+        item = loads.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    feed = _Feed()
+    svc = MonitorService([feed], _Pipe(), reference_loader=loader, reference_refresh_s=900)
+    t0 = datetime(2026, 10, 7, 4, 0, tzinfo=UTC)
+    assert svc.reference_due(t0)  # never checked
+    assert svc.refresh_reference() == 1
+    assert feed.engine.reference["AAA"]["prev_close"] == 4.0 and svc.pipeline.smallcap.reference["AAA"]["prev_close"] == 4.0
+    svc._reference_checked = t0
+    assert not svc.reference_due(t0 + timedelta(seconds=60))
+    assert svc.reference_due(t0 + timedelta(seconds=60), rolled=True)
+    assert svc.reference_due(t0 + timedelta(seconds=901))
+    assert svc.refresh_reference() == 1  # loader raised: old reference kept
+    assert svc.refresh_reference() == 1  # loader empty: old reference kept
+    assert feed.engine.reference["AAA"]["prev_close"] == 4.0

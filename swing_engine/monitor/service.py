@@ -50,6 +50,7 @@ from .constants import (
     BACKOFF_MAX_S,
     PIPELINE_WORKERS,
     QUEUE_MAXSIZE,
+    REFERENCE_REFRESH_S,
     REGULAR_CLOSE,
     REPLAY_FILE_DEFAULT,
     SHUTDOWN_DRAIN_S,
@@ -144,9 +145,13 @@ def load_bar_reference(settings: Settings) -> dict[str, dict[str, float]]:
     try:
         from swing_engine.data.store import Store
 
-        store = Store(str(path))
+        store = Store(str(path), read_only=True)
         try:
-            panel = store.read_table(BAR_REFERENCE_TABLE)
+            # only the latest row per symbol is needed; reading the whole panel every refresh is wasteful
+            panel = store.sql(
+                f"select * from {BAR_REFERENCE_TABLE} "  # noqa: S608 - constant table name, no user input
+                "qualify row_number() over (partition by symbol order by ts desc) = 1"
+            )
         finally:
             store.close()
     except Exception as exc:  # noqa: BLE001 - bars are optional input; the monitor still runs without them
@@ -391,9 +396,17 @@ class MonitorService:
         workers: int = PIPELINE_WORKERS,
         windows: dict[str, tuple[time, time]] | None = None,
         updates: TelegramUpdatesFeed | None = None,
+        reference_loader: Callable[[], dict[str, dict[str, float]]] | None = None,
+        reference_refresh_s: float = REFERENCE_REFRESH_S,
     ):
         self.feeds = list(feeds)
         self.pipeline = pipeline
+        # prev_close / avg volumes / 52w highs come from the nightly panel; a long-running monitor must pick up
+        # each new nightly build (finding: a reference loaded once goes stale from the second session on)
+        self.reference_loader = reference_loader
+        self.reference_refresh_s = reference_refresh_s
+        self.reference_size = 0
+        self._reference_checked: datetime | None = None
         self.updates = updates
         self.clock = clock or (lambda: datetime.now(UTC))
         self.watchdog_interval_s = watchdog_interval_s
@@ -569,9 +582,46 @@ class MonitorService:
         while not self._stop.is_set():
             await asyncio.sleep(self.watchdog_interval_s)
             now = self.clock()
-            self.roll_session(now)
+            rolled = self.roll_session(now)
+            if self.reference_due(now, rolled):
+                self._reference_checked = now
+                await asyncio.to_thread(self.refresh_reference)
             self._persist_cursors()
             await self.check_staleness(now)
+
+    def reference_due(self, now: datetime, rolled: bool = False) -> bool:
+        """Reload the bar reference at every session rollover and then every ``reference_refresh_s`` (cheap:
+        latest row per symbol), so a nightly rebuild during the night is picked up before the premarket."""
+        if self.reference_loader is None:
+            return False
+        if rolled or self._reference_checked is None:
+            return True
+        return (now - self._reference_checked).total_seconds() >= self.reference_refresh_s
+
+    def refresh_reference(self) -> int:
+        """Load the reference and hand it to every bar engine and the small-cap track. A failed or empty load
+        (store missing, nightly holding the DuckDB lock) keeps the previous reference and is retried later."""
+        if self.reference_loader is None:
+            return self.reference_size
+        try:
+            ref = self.reference_loader()
+        except Exception as exc:  # noqa: BLE001 - keep the old reference, retry on the next interval
+            log.warning("monitor.reference_reload_failed", error=f"{type(exc).__name__}: {exc}"[:200])
+            return self.reference_size
+        if not ref:
+            log.warning("monitor.reference_reload_empty", kept=self.reference_size)
+            return self.reference_size
+        for feed in self.feeds:
+            engine = getattr(feed, "engine", None)
+            if engine is not None and hasattr(engine, "reference"):
+                engine.reference = ref
+        track = self.pipeline.smallcap
+        if track is not None and hasattr(track, "set_reference"):
+            track.set_reference(ref)
+        changed = len(ref) != self.reference_size
+        self.reference_size = len(ref)
+        log.info("monitor.reference_reloaded", symbols=len(ref), changed_size=changed)
+        return len(ref)
 
     def roll_session(self, now: datetime | None = None) -> bool:
         """At the first tick of a new ET date: reset per-session small-cap memory and stale-alert latches."""
@@ -749,7 +799,13 @@ async def run_monitor_async(settings: Settings, secrets: Secrets, dry_run: bool 
     # the same set object: fills reported on alpaca_account update both the rules and the bar-trigger engine
     feed_objs = build_feeds(settings, secrets, dry_run, feeds, held=pipeline.ctx["held"], reference=reference)
     updates = build_telegram_updates(secrets, pipeline, dry_run)
-    service = MonitorService(feed_objs, pipeline, stop_when_feeds_end=dry_run, updates=updates)
+    service = MonitorService(
+        feed_objs, pipeline, stop_when_feeds_end=dry_run, updates=updates,
+        reference_loader=None if dry_run else (lambda: load_bar_reference(settings)),
+    )
+    service.reference_size = len(reference or {})
+    if reference is not None:
+        service._reference_checked = service.clock()
     await service.run()
     return service
 

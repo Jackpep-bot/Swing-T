@@ -14,6 +14,7 @@ from swing_engine.data.float_data import (
     FLOAT_KEYS,
     FLOAT_TABLE,
     METHOD_MASSIVE_SHARES,
+    METHOD_PUBLIC_FLOAT_ADJ,
     METHOD_PUBLIC_FLOAT_PRICE,
     METHOD_SHARES_OUTSTANDING,
     METHOD_UNKNOWN,
@@ -120,10 +121,11 @@ def test_lookup_edgar_public_float_over_price(tmp_path) -> None:
     assert asked == [("TINY", date(2025, 6, 30))]  # price is asked for the public-float date, never invented
     assert info.source == SOURCE_EDGAR and info.cik == "0001234567"
     assert info.shares_outstanding == 12_500_000
-    assert info.float_shares == pytest.approx(7_000_000) and info.float_estimate_method == METHOD_PUBLIC_FLOAT_PRICE
+    # 42M / $6 = 7.0M on 2025-06-30, plus the 2.4M shares issued since (10.1M on 2025-08-04 -> 12.5M on 2026-08-03)
+    assert info.float_shares == pytest.approx(9_400_000) and info.float_estimate_method == METHOD_PUBLIC_FLOAT_ADJ
     assert info.public_float_usd == 42_000_000 and info.price_used == PRICE_ON_FLOAT_DATE
     assert info.as_of == date(2026, 8, 3) and info.filed == date(2026, 8, 6) and info.float_as_of == date(2025, 6, 30)
-    assert info.float_m == pytest.approx(7.0) and info.known
+    assert info.float_m == pytest.approx(9.4) and info.known
     assert not info.stale and info.stale_reason is None and info.cross_check == "unavailable"  # no Massive key
 
 
@@ -135,9 +137,9 @@ def test_lookup_without_price_falls_back_to_shares_outstanding(tmp_path) -> None
     assert info.float_shares == 12_500_000 and info.float_estimate_method == METHOD_SHARES_OUTSTANDING
     assert info.public_float_usd == 42_000_000 and info.price_used is None
     scalar = src.lookup("TINY", price=PRICE_ON_FLOAT_DATE)  # a plain number is taken as the price on that date
-    assert scalar.float_shares == pytest.approx(7_000_000)
+    assert scalar.float_shares == pytest.approx(9_400_000)
     capped = src.lookup("TINY", price=0.5)  # 42M / 0.5 = 84M > shares outstanding => capped at the count
-    assert capped.float_shares == 12_500_000 and capped.float_estimate_method == METHOD_PUBLIC_FLOAT_PRICE
+    assert capped.float_shares == 12_500_000 and capped.float_estimate_method == METHOD_PUBLIC_FLOAT_ADJ
     assert src.lookup("TINY", price=-1.0).float_estimate_method == METHOD_SHARES_OUTSTANDING
 
 
@@ -145,7 +147,8 @@ def test_lookup_without_price_falls_back_to_shares_outstanding(tmp_path) -> None
 def test_lookup_point_in_time_uses_only_facts_filed_by_as_of(tmp_path) -> None:
     _mock_sec()
     info = _source(tmp_path).lookup("TINY", as_of=date(2025, 6, 1), price=lambda s, d: 3.0)
-    assert info.shares_outstanding == 9_800_000 and info.as_of == date(2025, 5, 5)
+    # no share count near the 2024-06-28 float date: the estimate keeps the float's own (older) date
+    assert info.shares_outstanding == 9_800_000 and info.as_of == date(2024, 6, 28)
     assert info.float_as_of == date(2024, 6, 28) and info.public_float_usd == 30_000_000
     assert info.float_shares == pytest.approx(9_800_000)  # 30M/3 = 10M capped at the 9.8M count
     assert info.stale and info.stale_reason.startswith("age:")  # judged against today, not as_of
@@ -356,18 +359,18 @@ def test_refresh_writes_float_table_and_load_float_map_restamps(tmp_path) -> Non
         table = store.read_table(FLOAT_TABLE, order_by="symbol")
         assert table["symbol"].tolist() == ["NOFL", "TINY"] and set(FLOAT_KEYS) <= set(table.columns)
         tiny = table.set_index("symbol").loc["TINY"]
-        assert tiny["float_shares"] == pytest.approx(7_000_000) and tiny["price_used"] == PRICE_ON_FLOAT_DATE
+        assert tiny["float_shares"] == pytest.approx(9_400_000) and tiny["price_used"] == PRICE_ON_FLOAT_DATE
         assert pd.Timestamp(tiny["as_of"]).date() == date(2026, 8, 3) and pd.Timestamp(tiny["refreshed_on"]).date() == TODAY
         assert bool(tiny["stale"]) is False and bool(table.set_index("symbol").loc["NOFL", "stale"]) is True
-        # idempotent upsert on (symbol, as_of); a mapping of prices works too
+        # idempotent upsert on (symbol, as_of); a mapping of prices works too (42M/$7 = 6.0M + 2.4M issued since)
         assert src.refresh(["TINY"], store, prices={"TINY": 7.0})["written"] == 1
         assert store.count(FLOAT_TABLE) == 2
-        assert store.read_table(FLOAT_TABLE, "symbol = ?", ["TINY"])["float_shares"].iloc[0] == pytest.approx(6_000_000)
+        assert store.read_table(FLOAT_TABLE, "symbol = ?", ["TINY"])["float_shares"].iloc[0] == pytest.approx(8_400_000)
 
         fmap = load_float_map(store, today=TODAY)
         assert set(fmap) == {"NOFL", "TINY"}
-        assert fmap["TINY"].float_shares == pytest.approx(6_000_000) and fmap["TINY"].as_of == date(2026, 8, 3)
-        assert fmap["TINY"].float_estimate_method == METHOD_PUBLIC_FLOAT_PRICE and fmap["TINY"].cik == "0001234567"
+        assert fmap["TINY"].float_shares == pytest.approx(8_400_000) and fmap["TINY"].as_of == date(2026, 8, 3)
+        assert fmap["TINY"].float_estimate_method == METHOD_PUBLIC_FLOAT_ADJ and fmap["TINY"].cik == "0001234567"
         assert fmap["TINY"].filed == date(2026, 8, 6) and fmap["TINY"].float_as_of == date(2025, 6, 30)
         assert not fmap["TINY"].stale and fmap["NOFL"].stale and fmap["NOFL"].stale_reason == "age:155d"
         later = load_float_map(store, today=date(2027, 1, 1))
@@ -388,3 +391,28 @@ def test_refresh_keeps_latest_row_per_symbol(tmp_path) -> None:
         assert store.count(FLOAT_TABLE) == 2
         fmap = load_float_map(store, today=TODAY)
         assert fmap["TINY"].as_of == date(2026, 8, 3) and fmap["TINY"].shares_outstanding == 12_500_000
+
+
+
+def test_old_public_float_is_dated_by_its_measurement_not_the_newer_cover_page() -> None:
+    """Finding: a year-old float (10M) next to a fresh cover page (60M shares after ATM dilution) was labelled fresh."""
+    from swing_engine.data.float_data import FloatInfo, FloatSource
+
+    payload = {"facts": {"dei": {
+        "EntityPublicFloat": {"units": {"USD": [{"end": "2025-06-30", "filed": "2025-09-15", "val": 10_000_000, "accn": "a1"}]}},
+        "EntityCommonStockSharesOutstanding": {"units": {"shares": [
+            {"end": "2026-08-01", "filed": "2026-08-05", "val": 60_000_000, "accn": "a2"},
+        ]}},
+    }}}
+    info = FloatInfo(symbol="DIL")
+    FloatSource._apply_edgar(None, info, payload, None, 1.0)  # type: ignore[arg-type]
+    assert info.float_shares == pytest.approx(10_000_000) and info.float_estimate_method == METHOD_PUBLIC_FLOAT_PRICE
+    assert info.as_of == date(2025, 6, 30)  # measured date wins -> 463 days old on 2026-10-06 -> stale by age
+    with_then = {"facts": {"dei": {**payload["facts"]["dei"], "EntityCommonStockSharesOutstanding": {"units": {"shares": [
+        {"end": "2025-08-04", "filed": "2025-08-07", "val": 12_000_000, "accn": "a0"},
+        {"end": "2026-08-01", "filed": "2026-08-05", "val": 60_000_000, "accn": "a2"},
+    ]}}}}}
+    adj = FloatInfo(symbol="DIL")
+    FloatSource._apply_edgar(None, adj, with_then, None, 1.0)  # type: ignore[arg-type]
+    assert adj.float_shares == pytest.approx(58_000_000) and adj.float_estimate_method == METHOD_PUBLIC_FLOAT_ADJ
+    assert adj.as_of == date(2026, 8, 1)  # 10M then + 48M issued since; well above the 20M small-cap gate

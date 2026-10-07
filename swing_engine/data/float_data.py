@@ -70,6 +70,8 @@ FMP_API_KEY_ENV = "FMP_API_KEY"
 
 # ---- methods / sources -----------------------------------------------------------------------------------------
 METHOD_PUBLIC_FLOAT_PRICE = "edgar_public_float_div_price"
+METHOD_PUBLIC_FLOAT_ADJ = "edgar_public_float_plus_new_shares"  # float then + shares issued since (dilution)
+SHARES_NEAR_FLOAT_WINDOW_DAYS = 100  # a cover-page share count this close to the float date is "the count then"
 METHOD_SHARES_OUTSTANDING = "edgar_shares_outstanding"
 METHOD_MASSIVE_SHARES = "massive_shares_outstanding"
 METHOD_VENDOR = "vendor_float"
@@ -348,6 +350,32 @@ def latest_fact(payload: Mapping[str, Any], concept: str, unit: str, as_of: date
     }
 
 
+def fact_nearest(
+    payload: Mapping[str, Any], concept: str, unit: str, on: date, *, window_days: int, as_of: date | None = None
+) -> dict[str, Any] | None:
+    """The `concept` fact (filed on or before `as_of`) whose `end` is closest to `on`, within `window_days`."""
+    rows = _filed_on_or_before(_facts(payload, concept, unit), as_of)
+    ends = {as_date(r["end"]) for r in rows}
+    near = [e for e in ends if abs((e - on).days) <= window_days]
+    if not near:
+        return None
+    end = min(near, key=lambda e: (abs((e - on).days), e))
+    # same share-class summing as latest_fact: newest filing for that end, newest accession, exact dups dropped
+    same_end = [r for r in rows if as_date(r["end"]) == end]
+    filed = max(str(r["filed"]) for r in same_end)
+    group = [r for r in same_end if str(r["filed"]) == filed]
+    accn = max((str(r.get("accn", "")) for r in group), default="")
+    group = [r for r in group if str(r.get("accn", "")) == accn]
+    seen: set[tuple[Any, ...]] = set()
+    total = 0.0
+    for r in group:
+        sig = (r.get("val"), r.get("fp"), r.get("fy"))
+        if sig not in seen:
+            seen.add(sig)
+            total += float(r["val"])
+    return {"val": total, "end": end, "filed": as_date(filed)}
+
+
 def bars_price_lookup(store: Store, *, lookback_days: int = PRICE_LOOKBACK_DAYS) -> PriceLookup:
     """Price function backed by the store's daily bars: last close on or before the date within `lookback_days`."""
 
@@ -546,7 +574,8 @@ class FloatSource:
             info.public_float_usd = None
             if vendor.shares_outstanding is not None and info.shares_outstanding is None:
                 info.shares_outstanding = vendor.shares_outstanding
-            if vendor.as_of is not None and (info.as_of is None or vendor.as_of > info.as_of):
+            # the vendor float is dated by the vendor, never by a newer EDGAR cover page
+            if vendor.as_of is not None:
                 info.as_of = vendor.as_of
         reason = stale_reason(info.as_of, today, sym, events, stale_after_days=self.stale_after_days)
         info.stale, info.stale_reason = reason is not None, reason
@@ -574,14 +603,30 @@ class FloatSource:
             px = _resolve_price(price, info.symbol, public_float["end"])
             if px is not None:
                 estimate = public_float["val"] / px
+                method = METHOD_PUBLIC_FLOAT_PRICE
+                # The public float is measured once a year (last Q2 end). Its date is what makes it fresh or
+                # stale, not the newer cover page. When a share count from near the float date exists, shares
+                # issued since then are assumed to have gone to the public (dilution), and the estimate is
+                # dated by the newer cover page instead.
+                measured = public_float["end"]
+                if shares is not None and shares["end"] > public_float["end"]:
+                    then = fact_nearest(
+                        facts, SHARES_OUTSTANDING_CONCEPT, SHARES_UNIT, public_float["end"],
+                        window_days=SHARES_NEAR_FLOAT_WINDOW_DAYS, as_of=cutoff,
+                    )
+                    if then is not None:
+                        estimate += max(0.0, shares["val"] - then["val"])
+                        method = METHOD_PUBLIC_FLOAT_ADJ
+                        measured = shares["end"]
                 if info.shares_outstanding is not None:
                     estimate = min(estimate, info.shares_outstanding)
                 info.float_shares = estimate
                 info.price_used = px
-                info.float_estimate_method = METHOD_PUBLIC_FLOAT_PRICE
-                if info.as_of is None:
-                    info.as_of = public_float["end"]
-                    info.filed = public_float["filed"]
+                info.float_estimate_method = method
+                if info.as_of is None or measured < info.as_of:
+                    info.as_of = measured
+                    if measured == public_float["end"]:
+                        info.filed = public_float["filed"]
                 return
         if info.shares_outstanding is not None:
             info.float_shares = info.shares_outstanding
