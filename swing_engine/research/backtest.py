@@ -6,7 +6,8 @@ Timeline for each trading day ``t`` (one bar per symbol):
 2. every open position is checked against today's bar: gap-through stop at the open, gap-through target at
    the open (a resting limit fills before any intrabar move), intrabar stop, target (the stop wins when both
    touch in the same bar), time stop, strategy rule exit (``exit_rule`` or ``should_exit``) at the close;
-3. trailing stops ratchet on the close and the book is marked to market;
+3. trailing stops ratchet on the close (``BacktestConfig.trailing``, then the strategy's ``trail_stop`` hook;
+   a strategy with ``engine_trail = False`` skips ``trailing``) and the book is marked to market;
 4. the strategy sees the panel up to and including ``t`` (point-in-time slice) and emits signals for
    next-open entry.
 
@@ -18,6 +19,7 @@ configs.
 from __future__ import annotations
 
 import math
+import re
 from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
@@ -53,6 +55,19 @@ DEFAULT_MAX_HOLD_BARS = 20
 #: Strategy ``params`` key that overrides ``BacktestConfig.max_hold_bars`` when present.
 STRATEGY_HOLD_PARAM = "max_hold_days"
 CLIENT_ORDER_PREFIX = "bt"
+#: Chandelier exit (docs/catalog/catalog.json chandelier_exit; LeBeau): highest high - 3 x ATR(22).
+CHANDELIER_ATR_PERIOD = 22
+CHANDELIER_ATR_MULT = 3.0
+#: ``atr_<n>`` trailing columns missing from the panel are computed on the fly (Wilder ATR, per symbol).
+ATR_COLUMN_RE = re.compile(r"^atr_(\d+)$")
+#: Strategy hooks (strategies._base.PanelStrategy): indicator trail and the engine-overlay opt-out.
+TRAIL_STOP_HOOK = "trail_stop"
+ENGINE_TRAIL_ATTR = "engine_trail"
+#: Microcap control (catalog microcap_control_vw_nyse; Hou-Xue-Zhang 2020): drop names below the NYSE 20th
+#: size percentile. ``SIZE_EXCHANGE_COLUMN`` == ``NYSE_LABEL`` rows set the breakpoint when the panel has it.
+MICROCAP_SIZE_PCTILE = 20.0
+SIZE_EXCHANGE_COLUMN = "exchange"
+NYSE_LABEL = "NYSE"
 
 SYMBOL = "symbol"
 TS = "ts"
@@ -76,6 +91,7 @@ class ExitReason(StrEnum):
     TARGET = "target"
     TIME = "time"
     RULE = "rule"  # strategy exit rule fired at the close
+    PROFITABLE_CLOSES = "profitable_closes"  # ``BacktestConfig.profitable_closes`` reached, exit at the close
     DELISTED = "delisted"  # no more bars for the symbol: closed at its last close
     END = "end"  # forced close at the end of the backtest window
 
@@ -139,14 +155,31 @@ class TrailingStop(BaseModel):
     """Optional stop ratchet evaluated on each close (never loosens the stop).
 
     ``pct``: trail this far below the best price since entry. ``atr_mult``: trail ``atr_mult * atr_column``
-    below the best price. ``breakeven_after_r``: move the stop to the entry fill once the close is this many
-    R in profit. Several may be combined; the tightest resulting stop wins.
+    below the best price (the highest high since entry for longs: with ``atr_22`` and 3.0 this is LeBeau's
+    chandelier exit, :meth:`chandelier`). ``breakeven_after_r``: move the stop to the entry fill once the close
+    is this many R in profit. Several may be combined; the tightest resulting stop wins.
+
+    Extra exits from docs/catalog/catalog.json ``extra_exit_rules`` (TradeStation / thinkorswim built-ins), all
+    off by default: ``close_atr_mult`` trails ``close_atr_mult * atr_column`` below each close (VoltyExpanClose
+    LX, ratcheted); ``channel_bars`` trails to the lowest low of the last N bars (channel trailing);
+    ``giveback_pct`` keeps at least ``100 - giveback_pct`` % of the best open profit (give-back % of open
+    profit; only once the best price is beyond the entry).
     """
 
     pct: float | None = Field(default=None, gt=0)
     atr_mult: float | None = Field(default=None, gt=0)
     atr_column: str = "atr_14"
     breakeven_after_r: float | None = Field(default=None, gt=0)
+    close_atr_mult: float | None = Field(default=None, gt=0)
+    channel_bars: int | None = Field(default=None, ge=1)
+    giveback_pct: float | None = Field(default=None, gt=0, lt=100)
+
+    @classmethod
+    def chandelier(
+        cls, atr_mult: float = CHANDELIER_ATR_MULT, period: int = CHANDELIER_ATR_PERIOD
+    ) -> TrailingStop:
+        """Chandelier exit: ``atr_mult`` x ATR(``period``) below the highest high since entry."""
+        return cls(atr_mult=atr_mult, atr_column=f"atr_{period}")
 
 
 class BacktestConfig(BaseModel):
@@ -162,6 +195,11 @@ class BacktestConfig(BaseModel):
     skip_entry_if_open_through_stop: bool = True
     #: ``exit_rule(row, position) -> bool`` evaluated on the close with the symbol's panel row (features included)
     exit_rule: Callable[[Any, Any], bool] | None = None
+    #: ``trail_rule(row) -> float | None``: indicator stop level ratcheted on the close (never loosened, never
+    #: through the close), live from the next bar. Filled from the strategy's ``trail_stop`` hook when unset.
+    trail_rule: Callable[[Any], float | None] | None = None
+    #: exit at the close once this many closes since entry were in profit (extra_exit_rules; None = off)
+    profitable_closes: int | None = Field(default=None, ge=1)
 
 
 # ----------------------------------------------------------------------------------------------- sizing
@@ -235,6 +273,7 @@ class OpenPosition:
     bars_held: int = 0
     slippage_cost: float = 0.0
     fees: float = 0.0
+    profitable_closes: int = 0  # closes beyond the entry fill since entry (extra_exit_rules)
 
     @property
     def direction(self) -> int:
@@ -562,19 +601,35 @@ def _check_exit(
         return ExitReason.TARGET, tgt, day
     if i - pos.entry_idx + 1 >= max_hold:
         return ExitReason.TIME, c, day
+    if config.profitable_closes is not None:
+        in_profit = (c > pos.entry_price) if is_long else (c < pos.entry_price)
+        if pos.profitable_closes + int(in_profit) >= config.profitable_closes:
+            return ExitReason.PROFITABLE_CLOSES, c, day
     if config.exit_rule is not None and config.exit_rule(view.row(i, pos.symbol), pos):
         return ExitReason.RULE, c, day
     return None
 
 
-def _ratchet_stop(pos: OpenPosition, trailing: TrailingStop, atr: float) -> None:
+def _ratchet_stop(pos: OpenPosition, trailing: TrailingStop, atr: float, channel: float = math.nan) -> None:
+    """Tighten ``pos.stop`` from ``trailing``. ``channel`` is the lowest low (highest high for shorts) of the
+    last ``trailing.channel_bars`` bars."""
     is_long = pos.is_long
+    sign = pos.direction
     cands: list[float] = []
     if trailing.pct is not None:
         f = trailing.pct / PCT
         cands.append(pos.best_price * (1.0 - f) if is_long else pos.best_price * (1.0 + f))
-    if trailing.atr_mult is not None and math.isfinite(atr) and atr > 0:
+    atr_ok = math.isfinite(atr) and atr > 0
+    if trailing.atr_mult is not None and atr_ok:
         cands.append(pos.best_price - trailing.atr_mult * atr if is_long else pos.best_price + trailing.atr_mult * atr)
+    if trailing.close_atr_mult is not None and atr_ok:
+        cands.append(pos.last_close - sign * trailing.close_atr_mult * atr)
+    if trailing.channel_bars is not None and math.isfinite(channel):
+        cands.append(channel)
+    if trailing.giveback_pct is not None:
+        best_profit = sign * (pos.best_price - pos.entry_price)
+        if best_profit > 0:
+            cands.append(pos.entry_price + sign * best_profit * (1.0 - trailing.giveback_pct / PCT))
     if trailing.breakeven_after_r is not None and pos.risk_per_share > 0:
         open_r = pos.direction * (pos.last_close - pos.entry_price) / pos.risk_per_share
         if open_r >= trailing.breakeven_after_r:
@@ -599,7 +654,32 @@ def _mark_position(pos: OpenPosition, view: _PanelView, i: int, config: Backtest
         pos.best_price = min(pos.best_price, lo)
         pos.worst_price = max(pos.worst_price, h)
     if config.trailing is not None:
-        _ratchet_stop(pos, config.trailing, view.value(config.trailing.atr_column, i, j))
+        channel = math.nan
+        n = config.trailing.channel_bars
+        if n is not None:
+            window = view.wide["low" if pos.is_long else "high"][max(i - n + 1, 0) : i + 1, j]
+            if np.isfinite(window).any():
+                channel = float(np.nanmin(window) if pos.is_long else np.nanmax(window))
+        _ratchet_stop(pos, config.trailing, view.value(config.trailing.atr_column, i, j), channel)
+    if config.trail_rule is not None:
+        _apply_trail_level(pos, config.trail_rule(view.row(i, pos.symbol)), c)
+    if (c > pos.entry_price) if pos.is_long else (c < pos.entry_price):
+        pos.profitable_closes += 1
+
+
+def _apply_trail_level(pos: OpenPosition, level: Any, close: float) -> None:
+    """Ratchet ``pos.stop`` to a strategy trail ``level``: never loosened, never at or through ``close``
+    (the same rule as ``execution.position_manager._trail_stop``)."""
+    try:
+        lv = float(level)
+    except (TypeError, ValueError):
+        return
+    if not math.isfinite(lv) or lv <= 0:
+        return
+    if pos.is_long and lv < close:
+        pos.stop = max(pos.stop, lv)
+    elif not pos.is_long and lv > close:
+        pos.stop = min(pos.stop, lv)
 
 
 def _close_position(
@@ -651,6 +731,80 @@ def _max_hold_for(strategy: Any, config: BacktestConfig) -> int:
     return int(value) if value is not None and int(value) >= 1 else config.max_hold_bars
 
 
+def strategy_trail_rule(strategy: Any) -> Callable[[Any], float | None] | None:
+    """The strategy's ``trail_stop(row)`` hook, or None when it has none (or keeps the no-op default)."""
+    hook = getattr(strategy, TRAIL_STOP_HOOK, None)
+    if not callable(hook) or getattr(hook, "default_hook", False):
+        return None
+    return hook
+
+
+def strategy_engine_trail(strategy: Any) -> bool:
+    """False when the strategy opts out of the engine trail overlay (``params["engine_trail"]`` wins)."""
+    params = getattr(strategy, "params", None) or {}
+    if isinstance(params, Mapping) and params.get(ENGINE_TRAIL_ATTR) is not None:
+        return bool(params[ENGINE_TRAIL_ATTR])
+    return bool(getattr(strategy, ENGINE_TRAIL_ATTR, True))
+
+
+def with_atr_column(panel: pd.DataFrame, column: str) -> pd.DataFrame:
+    """``panel`` plus ``column`` (``atr_<n>``: Wilder ATR over n bars, per symbol, causal) when it is missing."""
+    match = ATR_COLUMN_RE.match(column)
+    if column in panel.columns or match is None or panel.empty:
+        return panel
+    from swing_engine.features.indicators import atr
+
+    period = int(match.group(1))
+    ordered = panel.sort_values([SYMBOL, TS], kind="stable")
+    parts = [
+        atr(g["high"].astype(float), g["low"].astype(float), g["close"].astype(float), period)
+        for _, g in ordered.groupby(SYMBOL, sort=False)
+    ]
+    return panel.assign(**{column: pd.concat(parts).reindex(panel.index)})
+
+
+def chandelier_stop(
+    panel: pd.DataFrame, period: int = CHANDELIER_ATR_PERIOD, atr_mult: float = CHANDELIER_ATR_MULT
+) -> pd.Series:
+    """Classic rolling chandelier level per row: highest high of ``period`` bars - ``atr_mult`` x ATR(``period``).
+
+    For a strategy's ``trail_stop`` hook (the ``TrailingStop.chandelier`` preset uses the high since entry).
+    """
+    col = f"atr_{period}"
+    frame = with_atr_column(panel, col)
+    hh = frame.groupby(SYMBOL, sort=False)["high"].transform(lambda s: s.rolling(period, min_periods=period).max())
+    return hh - atr_mult * frame[col]
+
+
+def size_floor_universe(
+    panel: pd.DataFrame, size_column: str, pctile: float = MICROCAP_SIZE_PCTILE
+) -> UniverseAt:
+    """``universe_at`` for ``run_backtest`` that drops names below the ``pctile`` size breakpoint of the day.
+
+    catalog microcap_control_vw_nyse (Hou-Xue-Zhang): the breakpoint comes from NYSE rows when the panel has an
+    ``exchange`` column, else from every row of the session (an approximation, say so in the write-up).
+    ``size_column`` is market cap, or a liquidity proxy such as dollar volume when caps are unavailable.
+    Point-in-time: each day uses only that session's rows.
+    """
+    if size_column not in panel.columns:
+        raise KeyError(f"panel has no {size_column!r} column for the size floor")
+    day = pd.to_datetime(panel[TS])
+    if getattr(day.dt, "tz", None) is not None:
+        day = day.dt.tz_localize(None)
+    frame = panel.assign(_day=day.dt.date)
+    ref = frame
+    if SIZE_EXCHANGE_COLUMN in frame.columns and (frame[SIZE_EXCHANGE_COLUMN] == NYSE_LABEL).any():
+        ref = frame.loc[frame[SIZE_EXCHANGE_COLUMN] == NYSE_LABEL]
+    cut = ref.groupby("_day")[size_column].quantile(pctile / PCT)
+    keep = frame.loc[frame[size_column].astype(float) >= frame["_day"].map(cut).astype(float)]
+    allowed = {d: frozenset(g[SYMBOL].astype(str)) for d, g in keep.groupby("_day")}
+
+    def universe_at(as_of: date) -> Collection[str] | None:
+        return allowed.get(as_of, frozenset())
+
+    return universe_at
+
+
 def _strategy_exit_rule(strategy: Any) -> Callable[[Any, Any], bool] | None:
     """The strategy's rule exit, if it has one.
 
@@ -699,6 +853,15 @@ def run_backtest(
         rule = _strategy_exit_rule(strategy)
         if rule is not None:
             config = config.model_copy(update={"exit_rule": rule})
+    if config.trail_rule is None:
+        trail = strategy_trail_rule(strategy)
+        if trail is not None:
+            config = config.model_copy(update={"trail_rule": trail})
+    if config.trailing is not None and not strategy_engine_trail(strategy):
+        log.info("backtest.engine_trail_off", strategy=getattr(strategy, "name", None))
+        config = config.model_copy(update={"trailing": None})
+    if config.trailing is not None:
+        panel = with_atr_column(panel, config.trailing.atr_column)
 
     extra = [config.trailing.atr_column] if config.trailing is not None else []
     view = _PanelView(panel, extra)

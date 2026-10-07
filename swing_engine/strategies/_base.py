@@ -80,6 +80,11 @@ class PanelStrategy(Strategy):
     features_required: list[str] = []
     #: bar columns copied from the previous bar as `prior_<col>`
     prior_columns: list[str] = ["open", "high", "low", "close", "volume"]
+    #: False opts out of the engine-wide breakeven-at-+1R / N-day-low trail overlay (settings.execution) in
+    #: replay and the live position manager, and of `BacktestConfig.trailing` in `run_backtest`. A
+    #: `params["engine_trail"]` value wins over this attribute. Cards: docs/strategies/qullamaggie_flag.md,
+    #: episodic_pivot.md (the overlay cuts the winners those methods depend on).
+    engine_trail: bool = True
 
     def required_features(self) -> list[str]:
         return list(self.features_required)
@@ -205,6 +210,17 @@ class PanelStrategy(Strategy):
         entry. Backtest/execution may call this in addition to stop/target handling.
         """
         return False
+
+    def trail_stop(self, row: pd.Series) -> float | None:
+        """Indicator trailing stop for a held position (supertrend, PSAR, chandelier, swing low), or None.
+
+        `row` is the held symbol's panel row at the close. The engine ratchets the stop to this level (never
+        loosens it, never through the close), live from the next session, in `run_backtest`, replay and the
+        position manager alike. Default: no strategy trail.
+        """
+        return None
+
+    trail_stop.default_hook = True  # type: ignore[attr-defined]  # engines skip the per-day row lookup
 
     def log_scan(self, as_of: date, n_rows: int, n_signals: int) -> None:
         log.debug("strategy.scan", strategy=self.name, as_of=str(as_of), rows=n_rows, signals=n_signals)

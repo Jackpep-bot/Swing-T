@@ -17,7 +17,10 @@ open orders and returns :class:`ExitAction` items that ``execution.autopilot`` e
   protective stop at the ledger's intent stop (or the R-ladder stop when tighter). When that stop is already
   through the close the position is closed instead (``reason=no_stop``).
 * ``replace_stop``  breakeven at ``breakeven_after_r`` and a trailing stop (lowest low of ``trail_lookback_days``
-  sessions, never below breakeven) from ``trail_after_r``. A stop is only ever tightened, never loosened.
+  sessions, never below breakeven) from ``trail_after_r`` (the engine overlay; a strategy opts out with
+  ``engine_trail = False`` as a class attribute or param), and the strategy's own indicator trail
+  (``trail_stop(row) -> float | None`` on the ``as_of`` row: supertrend, PSAR, chandelier, swing low). The tightest
+  candidate wins; a stop is only ever tightened, never loosened, and never placed through the close.
 * ``flag``  an orphan position (no strategy recoverable from the position, the ``swing-<strategy>-...``
   client_order_id or the order ledger), a position without panel data, an unprotected position with no recorded
   stop, or a position whose review raised (``reason=error``; the other positions are still reviewed). Flags are
@@ -56,6 +59,11 @@ SESSION_CLOSE_ET = time(16, 0)  # fallback when the exchange calendar is unavail
 CLIENT_ORDER_ID_PREFIX = "swing"  # risk.sizing.CLIENT_ORDER_ID_PREFIX; ids look like swing-<strategy>-<symbol>-...
 PRICE_DECIMALS = 2  # Alpaca rejects sub-penny stops on stocks over $1
 HOLD_PARAMS = ("max_hold_days", "time_stop_days")  # strategy params read as the per-strategy time stop
+#: Strategy class attribute / param that opts out of the engine-wide breakeven + N-day-low overlay
+#: (docs/strategies/qullamaggie_flag.md, episodic_pivot.md: the overlay cuts the winners those methods need).
+ENGINE_TRAIL_ATTR = "engine_trail"
+#: Strategy hook ``trail_stop(row) -> float | None``: an indicator stop the engine ratchets to (never down).
+TRAIL_STOP_HOOK = "trail_stop"
 EARNINGS_DATE_COLUMNS = ("report_date", "earnings_date", "date")
 STOP_ORDER_TYPES = frozenset({"stop", "stop_limit", "trailing_stop"})
 FILLED = frozenset({OrderStatus.FILLED.value, OrderStatus.PARTIALLY_FILLED.value})
@@ -79,6 +87,7 @@ class ExitReason(StrEnum):
     EARNINGS = "earnings"
     BREAKEVEN = "breakeven"
     TRAIL = "trail"
+    STRATEGY_TRAIL = "strategy_trail"  # the strategy's own indicator trail (``trail_stop`` hook)
     STALE_ENTRY = "stale_entry"
     KILL_SWITCH = "kill_switch"  # unfilled entry cancelled because the kill switch is tripped
     NO_STOP = "no_stop"  # position without an open protective stop
@@ -450,27 +459,63 @@ def _rule_exit(strategy: Strategy | None, row: pd.Series, held: _Held, bars_held
     return bool(should_exit(row, bars_held)) if callable(should_exit) else False
 
 
-def _trail_stop(held: _Held, frame: pd.DataFrame, settings: Settings) -> tuple[float, ExitReason, str] | None:
-    """New (tighter) stop from the R ladder, or None. Long and short are mirrored."""
+def engine_trail_enabled(strategy: Any) -> bool:
+    """False when the strategy opts out of the engine overlay (param ``engine_trail`` wins over the attribute)."""
+    params = getattr(strategy, "params", None) or {}
+    if isinstance(params, Mapping) and params.get(ENGINE_TRAIL_ATTR) is not None:
+        return bool(params[ENGINE_TRAIL_ATTR])
+    return bool(getattr(strategy, ENGINE_TRAIL_ATTR, True))
+
+
+def strategy_trail_level(strategy: Any, row: pd.Series) -> float | None:
+    """The strategy's ``trail_stop(row)`` as a finite positive float, or None (no hook, no level, or it raised)."""
+    hook = getattr(strategy, TRAIL_STOP_HOOK, None)
+    if not callable(hook):
+        return None
+    try:
+        level = _float(hook(row))
+    except Exception as exc:  # noqa: BLE001 - a broken trail must not block the other exits
+        log.warning("strategy_trail_failed", strategy=getattr(strategy, "name", None), error=str(exc))
+        return None
+    return level if level is not None and np.isfinite(level) and level > 0 else None
+
+
+def _engine_candidate(
+    frame: pd.DataFrame, settings: Settings, entry: float, risk: float, close: float, long: bool
+) -> tuple[float, ExitReason, str] | None:
     cfg = settings.execution
-    pos = held.position
-    entry, init, cur = pos.avg_entry, held.initial_stop, held.current_stop
-    close = float(frame["close"].iloc[-1])
-    long = pos.side == Side.LONG
-    if init is None:
-        return None
-    risk = entry - init if long else init - entry
-    if risk <= 0:
-        return None
     r_now = ((close - entry) if long else (entry - close)) / risk
     window = frame.tail(cfg.trail_lookback_days)
     if cfg.trail_after_r is not None and r_now >= cfg.trail_after_r:
         extreme = float(window["low"].min()) if long else float(window["high"].max())
-        candidate, reason = (max(entry, extreme) if long else min(entry, extreme)), ExitReason.TRAIL
-    elif cfg.breakeven_after_r is not None and r_now >= cfg.breakeven_after_r:
-        candidate, reason = entry, ExitReason.BREAKEVEN
-    else:
+        return (max(entry, extreme) if long else min(entry, extreme)), ExitReason.TRAIL, f"{r_now:.2f}R"
+    if cfg.breakeven_after_r is not None and r_now >= cfg.breakeven_after_r:
+        return entry, ExitReason.BREAKEVEN, f"{r_now:.2f}R"
+    return None
+
+
+def _trail_stop(
+    held: _Held, frame: pd.DataFrame, settings: Settings, strategy: Strategy | None = None
+) -> tuple[float, ExitReason, str] | None:
+    """New (tighter) stop from the R ladder and/or the strategy's indicator trail, or None. Long/short mirrored."""
+    pos = held.position
+    entry, init, cur = pos.avg_entry, held.initial_stop, held.current_stop
+    close = float(frame["close"].iloc[-1])
+    long = pos.side == Side.LONG
+    cands: list[tuple[float, ExitReason, str]] = []
+    if init is not None and engine_trail_enabled(strategy):
+        risk = entry - init if long else init - entry
+        if risk > 0:
+            engine = _engine_candidate(frame, settings, entry, risk, close, long)
+            if engine is not None:
+                cands.append(engine)
+    if strategy is not None:
+        level = strategy_trail_level(strategy, frame.iloc[-1].drop(labels="_day", errors="ignore"))
+        if level is not None:
+            cands.append((level, ExitReason.STRATEGY_TRAIL, f"{getattr(strategy, 'name', 'strategy')} trail"))
+    if not cands:
         return None
+    candidate, reason, why = max(cands, key=lambda c: c[0]) if long else min(cands, key=lambda c: c[0])
     candidate = round(candidate, PRICE_DECIMALS)
     if (long and candidate >= close) or (not long and candidate <= close):
         return None  # would be through the market: let the next session decide
@@ -478,11 +523,16 @@ def _trail_stop(held: _Held, frame: pd.DataFrame, settings: Settings) -> tuple[f
         cur_r = round(cur, PRICE_DECIMALS)
         if (long and candidate <= cur_r) or (not long and candidate >= cur_r):
             return None  # never loosen (or no-op)
-    return candidate, reason, f"{r_now:.2f}R at close {close:.2f}; stop {cur} -> {candidate}"
+    return candidate, reason, f"{why} at close {close:.2f}; stop {cur} -> {candidate}"
 
 
 def _missing_stop(
-    held: _Held, frame: pd.DataFrame, settings: Settings, ref: float, base: Mapping[str, Any]
+    held: _Held,
+    frame: pd.DataFrame,
+    settings: Settings,
+    ref: float,
+    base: Mapping[str, Any],
+    strategy: Strategy | None = None,
 ) -> ExitAction | None:
     """A strategy-owned position with no open stop order: re-arm one, or close when it would already be hit."""
     if held.current_stop is not None:
@@ -492,7 +542,7 @@ def _missing_stop(
     if stop is None:
         return ExitAction(kind=ExitKind.FLAG, reason=ExitReason.NO_STOP, **base,
                           detail="no open stop order and no recorded stop; protect it by hand")
-    trail = _trail_stop(held, frame, settings)
+    trail = _trail_stop(held, frame, settings, strategy)
     if trail is not None:
         stop = max(stop, trail[0]) if long else min(stop, trail[0])
     stop = round(stop, PRICE_DECIMALS)
@@ -540,10 +590,10 @@ def _review_one(
     if _rule_exit(strategy, row.drop(labels="_day"), held, bars_held or 0):
         return [ExitAction(kind=ExitKind.CLOSE, reason=ExitReason.STRATEGY_EXIT, ref_price=ref, **base,
                            detail=f"{held.strategy} exit rule fired (held {bars_held} sessions)")]
-    unprotected = _missing_stop(held, frame, settings, ref, base)
+    unprotected = _missing_stop(held, frame, settings, ref, base, strategy)
     if unprotected is not None:
         return [unprotected]
-    trail = _trail_stop(held, frame, settings)
+    trail = _trail_stop(held, frame, settings, strategy)
     if trail is None:
         return []
     new_stop, reason, detail = trail

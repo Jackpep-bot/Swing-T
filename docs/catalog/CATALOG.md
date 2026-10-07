@@ -609,3 +609,37 @@ The 131 thinkorswim studies without a dedicated item go to `indicator_library_lo
 | `wyckoff_spring_accumulation` | Wyckoff accumulation: spring / test / SOS / LPS entries | disabled-compare |
 | `zscore_mean_reversion_garner` | SimpleMeanReversion z-score (Anthony Garner) | disabled-compare |
 
+
+## Fact-check (2026-10-07)
+
+Stopped early at the user's request. Claims marked "refuted (fix pending)" were checked against the source, but the files have **not** been edited yet. Claims marked "not yet checked" still need verification.
+
+| Claim | File(s) | Verdict | Evidence URL |
+|---|---|---|---|
+| CMP 82 bp/month is the return on opportunistic buys | catalog.json (`opportunistic_insider_purchases_cmp` notes/evidence_text, `stine_insider_superstock_weekly`), CATALOG.md row, docs/methods/14 (l.123, l.227), docs/methods.md l.718, strategies/insider_cluster.md, stine_insider_superstock_weekly.md | refuted (fix pending). 82 bp/mo is the value-weighted five-factor alpha of a long-short portfolio (opportunistic buys minus opportunistic sells), t=2.15; equal-weighted 180 bp (t=6.07). Long-side regression: opportunistic buys add +90 bp/mo over all insider trades (t=4.64). | https://dash.harvard.edu/server/api/core/bitstreams/7312037e-2b77-6bd4-e053-0100007fdf3b/content |
+| 80-20 buy setup: open in the top 20% of the range, close in the bottom 20% | strategies/eighty_twenty_reversal.md, catalog.json | confirmed | https://technical.traders.com/tradersonline/display.asp?art=2527 |
+| 80-20 bar "open in the bottom 20%, close in the top 80%" | docs/methods.md l.299 (section 2d) | refuted (fix pending). The buy setup is the reverse: opens in the top 20% and closes in the bottom 20%. | same as above |
+| NR7 Oxford Capital test period 1980-2011 | catalog.json (NR7/NR4 evidence) | refuted (fix pending). All three Oxford NR7 pages say 1 Jan 1980 to 31 Jan 2016, 42 futures, "not currently tradeable" after costs. The card's 1980-Jan 2016 is correct. | https://oxfordstrat.com/?p=3707 , https://oxfordstrat.com/?p=16086 |
+| Oxford ORB/GSV 1980-2011 (C12/C18) | catalog.json | not yet checked (probably 1980-2016 as well) | - |
+| Ehlers super smoother (a=exp(-1.414π/P), b=2a·cos(1.414π/P), c1=1-c2-c3) and 2-pole high-pass alpha/recursion; roofing 48/10 | strategies/ehlers_dsp_family.md | confirmed. Matches Ehlers' EasyLanguage. The card's "from memory" caveat can be dropped. | https://www.linnsoft.com/topic/super-smoother-and-roofing-filter |
+| Kaufman Gap Momentum: cumulative vs. non-cumulative ratio | strategies/kaufman_gap_momentum.md | resolved, card fix pending. The published Traders' Tips (Zorro) code uses a non-cumulative ratio, 100·UpGaps/DnGaps over Period (1 if DnGaps=0), with an SMA signal over SignalPeriod. Defaults are 40/20. The "cumulative like OBV" wording in summaries does not match the code. | https://financial-hacker.com/the-gap-momentum-system/ |
+| Turtle rules: N=(19·PDN+TR)/20; S1 skip rule (2N adverse before a profitable 10-day exit); 55-day failsafe; S1 exit 10-day low, S2 exit 20-day low; ½N pyramid; limits 4/6/10/12; whipsaw ½N stop | strategies/turtle_breakout_systems.md | confirmed | https://www.tradingwithrayner.com/wp-content/uploads/2014/11/OriginalTurtleRules.pdf |
+| Wilcox-Crittenden 2005: 49.3% winners, W/L 2.56, ~15.2% expectancy, 305-day hold, 19.3% vs 12.0% CAGR, DD -20.8% vs -44.7% | strategies/turtle_breakout_systems.md | confirmed | https://www.cis.upenn.edu/~mkearns/finread/trend.pdf |
+| Holy Grail: ADX(14) > 30 and rising, pullback to 20-period EMA | strategies/pullback_holy_grail.md | confirmed (secondary sources; some restatements say SMA, most say EMA) | https://tradingsetupsreview.com/the-holy-grail-trading-setup |
+| Connors RSI(2): close > SMA200, buy RSI(2) < 10 (< 5 better), exit above the 5-day SMA | strategies/rsi2_meanrev.md | confirmed | https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/rsi-2 |
+| Double 7s SPY 1993-2007: 153 trades, +0.85%, 80.4% | rsi2_meanrev.md, connors_rsi2_variants.md | confirmed (book chapter) | https://c.mql5.com/forextsd/forum/56/sttstw_chap10.pdf |
+| HXZ Sue1 0.47% (t=3.42); Sue6 0.19, Sue12 0.11 | strategies/pead_sue.md | confirmed | https://www.nber.org/papers/w23394 |
+| HXZ R11-1 1.19 (4.06), R11-6 0.81 (3.14), R6-1 0.60 (2.04), R6-6 0.82 (3.49), R6-12 0.55 (2.90) | strategies/xs_momentum_rank.md, catalog.json | confirmed | https://www.nber.org/papers/w23394 |
+| HXZ 52w6 0.57 (t=2.02), 52w1 0.14 (t=0.43) | strategies/breakout_52w.md | confirmed | https://www.nber.org/papers/w23394 |
+| HXZ residual momentum ε11-1 0.67 (3.91), ε11-6 0.55 (3.94), ε11-12 0.36 (2.96), ε6-6 0.49, ε6-12 0.39, ε6-1 0.20 | strategies/residual_momentum.md | confirmed | https://www.nber.org/papers/w23394 |
+| BHM residual momentum 11.2%/12.5% vol, Sharpe 0.90 vs 0.45 | strategies/residual_momentum.md | confirmed (CXO summary) | https://www.cxoadvisory.com/momentum-investing/stripping-risks-from-a-stock-momentum-strategy/ |
+| Daniel-Moskowitz: WML Sharpe 0.71, winners +15.3%/yr, losers -2.5%/yr, CAPM alpha 22.3%/yr | strategies/xs_momentum_rank.md | confirmed | https://www.nber.org/papers/w20439 |
+| Bernard-Thomas: SUE spread positive in 41 of 48 quarters, 1974-85 | strategies/pead_sue.md | confirmed (secondary) | https://en.wikipedia.org/wiki/Post%E2%80%93earnings-announcement_drift |
+| Martineau CFR 2022: large-cap PEAD gone since 2006, microcaps only recently | pead_sue.md, power_gap.md, episodic_pivot.md | confirmed | https://ideas.repec.org/a/now/jnlcfr/104.00000122.html |
+| Zhou-Zhu FAJ 2012: ~15.3%/yr abnormal, Sharpe 1.52 | strategies/power_gap.md | confirmed (3.63%/quarter not separately seen) | https://engagedscholarship.csuohio.edu/bus_facpub/202 |
+| Pagonidis IBS: > 30%/yr average alpha before costs | strategies/ibs_mean_reversion.md | confirmed (abstract via search summary) | https://www.quantconnect.com/forum/discussion/5675/mean-reversion-effect-in-etf-price-series/ |
+| Pandey-Joshi: 16 country ETFs 2009-2019, basket Sharpe 2.9-3.9, open-to-open near zero | strategies/ibs_mean_reversion.md | confirmed | https://arxiv.org/html/2306.12434v1 |
+| Pandey-Joshi: short borrow above ~0.15%/yr erodes the long/short version | strategies/ibs_mean_reversion.md l.56 | refuted (fix pending). The paper says about 0.15% **per day** (~56% annualised). Base case assumed 0.01%/day. | https://arxiv.org/html/2306.12434v1 |
+| Stockbee momentum burst: ≥ 4% up, volume > prior day, ≥ 100k | strategies/momentum_burst.md | confirmed (secondary implementations) | https://www.luxalgo.com/library/indicator/6h74IRYK-stockbee-momentum-burst/ |
+| Brandt-Kishore-Santa-Clara-Venkatachalam EAR 6.3% vs SUE 5.6%/yr | strategies/power_gap.md | unverifiable (paper not reached) | - |
+| Lakonishok-Lee 2001; Zhao 2026; Chordia 2009; Bulkowski NR7/BGU/cup stats; Stonks/EasySwing/Qullamaggie figures; Backtrex RSI2 OOS; JT 1993 figures; Crabel exits | various | not yet checked | - |
