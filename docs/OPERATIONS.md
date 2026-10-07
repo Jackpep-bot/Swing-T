@@ -7,8 +7,8 @@ How to run the engine day to day once `docs/SETUP.md` is done. Everything here a
 
 | When (ET) | What runs | What you do |
 |---|---|---|
-| 06:30 | `swing nightly` (launchd/systemd): ingest -> features -> scan -> rank -> size -> review -> positions -> execute -> journal; report in `data/runs/nightly/<date>.json`. On paper the execute step is the autopilot (section 1.1): it manages open positions and submits up to 5 new bracket orders | nothing; check `data/logs/nightly.err.log` only if the healthchecks.io ping is missing or the report shows a `fail` step |
-| 08:30 | P1 digest to Telegram | read it with `data/journal/<today>.md` and `data/runs/autopilot/<today>.json`: candidates, reviews, what was submitted / vetoed / capped, exits, open positions |
+| 06:30 | `swing nightly` (launchd/systemd): ingest -> features -> scan -> rank -> size -> review -> shadow -> positions -> execute -> journal; report in `data/runs/nightly/<date>.json`. The scan runs only the strategies the market regime allows (section 1.2). On paper the execute step is the autopilot (section 1.1): it manages open positions and submits up to 5 new bracket orders | nothing; check `data/logs/nightly.err.log` only if the healthchecks.io ping is missing or the report shows a `fail` step |
+| 08:30 | P1 digest to Telegram | read it with `data/journal/<today>.md` (its "Market regime" section says which strategies were allowed and at what size) and `data/runs/autopilot/<today>.json`: candidates, reviews, what was submitted / vetoed / capped, exits, open positions |
 | 09:00-09:25 | - | check the Alpaca paper dashboard against the audit. Disagree with an entry? Cancel it in the dashboard (the ledger reconciles on the next run; it will not be re-sent for that date). Never edit numbers in the run files. With execution off (`execution.nightly_execute: false`) this is where you run `uv run swing paper --broker alpaca --approve "<your name>"` |
 | 09:30-10:30 | monitor: P2 (watchlist halts, insider clusters, 52w breaks, gap+RVOL+news) and P3 (anything on a held position) | act on P3 immediately (halt, SSR, severe 8-K, >= 5% adverse move, order rejection); glance at P2; tap Useful / Noise / Traded on both (section 4) |
 | 10:30-15:30 | monitor | nothing unless P3. Long alerts from the small-cap track are never emitted after 10:30 by design |
@@ -50,6 +50,52 @@ and logged in `state/orders.sqlite` and `data/runs/autopilot/<date>.json`.
   `swing autopilot` too. A live account's staged plan (`runs/pending/<date>.json`) is executed exactly with
   `swing paper --approve NAME --as-of <date>`.
 
+### 1.2 Market regime and the playbook router
+
+Every school gates setups behind the market (docs/methods.md sections 0 and 2a: gate first, then select, then
+trigger). The nightly does it in three places:
+
+- **features** builds the panel only for the names that pass the universe screen at the run date
+  (`universe.*`: price, average volume, dollar volume, common stock, not OTC; split-adjusted history is
+  un-adjusted first so a later reverse split cannot sneak a penny stock in). With the whole market in the store
+  (~12,000 tickers from grouped ingest) that is about `universe.max_symbols` names, plus SPY, QQQ and IWM and
+  anything you hold or have an open order on (so exits always have data). The step detail shows the counts.
+  It also computes market breadth over the screened names (% above the 50/200-day, Stockbee 4% up/down counts
+  and their 10-day ratio, new highs/lows) into the store table `breadth`, one row per session.
+- **scan** classifies the day (`strategies.playbook.market_state`): SPY trend (vs its 50/200-day and the
+  50-day slope), volatility (SPY's 21-day vol percentile) and breadth -> one of `healthy_uptrend`,
+  `narrow_uptrend`, `choppy`, `correction`, `high_vol_selloff`. The table in `settings.playbook.regimes` then
+  says which strategies may open new trades and at what fraction of `risk.risk_per_trade_pct`. As shipped:
+  breakouts only in `healthy_uptrend`; pullbacks in healthy (full size) and narrow (half size) uptrends; RSI-2
+  in uptrends and chop, and at a quarter size in a high-vol selloff; nothing new in a `correction`. The
+  decision is saved to `data/runs/regime/<date>.json`, shown at the end of the nightly output, and written
+  into the journal.
+- **size** multiplies `risk_per_trade_pct` by the strategy's multiplier (never above 1). `swing autopilot`
+  re-applies the multipliers saved with the signals it sizes.
+
+`uv run swing regime --as-of <date>` prints the same state and the allowed / blocked strategies with the risk
+each would get, without running anything. A day with zero signals in a `correction` is the router working,
+not a failure. The router is a veto layer, so it fails closed: if the playbook raises (at import or when
+called) or is missing, the scan step fails, an empty signal list is saved for the day and no new entries are
+sized (exits still run). `swing autopilot` likewise refuses to size saved signals that have no saved routing
+(`runs/regime/<day>.json` with an `allowed` table). `playbook.enabled: false` turns routing off (every enabled
+strategy at 1.0). Change the
+table only on replay evidence (section 2), never because a week felt wrong.
+
+### 1.3 Shadow ledger
+
+The `shadow` step (after `review`) writes every signal of the day into the store table `shadow_signals`, the
+ones the engine took (sized and not vetoed) and the ones it passed on, with the regime. A strategy set to
+`{enabled: false, shadow_only: true}` in `settings.yaml` (the methods.md 7b P1 modules, until `docs/gates.md` is
+met) is scanned every night in every regime and recorded here, but never sized, reviewed or executed. Rows are
+dated by the session of the bars the signal was computed from (the 06:30 ET run records the previous close),
+so grading starts at the session the autopilot enters on. Each night it grades
+the signals whose 5/10/20-session horizons have matured on daily bars: entry at the next open (skipped if it
+gapped through the stop), stop-first when a bar touches both stop and target, else exit at the horizon close;
+result, MFE and MAE in R. `uv run swing shadow report [--since DATE] [--by strategy,regime] [--horizon 10]
+[--taken|--untaken]` prints win rate, average R, expectancy and profit factor per group. It is the evidence for
+"does this setup work in this regime", for setups you did not trade as much as for those you did.
+
 ## 2. Weekly routine (Saturday, ~45 minutes)
 
 1. `uv run swing monitor report --days 7` and read it with section 3.
@@ -58,19 +104,28 @@ and logged in `state/orders.sqlite` and `data/runs/autopilot/<date>.json`.
    track's warn/fade posture; a rule whose alerts are followed by nothing is noise even if it "felt right".
 3. `uv run swing trials --last 20`: every backtest you ran is a trial; the deflated Sharpe in the next backtest
    is judged against that count. Do not delete `data/trials.jsonl` to "reset" it.
-4. Sizing input: with `execution.broker: alpaca` (shipped) the nightly reads equity from the paper account, so
+4. `uv run swing shadow report --since <4 weeks ago>` (and `--by regime`): expectancy per strategy and regime
+   from the shadow ledger (section 1.3). Before changing `playbook.regimes`, run
+   `uv run swing replay --start <date> --end <date>` and the same with `--no-router`: the replay walks every
+   session with only the data available that day, routes, sizes, fills at the next open (marketable-limit
+   rule), applies the exit rules and costs, prints summary / by-strategy / by-regime tables, saves
+   `data/runs/replay/<start>_<end>.json` and logs a trial. Its signals are graded into a separate table
+   (`swing shadow report --replay`), never the live ledger. It opens the DuckDB store for writing, so run it
+   when the nightly and ingest are not running. Judge the router by drawdown reduction, not CAGR
+   (docs/methods.md 7a).
+5. Sizing input: with `execution.broker: alpaca` (shipped) the nightly reads equity from the paper account, so
    there is nothing to copy. Only if you run without a broker, copy the paper equity into
    `risk.account_equity_override` and commit the change.
-5. `scripts/backup-data.sh` (section 7). Check `du -sh data` and that `data/backups` is pruning.
-6. Rotate logs if `data/logs/*.log` is over ~100 MB (launchd/systemd append forever): stop the agent, move the
+6. `scripts/backup-data.sh` (section 7). Check `du -sh data` and that `data/backups` is pruning.
+7. Rotate logs if `data/logs/*.log` is over ~100 MB (launchd/systemd append forever): stop the agent, move the
    file aside, start it (`deploy/README.md`).
-7. Reconcile: every autopilot run reconciles the ledger with the broker (`reconcile` in the audit file lists
+8. Reconcile: every autopilot run reconciles the ledger with the broker (`reconcile` in the audit file lists
    unresolved orders and unknown positions). Compare the week's `data/runs/autopilot/*.json` with the Alpaca
    paper dashboard; `uv run swing paper --broker alpaca --approve "<you>" --reconcile` also pulls fills.
-8. Paper-gate ledger: closed trades so far, months elapsed, strategies with deflated-Sharpe evidence.
+9. Paper-gate ledger: closed trades so far, months elapsed, strategies with deflated-Sharpe evidence.
    Keep it at the top of `data/journal/README.md` (or wherever you keep notes) so the gate decision is not
    made from memory.
-9. Optional, with Claude Code: the `tune-monitor` skill proposes threshold changes from the report and a replay;
+10. Optional, with Claude Code: the `tune-monitor` skill proposes threshold changes from the report and a replay;
    the `research-loop` skill runs the strategy lab on one hypothesis. Both produce diffs you review.
 
 ## 3. Reading `swing monitor report`
@@ -207,6 +262,8 @@ scripts/backup-data.sh ~/Backups/swing --keep 30
 | Pushover alarm will not stop | acknowledge in the app | if the alert was wrong, rate it `noise` and look at the rule the same day |
 | Telegram rating buttons spin forever | is the monitor running (not `--dry-run`)? `tail data/logs/monitor.err.log` for `telegram_updates` errors | a webhook on the bot blocks `getUpdates` (409): `deleteWebhook`; meanwhile `swing monitor rate <event_id> <rating>` |
 | the autopilot submitted something you did not expect | `data/runs/autopilot/<date>.json` (outcome and review decision per entry) | cancel/close in the Alpaca dashboard; `touch state/KILL` if you do not understand why; journal it before clearing |
+| nightly `scan` shows 0 signals, `regime correction: allowed none` | `uv run swing regime --as-of <date>` | expected: no new longs in a correction; exits still run. Nothing to fix |
+| nightly `scan` fails with a playbook / `market_state` error | `scan` detail in `data/runs/nightly/<date>.json`; is SPY in the store (`swing status`)? | the router fails closed (no new entries). Ingest SPY or fix the module, then `swing nightly --as-of <date>` |
 | nightly `execute` shows `entries held (review step failed)` | `review` step detail in `data/runs/nightly/<date>.json` | fix the key/outage, `swing review --as-of <date>`, then `swing autopilot --as-of <date>` |
 | equity in the digest differs from the dashboard | `swing paper ... --reconcile` | a fill the engine did not see (account websocket down) |
 | disk nearly full | `du -sh data/* data/logs/*` | rotate logs, prune `data/backups`, `data/raw/` (provider JSON cache) can be deleted |

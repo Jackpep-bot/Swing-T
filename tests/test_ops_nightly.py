@@ -13,6 +13,7 @@ from typing import Any
 import pandas as pd
 import pytest
 import yaml
+from pydantic import BaseModel, Field
 
 from swing_engine.core import registry
 from swing_engine.core.config import Secrets, Settings
@@ -102,16 +103,96 @@ class ReadOnlyBroker:
 
 
 # ----------------------------------------------------------------------------------------------------------
+# contract stubs: features.breadth / strategies.playbook / research.shadow are loaded lazily through
+# nightly.contract_fn; every test here runs against these stubs (autouse) so the pipeline tests do not depend
+# on what the concurrently written modules decide about the sample data's regime.
+# ----------------------------------------------------------------------------------------------------------
+ORIGINAL_CONTRACT_FN = nightly.contract_fn
+
+
+class StubState(BaseModel):
+    as_of: date
+    spy_trend: str = "up"
+    vol_regime: str = "normal"
+    breadth: str = "strong"
+    regime: str = "healthy_uptrend"
+    notes: list[str] = Field(default_factory=list)
+
+
+def _sessions(panel: pd.DataFrame) -> pd.Series:
+    return pd.to_datetime(panel["ts"]).dt.tz_localize(None).dt.normalize()
+
+
+class ContractStubs:
+    """Records every call; `table=None` allows every enabled strategy at 1.0; names in `missing` are reported
+    unavailable; `boom` names raise when called."""
+
+    def __init__(self, regime: str = "healthy_uptrend", table: dict[str, float] | None = None,
+                 missing: tuple[str, ...] = (), boom: tuple[str, ...] = ()) -> None:
+        self.regime, self.table, self.missing, self.boom = regime, table, set(missing), set(boom)
+        self.calls: dict[str, list[dict[str, Any]]] = {name: [] for name in nightly.CONTRACT}
+
+    def contract_fn(self, name: str) -> tuple[Any, str]:
+        if name in self.missing:
+            return None, f"swing_engine.{nightly.CONTRACT[name]} unavailable (stubbed out)"
+        return getattr(self, name), ""
+
+    def _call(self, name: str, **kw: Any) -> None:
+        self.calls[name].append(kw)
+        if name in self.boom:
+            raise RuntimeError(f"{name} exploded")
+
+    def market_breadth(self, panel: pd.DataFrame, *, exclude: Any = ()) -> pd.DataFrame:
+        self._call("market_breadth", symbols=sorted(panel["symbol"].unique()), exclude=tuple(exclude))
+        per_day = panel.groupby(_sessions(panel))["symbol"].nunique()
+        frame = pd.DataFrame(index=pd.DatetimeIndex(per_day.index, name="session"))
+        frame["pct_above_50"], frame["pct_above_200"] = 60.0, 55.0
+        frame["up4_count"], frame["down4_count"], frame["ratio_10d"] = 2, 1, 2.0
+        frame["new_highs"], frame["new_lows"] = 1, 0
+        frame["n_symbols"] = per_day.to_numpy()
+        return frame
+
+    def market_state(self, panel: pd.DataFrame, as_of: date, breadth: Any = None, settings: Any = None) -> StubState:
+        self._call("market_state", symbols=sorted(panel["symbol"].unique()), as_of=as_of, breadth=breadth)
+        return StubState(as_of=as_of, regime=self.regime, notes=["stubbed"])
+
+    def select_strategies(self, state: StubState, settings: Settings) -> dict[str, float]:
+        self._call("select_strategies", regime=state.regime)
+        if self.table is not None:
+            return dict(self.table)
+        return {n: 1.0 for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)}
+
+    def record_signals(self, store: Any, signals: list[Signal], taken: set[str], as_of: date, regime: str | None) -> int:
+        self._call("record_signals", signals=list(signals), taken=set(taken), as_of=as_of, regime=regime)
+        return len(signals)
+
+    def grade_signals(self, store: Any, as_of: date, horizons: tuple[int, ...] = (5, 10, 20)) -> int:
+        self._call("grade_signals", as_of=as_of)
+        return 0
+
+
+def install_contract(monkeypatch: pytest.MonkeyPatch, **kw: Any) -> ContractStubs:
+    stubs = ContractStubs(**kw)
+    monkeypatch.setattr(nightly, "contract_fn", stubs.contract_fn)
+    return stubs
+
+
+@pytest.fixture(autouse=True)
+def contract(monkeypatch: pytest.MonkeyPatch) -> ContractStubs:
+    return install_contract(monkeypatch)
+
+
+# ----------------------------------------------------------------------------------------------------------
 # full pipeline
 # ----------------------------------------------------------------------------------------------------------
-def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path) -> None:
+def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path, contract: ContractStubs) -> None:
     settings = make_settings(tmp_path)
     report = run_nightly(settings, no_secrets(), AS_OF, "sample", EQUITY, True, journal_root=tmp_path)
 
     assert [s.name for s in report.steps] == list(nightly.STEP_NAMES)
     assert statuses(report) == {
         "ingest": "ok", "float": "skip", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
-        "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert report.ok and report.failed == [] and report.dry_run and report.provider == "sample"
     assert "no broker" in report.step("positions").detail and "dry run" in report.step("execute").detail
@@ -137,6 +218,25 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path) -> None:
     assert not run_file(tmp_path, "reviews").exists()
     journal = tmp_path / "data" / "journal" / f"{AS_OF.isoformat()}.md"
     assert journal.exists() and report.files["journal"] == str(journal)
+    assert "## Market regime" in journal.read_text() and report.step("journal").data["regime_section"] is True
+
+    # routing: state saved, every enabled strategy allowed at 1.0 by the stub, multipliers handed to sizing
+    regime = json.loads(run_file(tmp_path, "regime").read_text())
+    assert regime["regime"] == "healthy_uptrend" and regime["market_state"]["spy_trend"] == "up"
+    assert regime["allowed"] == {n: 1.0 for n in settings.strategies} and regime["blocked"] == {}
+    assert report.regime == regime and report.files["regime"] == str(run_file(tmp_path, "regime"))
+    assert scan.data["market_regime"] == "healthy_uptrend" and scan.data["router"] == "ok"
+    assert size.data["risk_multipliers"] == regime["allowed"]
+    assert "SPY" in contract.calls["market_state"][0]["symbols"]  # the state reads the unscreened panel
+    # breadth over the screened panel, index ETFs excluded from the population, stored as table 'breadth'
+    assert contract.calls["market_breadth"][0]["exclude"] == nightly.INDEX_SYMBOLS
+    assert "breadth rows" in report.step("features").data["breadth"]
+    # shadow: every signal recorded, taken = strategy:symbol of the sized intents; matured ones graded
+    shadow = report.step("shadow")
+    recorded = contract.calls["record_signals"][0]
+    assert shadow.data["recorded"] == len(signals) and recorded["regime"] == "healthy_uptrend"
+    assert recorded["taken"] == {f"{i.strategy}:{i.symbol}" for i in intents}
+    assert contract.calls["grade_signals"] == [{"as_of": AS_OF}]
 
     report_path = run_file(tmp_path, "nightly")
     assert report.report_path == str(report_path) and report_path.exists()
@@ -144,8 +244,10 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path) -> None:
     assert saved["as_of"] == AS_OF.isoformat() and [s["name"] for s in saved["steps"]] == list(nightly.STEP_NAMES)
     assert saved["files"]["signals"] == str(run_file(tmp_path, "signals"))
 
+    assert saved["regime"]["regime"] == "healthy_uptrend"
     with Store(str(tmp_path / "data" / "swing.duckdb")) as store:
         assert store.count("bars") > 0 and store.count(nightly.PANEL_TABLE) == store.count("bars")
+        assert store.count(nightly.BREADTH_TABLE) > 0
 
 
 def test_second_run_is_incremental_and_size_skips_without_equity(tmp_path: Path) -> None:
@@ -279,13 +381,15 @@ def test_failures_are_isolated_and_the_report_is_still_written(tmp_path: Path) -
         report = run_nightly(settings, no_secrets(), AS_OF, "no_such_provider", EQUITY, True, store=store, journal_root=tmp_path)
     assert statuses(report) == {
         "ingest": "fail", "float": "skip", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
-        "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
     }  # fmt: skip
     assert "no_such_provider" in report.step("ingest").detail
     assert "no bars" in report.step("features").detail and "no signals" in report.step("size").detail
     assert report.failed == ["ingest", "features", "scan"] and not report.ok
     saved = json.loads(run_file(tmp_path, "nightly").read_text())
-    assert [s["status"] for s in saved["steps"]] == ["fail", "skip", "fail", "fail", "skip", "skip", "skip", "skip", "skip", "ok"]
+    assert [s["status"] for s in saved["steps"]] == [
+        "fail", "skip", "fail", "fail", "skip", "skip", "skip", "ok", "skip", "skip", "ok",
+    ]  # fmt: skip
 
 
 def test_strategy_failure_is_isolated_inside_scan(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -358,9 +462,15 @@ def test_float_step_refreshes_small_cap_candidates_incrementally(tmp_path: Path,
         store.write_bars(pd.DataFrame(rows))
         from datetime import UTC, datetime
 
-        report = nightly.NightlyReport(as_of=AS_OF, provider="sample", dry_run=False, started_at=datetime.now(UTC))
-        ctx = nightly._Context(settings=settings, secrets=no_secrets(), as_of=AS_OF, provider="sample", equity=None,
+        report = nightly.NightlyReport(as_of=AS_OF, provider="massive", dry_run=False, started_at=datetime.now(UTC))
+        ctx = nightly._Context(settings=settings, secrets=no_secrets(), as_of=AS_OF, provider="massive", equity=None,
                                dry_run=False, store=store, broker=None, review_client=None, journal_client=None,
                                journal_root=tmp_path, report=report)
+        ctx_sample = nightly._Context(settings=settings, secrets=no_secrets(), as_of=AS_OF, provider="sample",
+                                      equity=None, dry_run=False, store=store, broker=None, review_client=None,
+                                      journal_client=None, journal_root=tmp_path, report=report)
+        with pytest.raises(nightly.Skip, match="sample provider"):  # offline bars never trigger SEC lookups
+            nightly._step_float(ctx_sample)
+        assert calls == []
         detail, data = nightly._step_float(ctx)
         assert calls == [["TINY"]] and data["written"] == 1, detail

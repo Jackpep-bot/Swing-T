@@ -19,10 +19,44 @@
 
 ## features
 - `features.panel.build_panel(bars, market=None) -> df` (see feature-contract.md); `features.indicators.*`, etc. as pure functions.
+- `features.breadth.market_breadth(panel, *, exclude=()) -> df`: one row per session (index `session`, naive New York
+  midnight) with `BREADTH_COLUMNS` = pct_above_50, pct_above_200, up4_count, down4_count, ratio_10d, new_highs, new_lows,
+  n_symbols. Uses the panel's sma_50 / sma_200 / prev_close / high_52w / low_52w when present. 4% counts follow Stockbee
+  (|close/prev_close - 1| >= 4%, volume >= 100k and above the prior day); `ratio_10d` floors its denominator at 1 and is NaN
+  when the window has no 4% moves. Pass `exclude=(index ETFs,)` so SPY/QQQ/IWM are not counted as stocks. Also
+  `breadth_as_of(breadth, as_of) -> Series | None`, `ratio_10d(up, down, window=10)`, `empty_breadth()`.
+- `features.patterns2.add_patterns2(df) -> df` (df sorted by symbol, ts) appends `PATTERNS2_COLUMNS`: ema_20, adx_14,
+  plus_di_14, minus_di_14, adr_pct_20, atr_40, avg_vol_50d_prev, vol_ratio_50d_prev, gap_atr40, run_up_42, rs_63d_rank (0-1
+  percentile of the 63-bar return across the panel's symbols on the same session, so it depends on universe size). All causal.
+  `patterns2_frame(panel)` returns them (from the panel, else computed once per panel object and cached);
+  `as_of_view(panel, as_of, columns)`; geometry detectors `flat_base`, `cup_with_handle`, `flag`, `gap_consolidation`,
+  `prior_advance` look only at indices <= `end`. Callers that slice the panel per day (replay) should run `add_patterns2`
+  once up front.
 
 ## strategies
 - Each `Strategy.signals(panel, as_of, regime) -> list[Signal]`; use only panel columns from the contract; `score` for ranking;
-  compute `reward_risk`. Provide `default_params`. Register `@register("strategy", name)`.
+  compute `reward_risk`. Provide `default_params`. Register `@register("strategy", name)`. Optional
+  `should_exit(row, bars_held) -> bool` (rule exit decided at the close, filled next open by the position manager) and a
+  `max_hold_days` param (time stop).
+- Registered: `sr_bounce`, `sr_breakout`, `pullback_trend`, `breakout_52w`, `momentum_burst`, `rsi2_meanrev`,
+  `insider_cluster`, and the docs/methods.md 7b modules (patterns2 columns; enabled in settings.yaml for paper + shadow):
+  `pullback_holy_grail` (ADX > 30 rising, low touches ema_20, first close above the touch-bar high; target = prior swing high,
+  `min_reward_risk: 1.0`; time stop 10), `base_breakout` (cup-with-handle / flat base, close > pivot on >= 1.4x prior 50-day
+  volume; exit on a heavy-volume close below sma_50; 40), `power_gap` (gap >= 10% or >= 0.75x ATR40 on 2x volume, break of a
+  2-30 bar hold; exit on a close below sma_20; 60; `earnings_verified=0`, a "volume gap"), `qullamaggie_flag` (rs_63d_rank >=
+  0.98, >= 30% prior move, ADR >= 5%, 10-40 bar flag; exit on a close below sma_20; 60), `episodic_pivot` (day-2 / delayed EP:
+  day 2 closes above the day-1 high, fills day-3 open; exit on a close below sma_10 from bar 3; 60; `catalyst_verified=0`).
+  The three trailing strategies set target = entry + 10R only so `risk.sizing` can size them; their MA exit closes the trade.
+- `strategies.playbook` (market-regime router; not registered as a strategy): `MarketState(as_of, spy_trend: up|down|mixed,
+  vol_regime: low|normal|high, breadth: strong|neutral|weak, regime, notes, inputs: dict[str, float])`;
+  `market_state(panel, as_of, breadth=None, settings=None) -> MarketState` reads only rows dated <= as_of (SPY =
+  `settings.playbook.market_symbol`; falls back to market_trend_state / market_vol_regime columns; no market data -> choppy).
+  Regime = first match of high_vol_selloff, correction, healthy_uptrend, narrow_uptrend, choppy.
+  `select_strategies(state, settings=None) -> {strategy: multiplier}` (sorted; enabled strategies with multiplier > 0 only;
+  `playbook.enabled: false` -> every enabled strategy at 1.0). The table is `settings.playbook.regimes`
+  (`core.config.default_playbook_table()` mirrors settings.yaml); a strategy absent from a regime may not open there. Every
+  enabled strategy must appear in at least one regime or the router never selects it. Also `classify_trend`, `classify_vol`,
+  `classify_breadth`, `classify_regime`, `enabled_strategy_names`.
 
 ## research
 - `research.backtest.run_backtest(strategy, panel, start, end, risk_cfg, costs: CostModel, market=None) -> BacktestResult`
@@ -30,6 +64,21 @@
 - `research.metrics.summarize(result) -> dict` (trades, win_rate, avg_r, profit_factor, cagr, max_dd, sharpe, turnover, cost_drag)
   and `deflated_sharpe(sharpe, n_trials, n_obs, skew, kurt) -> float`, `probability_backtest_overfit(...)`.
 - `research.trials.log_trial(name, params, metrics, path='data/trials.jsonl')`, `trial_count(name|None)`.
+- `research.shadow`: forward outcomes of every signal, taken or not, keyed (strategy, symbol, as_of).
+  `record_signals(store, signals, taken, as_of, regime, *, source='live', table=SHADOW_TABLE) -> int` (upsert; keeps grades
+  already settled; `taken` holds `signal_key(sig)` = "strategy:symbol", client order ids or bare symbols);
+  `grade_signals(store, as_of, horizons=(5, 10, 20), *, table=SHADOW_TABLE) -> int` (bars strictly after the signal date and
+  <= as_of; stop first; next-open entry; gap through stop/target exits at the open; R before costs; per-horizon columns
+  `hit_5d`, `result_r_5d`, `mfe_r_5d`, `mae_r_5d`, `exit_date_5d`, ...; unsuffixed = longest horizon);
+  `shadow_report(store, since=None, group_by=('strategy', 'regime'), *, horizon=None, taken=None, table=SHADOW_TABLE) -> df`.
+  Tables: `SHADOW_TABLE = 'shadow_signals'` (nightly, `source=live`) and `REPLAY_SHADOW_TABLE = 'shadow_signals_replay'`
+  (replay, `source=replay`); the two never mix.
+- `research.replay.run_replay(settings, store, start, end, *, strategies=None, use_router=True, equity=100000, costs=None,
+  panel=None, record_shadow=True, shadow_table=REPLAY_SHADOW_TABLE, trials_path=DEFAULT_TRIALS_PATH) -> ReplayResult`: the
+  nightly + autopilot loop replayed session by session (router on rows <= D, all enabled strategies compete for slots, sizing
+  via `risk.sizing.size_signal_detail` with `risk_per_trade_pct x multiplier`, position-manager exits, next-open fills, costs);
+  logs a trial. `ReplayResult(equity_curve, trades (+ signal_date, regime, risk_mult), daily, by_strategy, by_regime, summary)`.
+  `build_replay_panel(store, start, end)`.
 - `research.ranker.train_ranker(panel, horizon=10, start, end) -> RankerModel` (LightGBM if importable else sklearn
   HistGradientBoostingRegressor), `.predict(panel_as_of) -> Series`; `research.cv.purged_walk_forward(dates, n_splits, purge, embargo)`.
 
@@ -58,6 +107,11 @@
 - `ops.nightly.run_nightly(settings, secrets, as_of, provider, equity, dry_run, *, store, broker, execute=None, ...)` and
   `run_cycle(settings, secrets, as_of, broker, dry_run, *, equity=None, store=None)`; orders leave only through the execute step,
   which holds entries when the review step failed or a signal was not reviewed (`execution.require_review_approval`).
+  Steps (`STEP_NAMES`): ingest, float (skipped on dry runs and the sample provider), features (screened universe + index ETFs +
+  held names; breadth to the `breadth` table), scan (playbook-routed; state saved to `runs/regime/<date>.json`; a playbook
+  error fails the scan), rank, size (`risk_per_trade_pct x multiplier`), review, shadow (`research.shadow` record + grade),
+  positions, execute, journal. Helpers: `compute_regime`, `route_strategies`, `screened_breadth`, `regime_name`,
+  `regime_markdown`, `contract_fn`.
 
 ## monitor
 - `monitor.service.run_monitor(settings, secrets, dry_run=False, feeds=None)`: asyncio supervisor; each Feed task -> queue ->
@@ -84,4 +138,8 @@
 ## cli (`swing`)
 status | doctor | ingest (--mode auto|grouped|per-symbol) | universe | features | scan | backtest | rank | review | size |
 paper (submit with --approve) | nightly (--execute/--no-execute, --broker) | autopilot (--dry-run) | monitor (run | report |
-replay | outcomes | rate <event_id> <useful|noise|traded>) | journal | trials.
+replay | outcomes | rate <event_id> <useful|noise|traded>) | journal | trials | regime (--as-of) | replay (--start, --end,
+-s/--strategy, --no-router, --equity, --cost k=v; saves `runs/replay/<start>_<end>.json`, ledger `shadow_signals_replay`) |
+shadow report (--since, --by, --horizon, --taken/--untaken, --replay, --all-columns).
+`scan` and `size` are not routed by the playbook (they show every enabled strategy); `nightly` is, and `autopilot`
+re-applies the multipliers saved in `runs/regime/<date>.json` for its signals day when that file exists.

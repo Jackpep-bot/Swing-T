@@ -35,6 +35,16 @@ strategies:                    # name -> {enabled, params}; names come from swin
   momentum_burst:   {enabled: false}   # logged as a feature; weak standalone evidence
   rsi2_meanrev:     {enabled: true, min_reward_risk: 0.0}   # rule exit (close > sma_10 / rsi_2 > 70), no fixed target: skip the 2:1 floor
   insider_cluster:  {enabled: false}   # needs EDGAR Form 4 ingest
+  # docs/methods.md 7b P1 modules: "register enabled: false" until docs/gates.md is met (methods.md 7, gates.md
+  # step 4). shadow_only: the nightly scans them in every regime and records each signal in the shadow ledger, but
+  # never sizes, reviews or executes them. episodic_pivot and power_gap also stay out of execution until
+  # point-in-time earnings dates exist (methods.md 7b #3, #5: catalyst / earnings required). Families: pullback =
+  # pullback_holy_grail; breakout = base_breakout, qullamaggie_flag, power_gap, episodic_pivot.
+  pullback_holy_grail: {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # target = prior swing high (doc 01)
+  base_breakout:       {enabled: false, shadow_only: true}   # +20% target vs 7% stop ~ 2.9R
+  power_gap:           {enabled: false, shadow_only: true}   # "volume gap" (no earnings dates); sma_20 trail
+  qullamaggie_flag:    {enabled: false, shadow_only: true}   # sma_20 close trail; 10R reference target
+  episodic_pivot:      {enabled: false, shadow_only: true}   # day-2 delayed EP, catalyst_verified=0; sma_10 trail
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]
@@ -91,3 +101,44 @@ execution:                     # execution.autopilot / execution.position_manage
   broker: alpaca               # nightly reads equity/positions here; ALPACA_PAPER=true keeps it on paper
   nightly_execute: true        # nightly runs positions -> execute (never with --dry-run)
   ledger_file: state/orders.sqlite
+
+playbook:                      # strategies.playbook market-regime router; see docs/methods/06-breadth-regime-filters.md
+  enabled: true                # false = every enabled strategy at full risk (router off)
+  market_symbol: SPY           # index trend filter: SPY vs sma_50 / sma_200 and the sma_50 slope (methods.md 2a)
+  breadth_strong_pct_above_50: 60.0   # % above the 50-day > 60: a thrust note only, never "strong" on its own
+  breadth_weak_pct_above_50: 40.0     # < 40 weak (Oct 6 2026: 26.9% across 4,806 US stocks)
+  breadth_confirm_pct_above_50: 50.0  # Keller's line: a ratio-led "strong" read also needs >= 50% above the 50-day
+  breadth_strong_ratio_10d: 2.0       # Stockbee 10-day 4% up/down ratio >= 2 = long-side swing trading favoured
+  breadth_weak_ratio_10d: 0.5         # <= 0.5 = start of a bearish move (doc 06 D)
+  breadth_on_pct_above_200: 60.0      # Hill slow line: on above 60, off below 40 (hysteresis, doc 06 C); "strong"
+  breadth_off_pct_above_200: 40.0     # needs ratio >= 2 or this line on, plus the 50% line (methods.md 7a #1)
+  min_breadth_symbols: 20      # breadth from fewer names reads as unavailable (neutral)
+  vol_low_pct: 0.25            # SPY vol_21d percentile within its trailing vol_lookback bars (features/regime.py bands)
+  vol_high_pct: 0.75
+  vol_lookback: 252
+  near_high_pct: 5.0           # SPY within 5% of its 52w high + weak breadth -> "bifurcated market" note (doc 06 sig. 3)
+  regimes:                     # regime -> {strategy: risk multiplier 0-1}; absent = not allowed (methods.md 0, 3b, 3c)
+    healthy_uptrend:           # SPY uptrend + strong participation: breakouts allowed
+      breakout_52w: 1.0
+      sr_breakout: 1.0
+      momentum_burst: 1.0
+      pullback_trend: 1.0
+      sr_bounce: 1.0
+      rsi2_meanrev: 1.0
+      insider_cluster: 1.0
+      pullback_holy_grail: 1.0   # methods.md 7b P1 modules; breakout families only with confirmed participation
+      base_breakout: 1.0
+      power_gap: 1.0
+      qullamaggie_flag: 1.0
+      episodic_pivot: 1.0
+    narrow_uptrend:            # SPY uptrend, weak/neutral breadth (Oct 2026): leaders-only pullbacks, reduced size
+      pullback_trend: 0.5
+      pullback_holy_grail: 0.5   # pullback family with the RS 96+ / near-52w-high leader gate (methods.md 6.1)
+      # sr_bounce left out: no RS / leader filter and it accepts trend_state 0 (methods.md 3b, 3c)
+      rsi2_meanrev: 0.75
+      insider_cluster: 0.5
+    choppy:                    # SPY above its 200-day without a clean trend: mean reversion only
+      rsi2_meanrev: 0.75
+    correction: {}             # SPY below its 200-day or in a downtrend: no new longs
+    high_vol_selloff:          # high SPY vol and SPY below its 50-day: small RSI-2 only
+      rsi2_meanrev: 0.25

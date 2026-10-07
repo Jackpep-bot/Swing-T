@@ -1,8 +1,10 @@
 """`swing nightly`: the unattended evening pipeline, one step per CLI command, each timed and isolated.
 
-ingest (incremental) -> features -> scan -> rank predict (when a model exists) -> size (when equity is known)
--> review (ANTHROPIC key, not dry-run) -> positions (exit decisions, when a broker is injected) -> execute
-(execution.autopilot, when enabled) -> journal. A failing step is recorded and the pipeline carries on with
+ingest (incremental) -> features (liquidity-screened panel + market breadth) -> scan (market state ->
+playbook router -> allowed strategies) -> rank predict (when a model exists) -> size (when equity is known; the
+router's per-strategy multiplier scales risk_per_trade_pct) -> review (ANTHROPIC key, not dry-run) -> shadow
+(every signal into the shadow ledger, taken or not, and grading of matured ones) -> positions (exit decisions,
+when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal. A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
 
@@ -21,6 +23,15 @@ Fail-closed entry gates in `execute` (exits always still run): entries are held 
 (nightly), when the saved review outcome for the signals' day says the review failed or never finished
 (`runs/review_status/<date>.json`, written by the review step; `run_cycle`), and when the positions step
 failed (an exception there means no exit decisions were made, so no new risk is added either).
+
+Regime routing (docs/methods.md sections 0 and 2a: gate first, then select, then trigger): the scan computes
+`strategies.playbook.market_state` for `as_of`, runs only the strategies `select_strategies` allows, saves the
+state to `runs/regime/<date>.json` (also on `NightlyReport.market_state` and in the journal), and the size step
+scales each strategy's risk by its multiplier; `run_cycle` re-applies the saved multipliers. The breadth,
+playbook and shadow modules are loaded lazily through `contract_fn`. The router is a veto layer and fails
+closed: a playbook that raises (at import or when called), or that is absent, fails the scan step, so nothing
+is sized (exits still run); `playbook.enabled: false` is the explicit way to run every enabled strategy at
+1.0. Only an absent shadow module merely skips its step.
 """
 from __future__ import annotations
 
@@ -58,12 +69,18 @@ RANK_KIND = "rank"
 EXITS_KIND = "exits"
 CYCLE_KIND = "cycle"
 REVIEW_STATUS_KIND = "review_status"  # {"status": running|ok|skip|fail, "detail": ...} per signals day
+REGIME_KIND = "regime"  # {"market_state": MarketState, "allowed": {strategy: multiplier}, "blocked": {...}}
 EARNINGS_TABLE = "earnings"  # optional store table (symbol, report_date) for the close-before-earnings rule
 PANEL_TABLE = "panel"
 PANEL_KEYS = ["symbol", "ts"]
 SYMBOLS_TABLE = "symbols"
 RANKER_FILENAME = "ranker.pkl"
 MARKET_SYMBOL = "SPY"
+BREADTH_TABLE = "breadth"  # features.breadth.market_breadth over the screened panel, one row per session
+BREADTH_KEY = "date"
+# Always in the panel even when the liquidity screen drops them (ETFs fail the common-stock filter): the market
+# gauges docs/methods.md 2a names (SPY vs its 200-day, QQQ vs its 20 EMA) plus IWM for small-cap participation.
+INDEX_SYMBOLS = ("SPY", "QQQ", "IWM")
 RANK_FEATURE = "rank_score"  # Signal.features key the rank step fills (model output, never LLM output)
 
 # ---- windows -----------------------------------------------------------------------------------------------
@@ -72,10 +89,29 @@ PANEL_WARMUP_CALENDAR_DAYS = 400  # covers sma_200 / mom_12_1 before the first s
 REGIME_COLUMNS = ("market_trend_state", "market_vol_regime")
 ERROR_PREVIEW_CHARS = 200
 
-STEP_NAMES = ("ingest", "float", "features", "scan", "rank", "size", "review", "positions", "execute", "journal")
+STEP_NAMES = (
+    "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
+)
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
 ABORTED_MODE = "aborted"  # execution.autopilot.AutopilotMode.ABORTED
+
+# ---- contract modules written alongside this one: loaded lazily, a missing one skips only its part --------
+CONTRACT: dict[str, str] = {
+    "market_breadth": "features.breadth.market_breadth",
+    "market_state": "strategies.playbook.market_state",
+    "select_strategies": "strategies.playbook.select_strategies",
+    "record_signals": "research.shadow.record_signals",
+    "grade_signals": "research.shadow.grade_signals",
+}
+# playbook multipliers only scale risk down, never above risk.risk_per_trade_pct (docs/methods.md 2e: same risk
+# every trade; 3c: "reduced size" is the regime's lever)
+MULTIPLIER_MIN, MULTIPLIER_MAX = 0.0, 1.0
+TAKEN_KEY_SEP = ":"  # research.shadow `taken` keys are "strategy:symbol" (research.shadow.signal_key)
+# strategies.<name>: {enabled: false, shadow_only: true} -> scanned every night and recorded in the shadow ledger
+# (never sized, reviewed or executed): how a strategy collects evidence before docs/gates.md lets it trade
+SHADOW_ONLY_KEY = "shadow_only"
+STRATEGY_META_KEYS = frozenset({"enabled", SHADOW_ONLY_KEY})
 
 
 class StepStatus(StrEnum):
@@ -102,6 +138,7 @@ class NightlyReport(BaseModel):
     steps: list[StepResult] = Field(default_factory=list)
     files: dict[str, str] = Field(default_factory=dict)  # kind -> path written during this run
     report_path: str | None = None
+    regime: dict[str, Any] | None = None  # the runs/regime/<date>.json payload: market_state, allowed, blocked
 
     @property
     def ok(self) -> bool:
@@ -201,6 +238,17 @@ def _latest_rows(frame: pd.DataFrame, as_of: date) -> pd.DataFrame:
     return sliced.loc[ts == ts.max()]
 
 
+def _latest_session(frame: pd.DataFrame | None, as_of: date) -> date | None:
+    """Session date of the last bar on or before `as_of` (the bar the strategies' `rows_as_of` scans). A run
+    before the open (06:30 ET, `as_of` = today) only has the previous session in the store."""
+    if frame is None or len(frame) == 0 or "ts" not in frame.columns:
+        return None
+    sliced = _on_or_before(frame, as_of)
+    if sliced.empty:
+        return None
+    return _naive_ts(sliced).max().date()
+
+
 def _market_slice(bars: pd.DataFrame) -> pd.DataFrame | None:
     if "symbol" not in bars.columns:
         return None
@@ -246,11 +294,17 @@ def _enabled_strategies(settings: Settings) -> list[str]:
     return names or registry.names("strategy")
 
 
+def _shadow_only_strategies(settings: Settings) -> list[str]:
+    """Disabled strategies flagged `shadow_only`: scanned and recorded in the shadow ledger, never traded."""
+    return [n for n, cfg in settings.strategies.items()
+            if not (cfg or {}).get("enabled", True) and (cfg or {}).get(SHADOW_ONLY_KEY)]
+
+
 def _strategy_params(settings: Settings, name: str) -> dict[str, Any]:
     cfg = settings.strategies.get(name) or {}
     if isinstance(cfg.get("params"), dict):
         return dict(cfg["params"])
-    return {k: v for k, v in cfg.items() if k != "enabled"}
+    return {k: v for k, v in cfg.items() if k not in STRATEGY_META_KEYS}
 
 
 def _load_ranker(path: Path) -> Any:
@@ -270,6 +324,71 @@ def _account_equity(account: dict[str, Any]) -> float | None:
         if value is not None:
             return float(value)
     return None
+
+
+def contract_fn(name: str) -> tuple[Any | None, str]:
+    """`(function, "")` for a `CONTRACT` name, or `(None, reason)` only when its module is genuinely absent
+    (ModuleNotFoundError naming that very module). Anything else raised while importing it (the playbook's
+    regime-drift guard, a missing dependency, a syntax error) or a missing attribute propagates, so a broken
+    router fails the step instead of passing for "not installed". Tests monkeypatch this one function to stub
+    the breadth / playbook / shadow modules."""
+    dotted = CONTRACT[name]
+    module_path, _, attr = dotted.rpartition(".")
+    module_name = f"swing_engine.{module_path}"
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as e:
+        if e.name != module_name:  # the module exists but one of its imports does not: broken, not absent
+            raise
+        return None, f"swing_engine.{dotted} unavailable ({_error_text(e)})"
+    return getattr(module, attr), ""
+
+
+def _jsonable(obj: Any) -> Any:
+    """Plain JSON-able form of a pydantic model / mapping / enum (MarketState is a pydantic model)."""
+    if obj is None:
+        return None
+    if isinstance(obj, BaseModel):
+        return obj.model_dump(mode="json")
+    if isinstance(obj, dict):
+        return json.loads(json.dumps(obj, default=str))
+    return json.loads(json.dumps(getattr(obj, "__dict__", str(obj)), default=str))
+
+
+def regime_name(state: Any) -> str | None:
+    """`MarketState.regime` as plain text (it may be an enum or a Literal string)."""
+    value = getattr(state, "regime", None)
+    if value is None and isinstance(state, dict):
+        value = state.get("regime")
+    return None if value is None else str(getattr(value, "value", value))
+
+
+def route_strategies(
+    settings: Settings, multipliers: dict[str, Any], enabled: list[str] | None = None
+) -> tuple[dict[str, float], dict[str, str]]:
+    """Split the enabled strategies by `select_strategies`' table: `allowed` {name: multiplier clipped to
+    [MULTIPLIER_MIN, MULTIPLIER_MAX]} and `blocked` {name: reason}. A name absent from the table, or with a
+    multiplier of zero, is not allowed (docs/methods.md 2a: the regime is a veto layer)."""
+    names = enabled if enabled is not None else _enabled_strategies(settings)
+    allowed: dict[str, float] = {}
+    blocked: dict[str, str] = {}
+    for name in names:
+        raw = multipliers.get(name)
+        if raw is None:
+            blocked[name] = "not in the playbook table for this regime"
+            continue
+        mult = min(max(float(raw), MULTIPLIER_MIN), MULTIPLIER_MAX)
+        if mult <= MULTIPLIER_MIN:
+            blocked[name] = "multiplier 0 in this regime"
+        else:
+            allowed[name] = mult
+    return allowed, blocked
+
+
+def _scaled_risk(risk_cfg: Any, multiplier: float) -> Any:
+    if multiplier >= MULTIPLIER_MAX:
+        return risk_cfg
+    return risk_cfg.model_copy(update={"risk_per_trade_pct": risk_cfg.risk_per_trade_pct * multiplier})
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -298,6 +417,12 @@ class _Context:
     exit_actions: list[Any] = field(default_factory=list)
     stale_signals: str | None = None  # why saved signals were not sized (run_cycle only)
     review_hold: str | None = None  # why entries must be held: the saved review failed/never finished (run_cycle)
+    universe: list[str] | None = None  # liquidity-screened at as_of by the features step (None = not screened)
+    breadth: pd.DataFrame | None = None  # features.breadth.market_breadth over the screened panel
+    market_state: Any | None = None  # strategies.playbook.MarketState for as_of
+    risk_multipliers: dict[str, float] | None = None  # allowed strategy -> multiplier; None = no routing (full risk)
+    signal_day: date | None = None  # session of the bars the scan computed signals from (<= as_of)
+    shadow_signals: list[Signal] = field(default_factory=list)  # shadow_only strategies: recorded, never sized
 
     @property
     def history_start(self) -> date:
@@ -356,18 +481,174 @@ def _step_ingest(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return detail, data
 
 
+def _store_symbols_table(store: Any) -> pd.DataFrame | None:
+    has_table = getattr(store, "has_table", None)
+    try:
+        if callable(has_table) and not has_table(SYMBOLS_TABLE):
+            return None
+        symbols = store.read_table(SYMBOLS_TABLE)
+    except Exception as e:  # optional reference table: without it the screen is liquidity-only
+        log.info("symbols_table_unavailable", error=str(e))
+        return None
+    if symbols is None or len(symbols) == 0 or "symbol" not in symbols.columns:
+        return None
+    return symbols
+
+
+def _liquidity_only_universe(ctx: _Context) -> list[str] | None:
+    """`data.universe.liquidity_screen` over the store's lookback window (as-traded through the splits table)
+    when there is no `symbols` reference table to drive `build_universe` (a bare bars import)."""
+    screen = _try_load("data.universe.liquidity_screen")
+    window_fn = _try_load("data.universe.lookback_window")
+    if screen is None or window_fn is None:
+        return None
+    start, end = window_fn(ctx.as_of)
+    window = ctx.store.read_bars(None, start, end)
+    if window is None or len(window) == 0:
+        return []
+    has_table = getattr(ctx.store, "has_table", None)
+    splits = ctx.store.read_table("splits") if callable(has_table) and has_table("splits") else None
+    stats = screen(window, ctx.settings.universe, ctx.as_of, splits)
+    passed = stats.loc[stats["passes"].astype(bool)].sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])
+    return sorted(passed["symbol"].astype(str).head(ctx.settings.universe.max_symbols).tolist())
+
+
+def _screen_universe(ctx: _Context) -> tuple[list[str] | None, str]:
+    """Symbols passing the universe screen at `as_of` (static_symbols, else build_universe on the store's
+    reference table and liquidity window with split un-adjustment, else a liquidity-only screen)."""
+    build_universe = _try_load("data.universe.build_universe")
+    if build_universe is None:
+        return None, "data.universe unavailable"
+    if ctx.settings.universe.static_symbols:
+        return sorted({s.upper() for s in ctx.settings.universe.static_symbols}), "static_symbols"
+    symbols = _store_symbols_table(ctx.store)
+    if symbols is None:
+        return _liquidity_only_universe(ctx), "liquidity screen (no symbols table)"
+    universe = _call_supported(build_universe, _StoreListing(symbols), ctx.settings, ctx.as_of, store=ctx.store)
+    return sorted(str(s) for s in universe), "build_universe"
+
+
+def _held_symbols(ctx: _Context) -> tuple[set[str], list[str]]:
+    """Symbols held or with open orders (broker positions and open orders, plus the ledger's pending rows):
+    the positions step needs their panel rows even when they no longer pass the screen. Also returns the
+    broker sources that failed: the caller must then not restrict the panel (a filled position is terminal in
+    the ledger, so only the broker knows it is still held)."""
+    held: set[str] = set()
+    failed: list[str] = []
+    if ctx.broker is not None:
+        for fetch in ("positions", "open_orders"):
+            try:
+                for item in getattr(ctx.broker, fetch)() or []:
+                    sym = item.get("symbol") if isinstance(item, dict) else getattr(item, "symbol", None)
+                    if sym:
+                        held.add(str(sym).upper())
+            except Exception as e:  # noqa: BLE001 - the positions step reports broker trouble itself
+                failed.append(fetch)
+                log.warning("features_held_symbols_failed", source=fetch, error=_error_text(e))
+    ledger_path = _resolve(ctx.settings.execution.ledger_file)
+    ledger_cls = _try_load("execution.ledger.OrderLedger")
+    if ledger_cls is not None and ledger_path.exists():
+        ledger = None
+        try:
+            ledger = ledger_cls(ledger_path)
+            held.update(str(r["symbol"]).upper() for r in ledger.pending() if r.get("symbol"))
+        except Exception as e:  # noqa: BLE001
+            log.warning("features_ledger_symbols_failed", error=_error_text(e))
+        finally:
+            if ledger is not None:
+                ledger.close()
+    return held, failed
+
+
+def screened_breadth(
+    panel: pd.DataFrame, universe: list[str] | None = None, splits: pd.DataFrame | None = None
+) -> tuple[pd.DataFrame | None, str]:
+    """`features.breadth.market_breadth` over the panel rows of `universe` (all rows when None), with the index
+    ETFs left out of the population and the 4% days' share floor on as-traded volume when `splits` (the
+    store's splits table) is given; `(None, reason)` when the breadth module is unavailable."""
+    market_breadth, why = contract_fn("market_breadth")
+    if market_breadth is None:
+        return None, why
+    screened = panel if universe is None else panel.loc[panel["symbol"].isin(universe)]
+    extra = {"splits": splits} if splits is not None else {}
+    return _call_supported(market_breadth, screened, exclude=INDEX_SYMBOLS, **extra), ""
+
+
+def _store_splits(store: Any) -> pd.DataFrame | None:
+    has_table = getattr(store, "has_table", None)
+    try:
+        if not callable(has_table) or not has_table("splits"):
+            return None
+        splits = store.read_table("splits")
+    except Exception as e:  # optional input: without it the share floor reads adjusted volume
+        log.info("splits_table_unavailable", error=str(e))
+        return None
+    return splits if splits is not None and len(splits) else None
+
+
+def _write_breadth(ctx: _Context, panel: pd.DataFrame) -> tuple[pd.DataFrame | None, str]:
+    """`features.breadth.market_breadth` over the screened panel, upserted into the `breadth` table. Sessions
+    already stored keep their earlier value (each was computed on that night's universe), except the latest
+    stored session, which is recomputed. The first run writes only its latest session: earlier sessions computed
+    on today's screen would leave out every name delisted or illiquid since (survivor-only history)."""
+    breadth, why = screened_breadth(panel, ctx.universe, _store_splits(ctx.store))
+    if why:
+        return None, why
+    if breadth is None or len(breadth) == 0:
+        return breadth, "market_breadth returned no rows"
+    frame = breadth.rename_axis(BREADTH_KEY).reset_index()
+    frame[BREADTH_KEY] = pd.to_datetime(frame[BREADTH_KEY]).dt.date
+    has_table = getattr(ctx.store, "has_table", None)
+    last = None
+    if callable(has_table) and has_table(BREADTH_TABLE):
+        stored = ctx.store.read_table(BREADTH_TABLE)
+        if len(stored) and BREADTH_KEY in stored.columns:
+            last = pd.to_datetime(stored[BREADTH_KEY]).dt.date.max()
+    frame = frame.loc[frame[BREADTH_KEY] >= (last if last is not None else frame[BREADTH_KEY].max())]
+    written = ctx.store.write_table(BREADTH_TABLE, frame, [BREADTH_KEY])
+    return breadth, f"{written} breadth rows"
+
+
 def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """Panel for the screened universe only (~12,000 grouped-daily tickers in the store, ~1,500 kept), plus the
+    index ETFs and anything held or with an open order; full history for each kept symbol."""
     start = ctx.history_start - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS)
-    bars = ctx.store.read_bars(None, start, ctx.as_of)
+    universe, how = _screen_universe(ctx)
+    ctx.universe = universe
+    held, held_failed = _held_symbols(ctx)
+    keep: list[str] | None = None
+    if universe is not None and not held_failed:
+        keep = sorted(set(universe) | set(INDEX_SYMBOLS) | held)
+    elif universe is not None:  # holdings unknown: keep every symbol so a held name never loses its exit checks
+        log.warning("features_unrestricted_panel", reason=f"broker {held_failed} failed")
+    store_symbols = getattr(ctx.store, "symbols", None)
+    in_store = len(store_symbols()) if callable(store_symbols) else None
+    log.info("features_universe", how=how, store_symbols=in_store, screened=None if universe is None else len(universe),
+             held=len(held), kept=None if keep is None else len(keep))
+    bars = ctx.store.read_bars(keep, start, ctx.as_of)
     if bars is None or len(bars) == 0:
         raise RuntimeError(f"no bars in the store for {start}..{ctx.as_of}; ingest first")
     build_panel = _load("features.panel.build_panel")
     panel = build_panel(bars, _market_slice(bars))
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
+    try:
+        ctx.breadth, breadth_note = _write_breadth(ctx, panel)
+    except Exception as e:  # breadth is an input to the router, not to the panel: keep the panel step ok
+        ctx.breadth, breadth_note = None, f"breadth failed: {_error_text(e)}"
+        log.error("breadth_failed", error=breadth_note)
     symbols = int(panel["symbol"].nunique()) if "symbol" in panel.columns else 0
-    data = {"rows": int(len(panel)), "symbols": symbols, "columns": int(len(panel.columns))}
-    return f"{data['rows']:,} rows x {data['columns']} columns for {symbols} symbols", data
+    data = {
+        "rows": int(len(panel)), "symbols": symbols, "columns": int(len(panel.columns)), "universe_how": how,
+        "store_symbols": in_store, "screened": None if universe is None else len(universe), "held": sorted(held),
+        "breadth": breadth_note, "held_fetch_failed": held_failed,
+    }
+    detail = f"{data['rows']:,} rows x {data['columns']} columns for {symbols} symbols"
+    if universe is not None:
+        detail += f" ({len(universe)} screened via {how}{f' of {in_store}' if in_store else ''}, {len(held)} held)"
+    if held_failed and universe is not None:
+        detail += f"; panel not restricted to the screen (broker {', '.join(held_failed)} failed)"
+    return detail + f"; {breadth_note}", data
 
 
 def _panel_for(ctx: _Context) -> pd.DataFrame:
@@ -381,30 +662,106 @@ def _panel_for(ctx: _Context) -> pd.DataFrame:
 
 
 def _screened(ctx: _Context, panel: pd.DataFrame) -> tuple[pd.DataFrame, int | None]:
-    """Point-in-time universe screen from the store's `symbols` table (None when there is nothing to screen)."""
-    build_universe = _try_load("data.universe.build_universe")
-    if build_universe is None:
-        return panel, None
-    try:
-        symbols = ctx.store.read_table(SYMBOLS_TABLE)
-    except Exception as e:
-        log.info("symbols_table_unavailable", error=str(e))
-        return panel, None
-    if symbols is None or len(symbols) == 0 or "symbol" not in symbols.columns:
-        return panel, None
-    universe = list(_call_supported(build_universe, _StoreListing(symbols), ctx.settings, ctx.as_of, bars=panel))
+    """The panel restricted to the universe screened by the features step, else screened here from the store's
+    `symbols` table (None when there is nothing to screen)."""
+    universe = ctx.universe
+    if universe is None:
+        build_universe = _try_load("data.universe.build_universe")
+        symbols = _store_symbols_table(ctx.store) if build_universe is not None else None
+        if build_universe is None or symbols is None:
+            return panel, None
+        universe = list(
+            _call_supported(build_universe, _StoreListing(symbols), ctx.settings, ctx.as_of, bars=panel, store=ctx.store)
+        )
     kept = panel.loc[panel["symbol"].isin(universe)]
     if kept.empty:
         raise RuntimeError(f"no panel rows for the {len(universe)}-name universe as of {ctx.as_of}")
     return kept, len(universe)
 
 
+def _breadth_for(ctx: _Context, panel: pd.DataFrame) -> pd.DataFrame | None:
+    """This run's breadth (features step), else recomputed over the screened panel; None without the module."""
+    if ctx.breadth is not None:
+        return ctx.breadth
+    return screened_breadth(panel, None, _store_splits(ctx.store))[0]
+
+
+def compute_regime(
+    settings: Settings, panel: pd.DataFrame, as_of: date, *, breadth: pd.DataFrame | None = None,
+    enabled: list[str] | None = None,
+) -> tuple[Any | None, dict[str, Any] | None, str]:
+    """`(MarketState, payload, note)` for `as_of`. `payload` (saved as runs/regime/<date>.json) holds the state,
+    `allowed` {strategy: multiplier} and `blocked` {strategy: reason}, or no `allowed` key when
+    `select_strategies` is unavailable. `(None, None, reason)` when `market_state` is unavailable. Exceptions
+    from the playbook propagate: a broken router must not fall back to running every strategy."""
+    market_state, why = contract_fn("market_state")
+    if market_state is None:
+        return None, None, why
+    state = _call_supported(market_state, panel, as_of, breadth=breadth, settings=settings)
+    payload: dict[str, Any] = {"as_of": as_of.isoformat(), "regime": regime_name(state), "market_state": _jsonable(state)}
+    select_strategies, why = contract_fn("select_strategies")
+    if select_strategies is None:
+        return state, payload, why
+    allowed, blocked = route_strategies(settings, dict(select_strategies(state, settings) or {}), enabled)
+    payload.update(allowed=allowed, blocked=blocked)
+    return state, payload, ""
+
+
 def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    # an empty list first: a scan that fails (broken or missing router, no panel) must not leave `swing autopilot`
+    # sizing an older day's saved signals as the latest ones
+    ctx.save(SIGNALS_KIND, [])
     names = _enabled_strategies(ctx.settings)
     if not names:
         raise Skip("no strategies enabled in settings and none registered")
-    panel, universe_size = _screened(ctx, _panel_for(ctx))
+    full = _panel_for(ctx)
+    panel, universe_size = _screened(ctx, full)
+    ctx.signal_day = _latest_session(panel, ctx.as_of)
     regime = _regime(panel, ctx.as_of)
+    state, payload, router_note = compute_regime(
+        ctx.settings, full, ctx.as_of, breadth=_breadth_for(ctx, panel), enabled=names
+    )
+    ctx.market_state = state
+    if payload is not None:
+        path = _save_json(ctx.file(REGIME_KIND), payload)
+        ctx.report.files[REGIME_KIND] = str(path)
+        ctx.report.regime = payload
+    if payload is None or "allowed" not in payload:
+        # fail closed: without the router every enabled strategy (including ones enabled only so the router can
+        # see them) would run at full risk; playbook.enabled: false is the explicit opt-out
+        raise RuntimeError(
+            f"strategy routing unavailable ({router_note}); no strategies scanned "
+            "(set playbook.enabled: false to run every enabled strategy at 1.0)"
+        )
+    ctx.risk_multipliers = dict(payload["allowed"])
+    names = [n for n in names if n in ctx.risk_multipliers]
+    signals, per_strategy, failures = _run_strategies(ctx, names, panel, regime)
+    if failures and len(failures) == len(names):
+        raise RuntimeError(f"every strategy failed: {failures}")
+    signals.sort(key=lambda s: s.score, reverse=True)
+    ctx.signals = signals
+    ctx.save(SIGNALS_KIND, signals)  # saved even when empty: `swing autopilot` must not size an older day's list
+    # shadow-only strategies: every regime (the ledger grades them by regime), kept out of ctx.signals so they are
+    # never sized, reviewed or executed; a failure here never fails the scan
+    shadow, shadow_counts, shadow_failures = _run_strategies(ctx, _shadow_only_strategies(ctx.settings), panel, regime)
+    ctx.shadow_signals = shadow
+    data = {
+        "signals": len(signals), "per_strategy": per_strategy, "failures": failures, "universe": universe_size,
+        "regime": regime, "market_regime": regime_name(state), "allowed": ctx.risk_multipliers,
+        "blocked": (payload or {}).get("blocked"), "router": router_note or "ok",
+        "shadow_only": shadow_counts, "shadow_only_failures": shadow_failures,
+    }
+    detail = f"{len(signals)} signals from {len(per_strategy)} strategies" + (f"; failed: {sorted(failures)}" if failures else "")
+    if shadow_counts or shadow_failures:
+        detail += f"; {len(shadow)} shadow-only signals from {len(shadow_counts)} strategies"
+    routed = ", ".join(f"{n} x{m:g}" for n, m in ctx.risk_multipliers.items()) or "none"
+    detail += f"; regime {regime_name(state)}: allowed {routed}"
+    return detail, data
+
+
+def _run_strategies(
+    ctx: _Context, names: list[str], panel: pd.DataFrame, regime: dict[str, Any] | None
+) -> tuple[list[Signal], dict[str, int], dict[str, str]]:
     signals: list[Signal] = []
     failures: dict[str, str] = {}
     per_strategy: dict[str, int] = {}
@@ -418,14 +775,7 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
             continue
         per_strategy[name] = len(found)
         signals.extend(found)
-    if failures and len(failures) == len(names):
-        raise RuntimeError(f"every strategy failed: {failures}")
-    signals.sort(key=lambda s: s.score, reverse=True)
-    ctx.signals = signals
-    ctx.save(SIGNALS_KIND, signals)
-    data = {"signals": len(signals), "per_strategy": per_strategy, "failures": failures, "universe": universe_size, "regime": regime}
-    detail = f"{len(signals)} signals from {len(per_strategy)} strategies" + (f"; failed: {sorted(failures)}" if failures else "")
-    return detail, data
+    return signals, per_strategy, failures
 
 
 def _step_rank(ctx: _Context) -> tuple[str, dict[str, Any]]:
@@ -475,21 +825,30 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
     floor_for = _try_load("risk.sizing.strategy_min_reward_risk")
     intents: list[OrderIntent] = []
     skipped: dict[str, str] = {}
+    multipliers = ctx.risk_multipliers  # None = unrouted: every strategy at full risk_per_trade_pct
     for s in ctx.signals:
+        if multipliers is not None and s.strategy not in multipliers:
+            skipped[f"{s.strategy}:{s.symbol}"] = "strategy not allowed by the playbook in this regime"
+            continue
+        risk_cfg = _scaled_risk(ctx.settings.risk, MULTIPLIER_MAX if multipliers is None else multipliers[s.strategy])
         if size_detail is not None:
             floor = floor_for(ctx.settings.strategies, s.strategy) if floor_for is not None else None
             extra = {"min_reward_risk": floor} if floor is not None else {}
-            intent, reason = size_detail(s, equity, ctx.settings.risk, positions, **extra)
+            intent, reason = size_detail(s, equity, risk_cfg, positions, **extra)
         else:
-            intent, reason = size_signal(s, equity, ctx.settings.risk, positions), "rejected by risk.sizing"
+            intent, reason = size_signal(s, equity, risk_cfg, positions), "rejected by risk.sizing"
         if intent is not None:
             intents.append(intent)
         else:
             skipped[f"{s.strategy}:{s.symbol}"] = str(reason)
     ctx.intents = intents
     ctx.save(INTENTS_KIND, intents)
-    data = {"equity": float(equity), "intents": len(intents), "skipped": skipped, "open_positions": len(positions)}
-    return f"{len(intents)} intents from {len(ctx.signals)} signals at equity {equity:,.0f}; {len(skipped)} skipped by risk", data
+    data = {"equity": float(equity), "intents": len(intents), "skipped": skipped, "open_positions": len(positions),
+            "risk_multipliers": multipliers}
+    scaled = {n: m for n, m in (multipliers or {}).items() if m < MULTIPLIER_MAX}
+    note = f"; risk scaled {scaled}" if scaled else ""
+    return (f"{len(intents)} intents from {len(ctx.signals)} signals at equity {equity:,.0f}; "
+            f"{len(skipped)} skipped by risk{note}"), data
 
 
 def _save_review_status(ctx: _Context, status: str, detail: str) -> None:
@@ -544,6 +903,30 @@ def _review_body(ctx: _Context) -> tuple[str, dict[str, Any]]:
         ctx.save(INTENTS_KIND, kept)
     data = {"reviewed": len(reviews), "decisions": decisions, "intents_dropped": dropped}
     return f"{len(reviews)} reviewed ({decisions}); {dropped} unapproved intents dropped", data
+
+
+def _step_shadow(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """Every signal of the day into research.shadow's ledger, then grade the signals whose horizons have matured
+    on stored bars. Data only: no orders. `taken` holds `strategy:symbol` keys of the sized intents that survived
+    review (research.shadow also accepts bare symbols; the key keeps two strategies on one name apart).
+
+    Rows are keyed by the session of the bar the signals were computed from (`signal_day`), not the run date:
+    the scheduled run fires at 06:30 ET with `as_of` = today while the store ends at the previous close, and
+    grading starts at the first session strictly after the row's date, which must be the session the
+    autopilot enters on (same convention as research.replay)."""
+    record_signals, why = contract_fn("record_signals")
+    grade_signals, why_grade = contract_fn("grade_signals")
+    if record_signals is None or grade_signals is None:
+        raise Skip(why or why_grade)
+    taken = {f"{i.strategy}{TAKEN_KEY_SEP}{i.symbol}" for i in ctx.intents}
+    regime = regime_name(ctx.market_state) if ctx.market_state is not None else None
+    day = ctx.signal_day or _latest_session(ctx.panel, ctx.as_of) or ctx.as_of
+    signals = [s if s.as_of == day else s.model_copy(update={"as_of": day}) for s in [*ctx.signals, *ctx.shadow_signals]]
+    recorded = int(record_signals(ctx.store, signals, taken, day, regime) or 0) if signals else 0
+    graded = int(grade_signals(ctx.store, ctx.as_of) or 0)
+    data = {"recorded": recorded, "taken": sorted(taken), "graded": graded, "regime": regime,
+            "signal_day": day.isoformat()}
+    return f"{recorded} signals recorded ({len(taken)} taken, regime {regime or 'unknown'}); {graded} graded", data
 
 
 def _earnings_frame(ctx: _Context) -> pd.DataFrame | None:
@@ -670,15 +1053,53 @@ def _step_journal(ctx: _Context) -> tuple[str, dict[str, Any]]:
     extra: dict[str, Any] = {"settings": ctx.settings, "narrative": narrative, "client": client}
     if ctx.journal_root is not None:
         extra["root"] = ctx.journal_root
-    text = _call_supported(write_entry, ctx.as_of, ctx.signals, ctx.reviews, ctx.intents, fills, **extra)
+    if ctx.report.regime is not None:
+        extra["market_state"] = ctx.report.regime  # passed through if agent.journal ever takes it
+    text = str(_call_supported(write_entry, ctx.as_of, ctx.signals, ctx.reviews, ctx.intents, fills, **extra) or "")
     journal_path = _try_load("agent.journal.journal_path")
     path = str(journal_path(ctx.as_of, ctx.journal_root)) if journal_path is not None else None
+    regime_section = False
+    if path and ctx.report.regime is not None and not _accepts(write_entry, "market_state"):
+        section = regime_markdown(ctx.report.regime)
+        with Path(path).open("a", encoding="utf-8") as fh:
+            fh.write(section)
+        text += section
+        regime_section = True
     if path:
         ctx.report.files["journal"] = path
-    data = {"narrative": narrative, "chars": len(str(text or "")), "path": path}
+    data = {"narrative": narrative, "chars": len(text), "path": path, "regime_section": regime_section}
     return f"entry written ({'prose' if narrative else 'tables only'}){f' to {path}' if path else ''}", data
 
 
+def _accepts(fn: Any, name: str) -> bool:
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
+
+
+def regime_markdown(payload: dict[str, Any]) -> str:
+    """Journal section for a runs/regime/<date>.json payload (codes and enums only, no LLM text)."""
+    state = payload.get("market_state") or {}
+    lines = ["", "## Market regime", ""]
+    lines.append(f"- regime: **{payload.get('regime') or state.get('regime') or 'unknown'}**")
+    for key in ("spy_trend", "vol_regime", "breadth"):
+        if key in state:
+            lines.append(f"- {key}: {state[key]}")
+    allowed = payload.get("allowed")
+    if allowed is not None:
+        routed = ", ".join(f"{name} x{float(mult):g}" for name, mult in allowed.items()) or "none (no new entries)"
+        lines.append(f"- allowed strategies (risk multiplier): {routed}")
+    blocked = payload.get("blocked") or {}
+    if blocked:
+        lines.append(f"- blocked: {', '.join(sorted(blocked))}")
+    for note in state.get("notes") or []:
+        lines.append(f"- note: {note}")
+    return "\n".join(lines) + "\n"
+
+
+SAMPLE_PROVIDER = "sample"  # data.providers sample: deterministic offline bars for tests and smoke runs
 FLOAT_REFRESH_MIN_AGE_DAYS = 7  # a float row refreshed this recently is left alone
 FLOAT_REFRESH_MAX_PER_NIGHT = 600  # EDGAR companyfacts at <=10 req/s: ~1-2 minutes; the rest roll to later nights
 FLOAT_CANDIDATE_MIN_DOLLAR_VOL = 1_000_000.0  # 20-day average dollar volume; illiquid shells are not candidates
@@ -695,6 +1116,8 @@ def _step_float(ctx: _Context) -> tuple[str, dict[str, Any]]:
         raise Skip("small-cap track disabled")
     if ctx.dry_run:
         raise Skip("dry run")
+    if ctx.provider == SAMPLE_PROVIDER:  # synthetic offline bars: SEC / vendor float lookups would be network calls
+        raise Skip("sample provider: synthetic symbols, no SEC float lookups")
     lo, hi = float(sc.get("min_price", 1.0)), float(sc.get("max_price", 20.0))
     bars = ctx.store.read_bars(None, ctx.as_of - timedelta(days=FLOAT_CANDIDATE_LOOKBACK_DAYS), ctx.as_of)
     if bars is None or len(bars) == 0:
@@ -731,6 +1154,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("rank", _step_rank),
     ("size", _step_size),
     ("review", _step_review),
+    ("shadow", _step_shadow),
     ("positions", _step_positions),
     ("execute", _step_execute),
     ("journal", _step_journal),
@@ -867,6 +1291,10 @@ def run_cycle(
 ) -> NightlyReport:
     """`swing autopilot`: size -> positions -> execute from the latest saved signals (and their reviews).
 
+    The playbook multipliers saved with those signals (`runs/regime/<signals day>.json`) scale risk the same
+    way the nightly did; a strategy absent from the saved `allowed` table is not sized, and without a saved
+    `allowed` table nothing is sized (fail closed: positions and exits still run).
+
     Signals older than `execution.max_signal_age_days` are not sized, but positions and exits still run.
     `dry_run` plans through the autopilot (nothing reaches the broker). Report: `runs/cycle/<date>.json`.
     """
@@ -888,6 +1316,19 @@ def run_cycle(
         reviews = _load_models(run_file(settings, REVIEWS_KIND, signals_day), Review)
         report.files["signals_used"] = str(signals_path)
     review_hold = _saved_review_hold(settings, signals_day) if signals and signals_day is not None else None
+    multipliers: dict[str, float] | None = None
+    if signals and signals_day is not None:  # re-apply the playbook routing the nightly saved for that day
+        regime_path = run_file(settings, REGIME_KIND, signals_day)
+        saved = _load_json(regime_path, {})
+        if isinstance(saved, dict) and isinstance(saved.get("allowed"), dict):
+            multipliers = {str(k): float(v) for k, v in saved["allowed"].items()}
+            report.regime = saved
+            report.files["regime_used"] = str(regime_path)
+        else:  # fail closed: unrouted signals would all be sized at full risk, whatever the regime allows
+            stale = (
+                f"no saved playbook routing for the {signals_day} signals ({regime_path} is missing or has no "
+                "'allowed' table); run `swing nightly` or `swing scan` for that day"
+            )
     store, own_store = _open_store(settings, store)
     ctx = _Context(
         settings=settings,
@@ -908,6 +1349,7 @@ def run_cycle(
         plan_on_dry_run=True,
         stale_signals=stale,
         review_hold=review_hold,
+        risk_multipliers=multipliers,
     )
     log.info("cycle_start", as_of=str(as_of_d), signals_day=str(signals_day), signals=len(signals), dry_run=dry_run,
              broker=getattr(broker, "name", None))

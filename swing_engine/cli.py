@@ -86,6 +86,18 @@ EQUITY_ACCOUNT_KEYS = ("equity", "portfolio_value", "last_equity", "cash")
 REGIME_COLUMNS = ("market_trend_state", "market_vol_regime")
 PRODUCTION_SIZER = "risk.sizing.size_signal_detail"  # the sizer `swing size` / paper use; backtests use it too
 RESEARCH_SIZER = "research.backtest.fixed_fractional_sizer"  # fallback when risk.sizing is unavailable
+REPLAY_KIND = "replay"  # runs/replay/<start>_<end>.json written by `swing replay`
+DEFAULT_REPLAY_EQUITY = 100_000.0  # research.replay.run_replay's default starting equity
+SHADOW_GROUP_BY = "strategy,regime"  # research.shadow.shadow_report's default grouping
+# `swing replay` grades its signals in a table of its own so research runs never overwrite or mix with the live
+# nightly's `shadow_signals` rows (same key: strategy, symbol, as_of); `swing shadow report --replay` reads it.
+# Same value as research.shadow.REPLAY_SHADOW_TABLE (run_replay's default); kept literal so the CLI imports lazily.
+REPLAY_SHADOW_TABLE = "shadow_signals_replay"
+# the columns `swing shadow report` prints by default (research.shadow.summarize_outcomes; --all-columns for every one)
+SHADOW_REPORT_COLUMNS = (
+    "n_signals", "n_taken", "n_pending", "n", "win_rate", "avg_r", "expectancy", "profit_factor", "avg_mfe_r",
+    "avg_mae_r",
+)
 
 log = structlog.get_logger("swing.cli")
 
@@ -101,8 +113,10 @@ app = typer.Typer(
 )
 rank_app = typer.Typer(help="Train or apply the cross-sectional ranker (research.ranker).")
 monitor_app = typer.Typer(help="Live monitor: run the service, report on alerts, or replay the event log.")
+shadow_app = typer.Typer(help="Shadow ledger: forward outcomes of every signal, taken or not (research.shadow).")
 app.add_typer(rank_app, name="rank")
 app.add_typer(monitor_app, name="monitor")
+app.add_typer(shadow_app, name="shadow")
 
 
 @dataclass
@@ -907,6 +921,7 @@ def scan(
         _fail("no strategies enabled in settings and none registered", EXIT_USAGE)
     store = _open_store(settings)
     panel = _read_panel(store, settings, None, as_of_d)
+    full_panel, universe = panel, None
     listing = _store_listing(store)
     if listing is not None:  # screened, point-in-time universe (ETFs/OTC/delisted-before-as_of drop out)
         universe = _universe_window(listing, settings, [as_of_d], bars=panel)
@@ -918,6 +933,38 @@ def scan(
     if save:
         path = _save_models(_run_file(settings, "signals", as_of_d), signals)
         _console().print(f"saved {len(signals)} signals to {path}")
+        _save_scan_routing(settings, full_panel, universe, as_of_d, store)
+
+
+def _save_scan_routing(
+    settings: Settings, panel: pd.DataFrame, universe: list[str] | None, as_of_d: date, store: Any = None
+) -> None:
+    """Save the playbook routing for saved scan signals (`runs/regime/<date>.json`, as the nightly does) so
+    `swing autopilot` sizes them by the regime's multipliers. Without it `swing autopilot` refuses to size them
+    (fail closed), so a routing failure here only warns."""
+    note = "ops.nightly unavailable"
+    payload: dict[str, Any] | None = None
+    compute_regime = _try_load("ops.nightly.compute_regime")
+    screened_breadth = _try_load("ops.nightly.screened_breadth")
+    store_splits = _try_load("ops.nightly._store_splits")
+    if compute_regime is not None and screened_breadth is not None:
+        try:
+            splits = store_splits(store) if store_splits is not None and store is not None else None
+            breadth, _why = screened_breadth(panel, universe, splits)
+            _state_obj, payload, note = compute_regime(settings, panel, as_of_d, breadth=breadth)
+        except Exception as e:  # noqa: BLE001 - reported below; autopilot then refuses these signals
+            payload, note = None, f"{type(e).__name__}: {e}"
+    if payload is None or not isinstance(payload.get("allowed"), dict):
+        Console(stderr=True).print(
+            f"[yellow]playbook routing not saved ({escape(note or 'no allowed table')}); "
+            "`swing autopilot` will not size these signals[/yellow]"
+        )
+        return
+    path = _run_file(settings, "regime", as_of_d)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, default=str))
+    allowed = ", ".join(f"{n} x{float(m):g}" for n, m in payload["allowed"].items()) or "none"
+    _console().print(f"saved regime {escape(str(payload.get('regime')))} routing (allowed {escape(allowed)}) to {path}")
 
 
 def _panel_from_provider(
@@ -1722,6 +1769,15 @@ def _print_step_report(title: str, report: Any) -> list[str]:
     report_path = getattr(report, "report_path", None)
     if files or report_path:
         _print_mapping("Files written", {**files, "report": report_path})
+    regime_payload = getattr(report, "regime", None)
+    if isinstance(regime_payload, dict) and regime_payload:
+        allowed = regime_payload.get("allowed")
+        _print_mapping("Market regime", {
+            "regime": regime_payload.get("regime"),
+            "allowed (risk multiplier)": "unrouted" if allowed is None else
+            (", ".join(f"{k} x{float(v):g}" for k, v in allowed.items()) or "none: no new entries"),
+            "blocked": ", ".join(sorted(regime_payload.get("blocked") or {})) or "-",
+        })  # fmt: skip
     return [str(s.name) for s in steps if str(getattr(s.status, "value", s.status)) == "fail"]
 
 
@@ -1750,7 +1806,10 @@ def nightly(
                      "(default execution.nightly_execute; never with --dry-run)"),
     ] = None,
 ) -> None:
-    """Ingest -> features -> scan -> rank -> size -> review -> positions -> execute -> journal (ops.nightly).
+    """Ingest -> features -> scan -> rank -> size -> review -> shadow -> positions -> execute -> journal (ops.nightly).
+
+    The scan runs only the strategies the playbook allows in today's market regime (runs/regime/<date>.json)
+    and the size step scales each one's risk by its multiplier; `swing regime` shows the same decision.
 
     Writes runs/nightly/<date>.json next to the other run files. Orders leave only through the execute step
     (execution.autopilot: automatic approval on a paper broker only). Exit code 1 when a step failed.
@@ -1814,6 +1873,176 @@ def autopilot(
         _print_mapping("Autopilot", dict(execute_step.data))
     if failed:
         _fail(f"autopilot finished with failed steps: {', '.join(failed)} (see {report.report_path})", EXIT_FAILED)
+
+
+# ----------------------------------------------------------------------------------------------------------
+# regime / replay / shadow (strategies.playbook, research.replay, research.shadow)
+# ----------------------------------------------------------------------------------------------------------
+def _jsonable(obj: Any) -> Any:
+    """JSON-ready form of replay output: frames/series become records, models dicts, the rest via str()."""
+    if obj is None:
+        return None
+    if isinstance(obj, pd.DataFrame):
+        frame = obj.reset_index() if not isinstance(obj.index, pd.RangeIndex) else obj
+        return json.loads(frame.to_json(orient="records", date_format="iso"))
+    if isinstance(obj, pd.Series):
+        return _jsonable(obj.rename(obj.name or "value").to_frame())
+    if isinstance(obj, BaseModel):
+        return obj.model_dump(mode="json")
+    return json.loads(json.dumps(obj, default=str))
+
+
+def _as_frame(obj: Any) -> pd.DataFrame | None:
+    if obj is None:
+        return None
+    if isinstance(obj, pd.DataFrame):
+        return obj.reset_index() if not isinstance(obj.index, pd.RangeIndex) else obj
+    if isinstance(obj, dict):
+        return pd.DataFrame([{"key": k, **(v if isinstance(v, dict) else {"value": v})} for k, v in obj.items()])
+    return pd.DataFrame(obj)
+
+
+@app.command()
+def regime(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+) -> None:
+    """Market state for a date (strategies.playbook.market_state) and the strategies the playbook allows.
+
+    Breadth is computed over the screened universe in the cached panel, like the nightly scan step. Prints the
+    risk multiplier the size step would apply to each allowed strategy (risk.risk_per_trade_pct x multiplier).
+    """
+    settings = _state(ctx).settings
+    as_of_d = _parse_date(as_of, date.today())
+    compute_regime = _load("ops.nightly.compute_regime")
+    screened_breadth = _load("ops.nightly.screened_breadth")
+    _load("strategies.playbook.market_state")  # exit with a clear message before any work when it is missing
+    store = _open_store(settings)
+    panel = _read_panel(store, settings, None, as_of_d)
+    listing = _store_listing(store)
+    universe = _universe_window(listing, settings, [as_of_d], bars=panel) if listing is not None else None
+    store_splits = _try_load("ops.nightly._store_splits")
+    breadth, breadth_note = screened_breadth(panel, universe, store_splits(store) if store_splits else None)
+    if breadth_note:
+        Console(stderr=True).print(f"[yellow]breadth: {escape(breadth_note)}; the playbook computes its own[/yellow]")
+    state, payload, note = compute_regime(settings, panel, as_of_d, breadth=breadth)
+    if state is None or payload is None:
+        _fail(note or "market state unavailable", EXIT_MISSING_MODULE)
+    fields = dict(payload.get("market_state") or {})
+    notes = fields.pop("notes", []) or []
+    _print_mapping(f"Market state as of {as_of_d}", {**fields, "universe": len(universe) if universe else "-"})
+    for line in notes:
+        _console().print(f"  - {escape(str(line))}")
+    if "allowed" not in payload:
+        _fail(f"strategy routing unavailable: {note}", EXIT_MISSING_MODULE)
+    table = Table(title=f"Strategies in regime {escape(str(payload.get('regime')))}")
+    for col in ("strategy", "status", "multiplier", "risk % per trade", "reason"):
+        table.add_column(col)
+    base = settings.risk.risk_per_trade_pct
+    for name, mult in payload["allowed"].items():
+        table.add_row(escape(name), Text("allowed", style="green"), f"{mult:g}", f"{base * mult:.2f}", "")
+    for name, reason in payload["blocked"].items():
+        table.add_row(escape(name), Text("blocked", style="dim"), "0", "0.00", escape(reason))
+    _console().print(table)
+
+
+@app.command()
+def replay(
+    ctx: typer.Context,
+    start: Annotated[str, typer.Option("--start", help="YYYY-MM-DD first session")],
+    end: Annotated[str | None, typer.Option("--end", help="YYYY-MM-DD last session (default: today)")] = None,
+    strategies: Annotated[
+        list[str] | None, typer.Option("--strategies", "-s", help="repeat or comma-separate (default: enabled)")
+    ] = None,
+    no_router: Annotated[
+        bool, typer.Option("--no-router", help="run every strategy every day at full risk (no playbook routing)")
+    ] = False,
+    equity: Annotated[float, typer.Option("--equity", help="starting equity")] = DEFAULT_REPLAY_EQUITY,
+    cost: Annotated[
+        list[str] | None, typer.Option("--cost", help="CostModel field override k=v (repeatable)")
+    ] = None,
+) -> None:
+    """Day-by-day portfolio replay of the live pipeline (research.replay.run_replay): market state -> allowed
+    strategies -> signals -> sizing -> next-open fills -> exits, logged as one trial.
+
+    Prints the summary, by-strategy and by-regime tables and saves runs/replay/<start>_<end>.json. Its signals
+    are graded into the `shadow_signals_replay` table (`swing shadow report --replay`), never the live ledger.
+    Opens the DuckDB store for writing: do not run it while the nightly or an ingest is running.
+    """
+    settings = _state(ctx).settings
+    start_d = _parse_date(start)
+    end_d = _parse_date(end, date.today())
+    if start_d is None or end_d is None or start_d > end_d:
+        _fail(f"--start {start_d} must be on or before --end {end_d}", EXIT_USAGE)
+    run_replay = _load("research.replay.run_replay")
+    costs = _load("research.backtest.CostModel")(**_parse_params(cost)) if cost else None
+    names = _split_list(strategies)
+    store = _open_store(settings)
+    log.info("replay_start", start=str(start_d), end=str(end_d), strategies=names, router=not no_router)
+    result = _call_supported(
+        run_replay, settings, store, start_d, end_d, strategies=names, use_router=not no_router, equity=equity,
+        costs=costs, shadow_table=REPLAY_SHADOW_TABLE,
+    )
+    summary = dict(getattr(result, "summary", None) or {})
+    _print_mapping(
+        f"Replay {start_d}..{end_d} ({'playbook router' if not no_router else 'no router'})",
+        {"strategies": ", ".join(names) if names else "enabled", "equity": equity, **summary},
+    )
+    for title, attr in (("By strategy", "by_strategy"), ("By regime", "by_regime")):
+        frame = _as_frame(getattr(result, attr, None))
+        if frame is None or frame.empty:
+            _console().print(f"{title}: (no trades)")
+        else:
+            _print_frame(title, frame)
+    payload = {
+        "start": start_d.isoformat(), "end": end_d.isoformat(), "strategies": names, "use_router": not no_router,
+        "equity": equity, "summary": _jsonable(summary),
+        **{attr: _jsonable(getattr(result, attr, None))
+           for attr in ("by_strategy", "by_regime", "trades", "equity_curve", "daily")},
+    }
+    path = _store_path(settings).parent / RUNS_DIRNAME / REPLAY_KIND / f"{start_d.isoformat()}_{end_d.isoformat()}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2, default=str))
+    _console().print(f"saved replay to {path}")
+
+
+@shadow_app.command("report")
+def shadow_report(
+    ctx: typer.Context,
+    since: Annotated[str | None, typer.Option("--since", help="YYYY-MM-DD: only signals on or after")] = None,
+    by: Annotated[str, typer.Option("--by", help="comma-separated group columns")] = SHADOW_GROUP_BY,
+    horizon: Annotated[
+        int | None, typer.Option("--horizon", help="grade at this horizon in sessions (default: the longest)")
+    ] = None,
+    taken: Annotated[
+        bool | None, typer.Option("--taken/--untaken", help="only signals the engine took / passed on")
+    ] = None,
+    replay_rows: Annotated[
+        bool, typer.Option("--replay", help=f"report the `swing replay` ledger ({REPLAY_SHADOW_TABLE})")
+    ] = False,
+    all_columns: Annotated[bool, typer.Option("--all-columns", help="print every statistic column")] = False,
+) -> None:
+    """Win rate, average R, expectancy and profit factor of graded shadow signals per group (the nightly's
+    shadow step records every signal and grades it at 5/10/20 sessions on daily bars, stop-first)."""
+    settings = _state(ctx).settings
+    since_d = _parse_date(since)
+    group_by = tuple(_split_list([by]) or [])
+    if not group_by:
+        raise typer.BadParameter("--by needs at least one column, e.g. strategy,regime")
+    report_fn = _load("research.shadow.shadow_report")
+    store = _open_store(settings)
+    extra: dict[str, Any] = {k: v for k, v in {"horizon": horizon, "taken": taken}.items() if v is not None}
+    if replay_rows:
+        extra["table"] = REPLAY_SHADOW_TABLE
+    frame = _call_supported(report_fn, store, since=since_d, group_by=group_by, **extra)
+    if frame is None or len(frame) == 0:
+        _console().print(f"no graded shadow signals{f' since {since_d}' if since_d else ''}")
+        return
+    table = _as_frame(frame)
+    if not all_columns:
+        keep = [c for c in table.columns if c in group_by or c in SHADOW_REPORT_COLUMNS]
+        table = table[keep] if any(c in SHADOW_REPORT_COLUMNS for c in keep) else table
+    _print_frame(f"Shadow signals by {', '.join(group_by)}{f' since {since_d}' if since_d else ''}", table)
 
 
 @monitor_app.command("outcomes")

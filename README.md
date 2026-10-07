@@ -1,9 +1,11 @@
 # swing-engine
 
-A personal swing-trading engine: nightly data ingest and feature pipeline, pluggable strategies, walk-forward
-backtests with trial-count-aware (deflated) Sharpe, a ranking model, a Claude analyst layer that reviews
-candidates and writes the journal, an always-on live monitor (news, SEC filings, halts, bar triggers, a small-cap
-runner track) that pushes alerts to your phone, and a paper-trading executor on Alpaca with hard risk limits.
+A personal swing-trading engine: nightly data ingest and feature pipeline, a market-regime router that decides
+which strategies may trade and at what size, pluggable strategies, walk-forward backtests and a day-by-day
+portfolio replay with trial-count-aware (deflated) Sharpe, a shadow ledger that grades every signal (taken or
+not), a ranking model, a Claude analyst layer that reviews candidates and writes the journal, an always-on live
+monitor (news, SEC filings, halts, bar triggers, a small-cap runner track) that pushes alerts to your phone, and a
+paper-trading executor on Alpaca with hard risk limits.
 
 Hard rule everywhere: the language model never produces a number that reaches an order. See `CLAUDE.md`.
 
@@ -21,7 +23,11 @@ uv run swing backtest rsi2_meanrev   --provider sample --start 2022-01-01
 uv run swing rank train                    # cross-sectional ranker (LightGBM, or scikit-learn fallback)
 uv run swing size --as-of 2026-09-30 --equity 50000          # 1% risk sizing + reward:risk floor + caps
 uv run swing paper --broker paper_sim --as-of 2026-09-30 --approve "your name"   # refuses without --approve
-uv run swing nightly --provider sample --as-of 2026-09-30 --dry-run   # the whole chain in one command, timed per step
+uv run swing regime --as-of 2026-09-30     # market state (SPY trend, vol, breadth) -> allowed strategies + risk multipliers
+uv run swing nightly --provider sample --as-of 2026-09-30 --dry-run   # the whole chain in one command, timed per step:
+                                           # screened panel + breadth -> regime-routed scan -> size -> shadow ledger
+uv run swing replay --start 2026-01-02 --end 2026-09-30   # day-by-day replay of that pipeline (--no-router to compare)
+uv run swing shadow report --by strategy,regime           # graded outcomes of every signal, taken or not
 uv run swing nightly --provider sample --as-of 2026-09-30 --broker paper_sim --execute
                                            # same chain plus positions -> execute: the autopilot submits through the
                                            # in-memory paper simulator (review calls Claude if ANTHROPIC_API_KEY is set)
@@ -30,8 +36,10 @@ uv run swing monitor run --dry-run         # replays a fixture feed through rule
 uv run swing monitor rate <event_id> useful   # rate an alert: useful | noise | traded (same as the Telegram buttons)
 uv run swing monitor outcomes --days 30    # forward returns after each logged alert (+5m .. +20d)
 uv run swing review --dry-run              # prints the Claude review prompt without calling the API
-uv run pytest -q                           # ~850 tests, no network
+uv run pytest -q                           # ~1,000 tests, no network
 ```
+The router is `settings.playbook` (regime -> {strategy: risk multiplier}); a day in `correction` opens nothing new,
+and each day's decision is in `data/runs/regime/<date>.json` and the journal (`docs/OPERATIONS.md` 1.2-1.3).
 Create `state/KILL` to block every order path (the autopilot refuses entries, exits and cancels); delete it to
 resume. Re-running a nightly or autopilot for the same date is safe: orders are idempotent on `client_order_id`
 (`state/orders.sqlite`) and `execution.max_new_orders_per_day` counts across runs.

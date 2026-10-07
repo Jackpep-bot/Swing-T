@@ -15,8 +15,11 @@ from swing_engine.core.models import Position, Review, ReviewDecision, Side
 from swing_engine.execution.paper_sim import PaperSimBroker
 from swing_engine.ops import nightly
 from swing_engine.ops.nightly import NightlyReport, StepStatus, latest_signals_date, run_cycle, run_nightly
+from tests import test_ops_nightly as nightly_tests
 from tests.agent_fakes import FakeClient
 from tests.test_ops_nightly import AS_OF, make_settings, no_secrets
+
+contract = nightly_tests.contract  # autouse stubs for the breadth / playbook / shadow modules (contract_fn)
 
 
 def runs(tmp_path: Path, kind: str, day: date = AS_OF) -> Path:

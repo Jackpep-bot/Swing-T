@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -105,6 +105,112 @@ class ExecutionConfig(BaseModel):
     ledger_file: str = "state/orders.sqlite"  # OrderManager idempotency ledger
 
 
+#: Market regimes the playbook router classifies (strategies.playbook.market_state; docs/methods.md 2a, 3c).
+PLAYBOOK_REGIMES: tuple[str, ...] = (
+    "healthy_uptrend",
+    "narrow_uptrend",
+    "choppy",
+    "correction",
+    "high_vol_selloff",
+)
+
+
+def default_playbook_table() -> dict[str, dict[str, float]]:
+    """Regime -> {strategy: risk multiplier in [0, 1]}; a strategy absent from a regime may not open there.
+
+    Derived from docs/methods.md (section 0 items 2-5, 3b, 3c, 7a.1) and
+    docs/methods/06-breadth-regime-filters.md: breakout families only when participation confirms (Stockbee:
+    breadth cross-overs mark "safe periods for breakout trading"); pullbacks in leaders in healthy and narrow
+    uptrends, at reduced size in the narrow tape; RSI-2 mean reversion is the diversifier in uptrends and chop
+    (Nagel 2012: reversal pays most when volatility is high, hence a small allocation in a high-vol selloff);
+    no new longs in a correction (SPY below its 200-day or in a downtrend). The multipliers are an exposure
+    ladder to backtest, not a published rule (doc 06, position sizing).
+    """
+    return {
+        "healthy_uptrend": {
+            "breakout_52w": 1.0,
+            "sr_breakout": 1.0,
+            "momentum_burst": 1.0,
+            "pullback_trend": 1.0,
+            "sr_bounce": 1.0,
+            "rsi2_meanrev": 1.0,
+            "insider_cluster": 1.0,
+            # docs/methods.md 7b P1 modules: breakout families need confirmed participation (methods.md 0.3)
+            "pullback_holy_grail": 1.0,
+            "base_breakout": 1.0,
+            "power_gap": 1.0,
+            "qullamaggie_flag": 1.0,
+            "episodic_pivot": 1.0,
+        },
+        "narrow_uptrend": {  # Oct 2026 posture: reduced size, leaders-only pullbacks, RSI-2 diversifier
+            "pullback_trend": 0.5,
+            "pullback_holy_grail": 0.5,  # pullback family with the RS / 52-week-high leader gate (methods.md 6.1)
+            # sr_bounce: no RS / leader filter and accepts trend_state 0, so not in the leaders-only tape (3b, 3c)
+            "rsi2_meanrev": 0.75,
+            "insider_cluster": 0.5,
+        },
+        "choppy": {"rsi2_meanrev": 0.75},
+        "correction": {},
+        "high_vol_selloff": {"rsi2_meanrev": 0.25},
+    }
+
+
+class PlaybookConfig(BaseModel):
+    """Market-regime router (strategies.playbook): breadth / trend / volatility thresholds and the table.
+
+    Breadth thresholds cite docs/methods/06-breadth-regime-filters.md: % above the 50-day > 60 strong /
+    < 40 weak (Hill's 60 / 40 hysteresis band, applied to the fast line), Keller's 50% line, and the
+    Stockbee 10-day 4% ratio >= 2.0 (long-side swing trading favoured) / <= 0.5 (start of a bearish move).
+    These are absolute levels taken from other universes; recalibrate on the engine's own universe
+    (doc 06, pitfall 9).
+    """
+
+    enabled: bool = True  # False: select_strategies returns every enabled strategy at 1.0 (router off)
+    market_symbol: str = "SPY"  # index proxy for the trend filter (docs/methods.md 2a: SPY vs its 200-day)
+    breadth_strong_pct_above_50: float = Field(default=60.0, ge=0.0, le=100.0)
+    breadth_weak_pct_above_50: float = Field(default=40.0, ge=0.0, le=100.0)
+    # Keller's 50% line: a ratio-led "strong" read also needs this much of the universe above the 50-day
+    breadth_confirm_pct_above_50: float = Field(default=50.0, ge=0.0, le=100.0)
+    breadth_strong_ratio_10d: float = Field(default=2.0, ge=0.0)
+    breadth_weak_ratio_10d: float = Field(default=0.5, ge=0.0)
+    # Hill's slow line with hysteresis: % above the 200-day turns "on" above 60 and stays on until it drops below
+    # 40 (doc 06 C). "strong" (breakouts allowed) needs ratio_10d >= breadth_strong_ratio_10d or this line on,
+    # plus Keller's 50% confirmation (docs/methods.md 7a #1); pct_above_50 alone is never sufficient
+    breadth_on_pct_above_200: float = Field(default=60.0, ge=0.0, le=100.0)
+    breadth_off_pct_above_200: float = Field(default=40.0, ge=0.0, le=100.0)
+    min_breadth_symbols: int = Field(default=20, ge=1)  # fewer names: breadth reads as unavailable (neutral)
+    # SPY vol_21d percentile within its trailing `vol_lookback` bars; same bands as features/regime.py
+    vol_low_pct: float = Field(default=0.25, ge=0.0, le=1.0)
+    vol_high_pct: float = Field(default=0.75, ge=0.0, le=1.0)
+    vol_lookback: int = Field(default=252, ge=2)
+    near_high_pct: float = Field(default=5.0, ge=0.0)  # SPY within this % of its 52w high: bifurcation note
+    regimes: dict[str, dict[str, float]] = Field(default_factory=default_playbook_table)
+
+    @field_validator("regimes")
+    @classmethod
+    def _check_regimes(cls, v: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
+        unknown = sorted(set(v) - set(PLAYBOOK_REGIMES))
+        if unknown:
+            raise ValueError(f"playbook.regimes: unknown regime(s) {unknown}; known {list(PLAYBOOK_REGIMES)}")
+        for regime, table in v.items():
+            for name, mult in (table or {}).items():
+                if not 0.0 <= float(mult) <= 1.0:
+                    raise ValueError(f"playbook.regimes.{regime}.{name}: multiplier {mult} outside [0, 1]")
+        return {r: dict(t or {}) for r, t in v.items()}
+
+    @model_validator(mode="after")
+    def _check_bands(self) -> PlaybookConfig:
+        if self.breadth_weak_pct_above_50 > self.breadth_strong_pct_above_50:
+            raise ValueError("playbook: breadth_weak_pct_above_50 must be <= breadth_strong_pct_above_50")
+        if self.breadth_weak_ratio_10d > self.breadth_strong_ratio_10d:
+            raise ValueError("playbook: breadth_weak_ratio_10d must be <= breadth_strong_ratio_10d")
+        if self.breadth_off_pct_above_200 > self.breadth_on_pct_above_200:
+            raise ValueError("playbook: breadth_off_pct_above_200 must be <= breadth_on_pct_above_200")
+        if self.vol_low_pct > self.vol_high_pct:
+            raise ValueError("playbook: vol_low_pct must be <= vol_high_pct")
+        return self
+
+
 class Settings(BaseModel):
     data: DataConfig = DataConfig()
     universe: UniverseConfig = UniverseConfig()
@@ -112,6 +218,7 @@ class Settings(BaseModel):
     monitor: MonitorConfig = MonitorConfig()
     agent: AgentConfig = AgentConfig()
     execution: ExecutionConfig = ExecutionConfig()
+    playbook: PlaybookConfig = PlaybookConfig()
     strategies: dict[str, dict[str, Any]] = Field(default_factory=dict)  # name -> params/enabled
 
 
