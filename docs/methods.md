@@ -2641,3 +2641,32 @@ each file's own Sources section.
 - https://www.firstfinancialtrust.com/2026/10/01/quarterly-market-review-july-september-2026/ (Q3 2026 index returns)
 - https://stockanalysis.com/etf/spy/ (SPY close 2026-10-06)
 - https://thepatternsite.com/ (banner figure not visible on fetch; 7,819 / +14.2% YTD stays unverified)
+
+## Fact-check (2026-10-06)
+
+Adversarial check of the 12 most consequential claims in the deep dives.
+
+- **confirmed**: FINRA eliminated the PDT designation and the $25k minimum, effective 4 Jun 2026 (doc 09).  
+  Evidence: FINRA RN 26-10 (20 Apr 2026): replaced by intraday margin standards, effective 4 Jun 2026; phase-in runs to 20 Oct 2027 (doc 09 omits this). https://www.finra.org/rules-guidance/notices/26-10
+- **confirmed**: 6 Oct 2026: S&P 7,819, +14.2% YTD. Q3 2026: S&P +2.03%, R2K -7.52%, 10y +88bp to 5.29%. R2K ~+19% YTD to 31 Jul (docs 04/09/14).  
+  Evidence: Yahoo chart API: 7,818.93 (+14.22%); Q3 +2.03% / -7.52%; R2K +18.1% YTD to 31 Jul. Treasury par 10y: 5.29 on 9/30 vs 4.44 on 6/30, so +85bp, not +88. https://home.treasury.gov/resource-center/data-chart-center/interest-rates/TextView?type=daily_treasury_yield_curve&field_tdr_date_value_month=202609
+- **confirmed**: 6 Oct 2026: 26.9% of 4,806 US stocks above the 50-day, 39.7% above the 200-day (docs 01/04/06).  
+  Evidence: thetrading.tools shows 48.5/26.9/33.6/39.7% across 4,806 stocks. One vendor only, not independently reproduced. https://www.thetrading.tools/market-breadth
+- **confirmed**: Fed raised rates on 16 Sep 2026 under Chair Warsh (doc 07).  
+  Evidence: FOMC raised 25bp to 3.75-4.00%, 12-0 vote; the Board page lists Kevin Warsh as Chairman. https://www.federalreserve.gov/newsevents/pressreleases/monetary20260916a.htm
+- **refuted**: '10-year yield at records above 5% (14 and 28 Sep)' (doc 07).  
+  Evidence: Treasury par 10y: 4.97% on 14 Sep (below 5%), 5.24% on 28 Sep, month high 5.29% on 30 Sep. Not a record. Treasury daily par-yield CSV (2026).
+- **unverifiable**: IBD follow-through days on 22 Apr 2025 (Day 11) and 8 Apr 2026 (Day 6) (doc 07).  
+  Evidence: investors.com fetch blocked. Yahoo index data fits: 22 Apr 2025 Nasdaq +2.71%, S&P +2.51% on higher volume; 8 Apr 2026 is Day 6, S&P +2.51% on higher volume, Nasdaq +2.80%. The doc's '+2.2%' matches neither.
+- **confirmed**: USIC: Minervini +334.8% (2021, $1M+ division) and +155% (1997); Kell +941.1% (2020) (docs 03/12).  
+  Evidence: Business Wire 403. Secondary quote of the release: https://wallstreettrader.substack.com/p/how-mark-minervini-won-us-investing . Kell's figure (2nd place +497%) is from his own newsletter: https://theswingreport.com/ . Kell's '<$1M' division is unverified.
+- **confirmed**: Qullamaggie FAQ: risk 0.3-0.5% (rarely >1%), size 5-25%, 25% win rate (2019), 268% CAGR 2013-19, 50% drawdown (2014) (doc 05).  
+  Evidence: All appear verbatim; self-reported and unaudited. https://qullamaggie.com/faq/
+- **confirmed**: PEAD decay: Martineau (CFR) finds no large-cap PEAD since 2006; Subrahmanyam t=2.18 all stocks, 1.43 ex-microcaps (docs 02/13).  
+  Evidence: Martineau's abstract says this. UCLA Anderson Review (21 Jan 2026) gives the 2001-2024 sample and t 2.18/1.43; the paper is 2025, but the docs date it 2025 and 2026 inconsistently. https://anderson-review.ucla.edu/is-post-earnings-announcement-drift-a-thing-again/
+- **confirmed**: Bulkowski cup with handle: rank 3/39, 5% failure, +54%, 62% throwback, 61% hit target, 913 perfect trades (doc 04).  
+  Evidence: All match. The page says examples were added 7/25/25 (doc 04 says 10/25/2025). Perfect-trade stats, no stops or costs. https://thepatternsite.com/cup.html
+- **confirmed**: EasySwing panel 7 Jul 2026 (~2,000 stocks, 5-yr walk-forward, no fees): Pullback PF 1.45, VCP 0.38, Template 0.99, C&H 1.57, Qullamaggie 1.10.  
+  Evidence: Win rates, R, PFs and holds match (17 detectors). Trade counts (1,092, 16,943, etc.) were not visible in the fetch and are unverified. Vendor data, gross of costs. https://easyswing.trading/performance
+- **confirmed**: Zweig thrust: 38% on 10 Apr 2025 to 61.7% at the 24 Apr 2025 close; Detrick '19 for 19' higher at 6 and 12 months (doc 06).  
+  Evidence: Sherwood News (25 Apr 2025) gives the rule, the readings and Detrick's record. S&P closed at 5,484.77 that day (Yahoo), matching doc 06. https://sherwood.news/markets/unusual-technical-indicator-with-perfect-track-record-sends-buy-signal-on-us
