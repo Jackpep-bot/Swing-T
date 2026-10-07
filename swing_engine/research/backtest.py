@@ -31,7 +31,7 @@ import structlog
 from pydantic import BaseModel, Field
 
 from swing_engine.core.config import RiskConfig
-from swing_engine.core.models import OrderIntent, Position, Side, Signal
+from swing_engine.core.models import EntryType, OrderIntent, Position, Side, Signal
 
 log = structlog.get_logger(__name__)
 
@@ -455,6 +455,24 @@ def _select_entries(
     return chosen
 
 
+def entry_fill(signal: Signal, open_: float, high: float, low: float) -> tuple[float, str | None]:
+    """Entry price on the session after the signal for its ``entry_type`` (long side; shorts mirror).
+
+    open: the open. stop: a buy stop at ``entry`` fills at max(open, entry) when the high reaches it. limit: a buy
+    limit at ``entry`` fills at min(open, entry) when the low reaches it. Untriggered orders expire after one day.
+    """
+    kind, level, long = signal.entry_type, float(signal.entry), signal.side == Side.LONG
+    if kind == EntryType.STOP:
+        if (high < level) if long else (low > level):
+            return open_, "not_triggered"
+        return (max(open_, level) if long else min(open_, level)), None
+    if kind == EntryType.LIMIT:
+        if (low > level) if long else (high < level):
+            return open_, "not_triggered"
+        return (min(open_, level) if long else max(open_, level)), None
+    return open_, None
+
+
 def _fill_entry(
     i: int,
     signal: Signal,
@@ -471,6 +489,9 @@ def _fill_entry(
     if math.isnan(raw):
         return None, cash, "no_bar"
     is_long = intent.side == Side.LONG
+    raw, why = entry_fill(signal, raw, view.value("high", i, j), view.value("low", i, j))
+    if why:
+        return None, cash, why
     through_stop = raw <= intent.stop if is_long else raw >= intent.stop
     if through_stop and config.skip_entry_if_open_through_stop:
         return None, cash, "open_through_stop"

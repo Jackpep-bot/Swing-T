@@ -8,7 +8,8 @@ Table ``shadow_signals`` (DuckDB, via ``data.store.Store.write_table``) is keyed
 
 Grading rules (``grade_signals``), all on daily bars dated strictly after the signal date:
 
-* entry = the next session's open. When that open is already through the stop (or, for a long, at or above the
+* entry = the next session's open (``entry_type`` stop / limit: the fill at ``entry`` on that session, or ``not_triggered``
+  when the bar never reaches it). When that open is already through the stop (or, for a long, at or above the
   target) the signal is ``entry_skipped``: the setup's geometry no longer exists (``docs/methods.md`` 2e,
   "model gap-through-stop").
 * then the first touch of the stop or the target decides the outcome, bar by bar: a later open through the stop or
@@ -42,7 +43,7 @@ from typing import Any
 import pandas as pd
 import structlog
 
-from swing_engine.core.models import Side, Signal
+from swing_engine.core.models import EntryType, Side, Signal
 from swing_engine.risk.sizing import make_client_order_id
 
 log = structlog.get_logger(__name__)
@@ -76,6 +77,7 @@ SKIP_DELISTED_BEFORE_ENTRY = "delisted_before_entry"
 SPLITS_TABLE = "splits"  # data.ingest.SPLITS_TABLE: symbol, ex_date, ratio (split_to / split_from)
 SKIP_OPEN_THROUGH_STOP = "open_through_stop"
 SKIP_OPEN_THROUGH_TARGET = "open_through_target"
+SKIP_NOT_TRIGGERED = "not_triggered"  # a stop/limit entry the next session never reached
 
 SIGNAL_SCHEMA: dict[str, str] = {
     "strategy": "VARCHAR",
@@ -83,6 +85,7 @@ SIGNAL_SCHEMA: dict[str, str] = {
     "as_of": "DATE",
     "side": "VARCHAR",
     "entry": "DOUBLE",
+    "entry_type": "VARCHAR",
     "stop": "DOUBLE",
     "target": "DOUBLE",
     "reward_risk": "DOUBLE",
@@ -182,6 +185,7 @@ def record_signals(
                 "as_of": day,
                 "side": sig.side.value,
                 "entry": float(sig.entry),
+                "entry_type": sig.entry_type.value,
                 "stop": float(sig.stop),
                 "target": _opt_float(sig.target),
                 "reward_risk": _opt_float(sig.reward_risk),
@@ -231,6 +235,8 @@ def grade_one(
     horizons: Sequence[int] = DEFAULT_HORIZONS,
     *,
     delisted: bool = False,
+    entry_type: EntryType | str = EntryType.OPEN,
+    entry_level: float | None = None,
 ) -> Grade:
     """Grade one signal on ``bars`` (columns ``day, open, high, low, close``; sessions strictly after the signal,
     oldest first, none after the grading date). ``delisted``: the symbol has stopped trading, so horizons the
@@ -248,6 +254,16 @@ def grade_one(
     lo = bars["low"].to_numpy(dtype=float)
     c = bars["close"].to_numpy(dtype=float)
     entry = float(o[0])
+    kind = EntryType(entry_type or EntryType.OPEN)
+    if kind != EntryType.OPEN and entry_level is not None and math.isfinite(entry_level) and math.isfinite(entry):
+        lvl = float(entry_level)
+        is_stop = kind == EntryType.STOP
+        reached = (float(hi[0]) >= lvl if d > 0 else float(lo[0]) <= lvl) if is_stop else \
+            (float(lo[0]) <= lvl if d > 0 else float(hi[0]) >= lvl)
+        if not reached:
+            out = Outcome(Hit.SKIPPED.value, exit_date=days[0])
+            return Grade({h: out for h in hs}, days[0], entry, SKIP_NOT_TRIGGERED)
+        entry = (max if (d > 0) == is_stop else min)(entry, lvl)
     has_target = target is not None and math.isfinite(float(target))
     tgt = float(target) if has_target else math.nan
     skip: str | None = None
@@ -466,7 +482,10 @@ def grade_signals(
         factor = split_factor(splits, str(rec["symbol"]), rec["as_of"], day)
         target = rec.get("target")
         target = None if target is None or pd.isna(target) else float(target) / factor
-        grade = grade_one(str(rec["side"]), float(rec["stop"]) / factor, target, after, hs, delisted=delisted)
+        kind = rec.get("entry_type")
+        kind = EntryType.OPEN if kind is None or pd.isna(kind) else kind
+        grade = grade_one(str(rec["side"]), float(rec["stop"]) / factor, target, after, hs, delisted=delisted,
+                          entry_type=kind, entry_level=float(rec["entry"]) / factor)
         key = {k: rec[k] for k in KEYS}
         row = _outcome_row(key, grade, hs, day)
         _keep_final_horizons(row, rec, hs)

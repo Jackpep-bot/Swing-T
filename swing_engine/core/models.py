@@ -13,6 +13,14 @@ class Side(StrEnum):
     SHORT = "short"
 
 
+class EntryType(StrEnum):
+    """How a signal enters on the next session: at the open, on a buy stop at ``entry``, or a limit at ``entry``."""
+
+    OPEN = "open"
+    STOP = "stop"
+    LIMIT = "limit"
+
+
 class Bar(BaseModel):
     symbol: str
     ts: datetime  # bar start, timezone-aware (America/New_York for daily)
@@ -33,6 +41,7 @@ class Signal(BaseModel):
     side: Side = Side.LONG
     as_of: date
     entry: float = Field(description="Reference entry price (next-open or limit)")
+    entry_type: EntryType = Field(default=EntryType.OPEN, description="open: next open; stop/limit: at entry")
     stop: float
     target: float | None = None
     reward_risk: float | None = None
@@ -78,6 +87,7 @@ class OrderIntent(BaseModel):
     strategy: str
     client_order_id: str
     risk_dollars: float
+    entry_type: EntryType = EntryType.OPEN
     notes: str = ""
 
 

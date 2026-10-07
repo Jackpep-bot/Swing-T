@@ -155,6 +155,7 @@ def size_signal_detail(
         strategy=signal.strategy,
         client_order_id=make_client_order_id(signal),
         risk_dollars=round(qty * rps_worst, PRICE_DECIMALS),
+        entry_type=signal.entry_type,
         notes=notes,
     )
     return intent, "ok"
