@@ -27,6 +27,7 @@ flag breakout as the setup "most of his money comes from" (streams 1–5, Oct 20
 | Prior move | "A big move higher sometime in the past 1–3 months. This move can be anywhere from **30–100%+**" | qullamaggie.com (primary) |
 | ADR % (20-day average daily range) | Formula: `100*((H0/L0 + H1/L1 + ... + H19/L19)/20 - 1)`. Avoid < 2% ("you'll never get rich trading stocks like this"); 2.8% called "slow". Community scans use **ADR > 5%** | FAQ (primary, formula); stream 30 Jun 2020 via Trading Resource Hub (secondary); Tikam Alma, TradingView HTF-table script (secondary, the 5% number) |
 | Dollar volume | "$Volume (close * volume) greater than **3,000,000**" (Tikam Alma); "> $10 million" and "≈50x account size" (TradingView HTF-table script). Own rule: "should not be trading over **1% of daily volume** on a stock" | secondary for the thresholds (unverified against primary); streams 1–5 for the 1%-of-ADV rule (secondary notes of primary) |
+| Vendor scan (Deepvue, 25 Jul 2025) | "Continuation base": up **≥25% in the past month**, current-week volume **≥50% below** prior week, price **within ~2% of the 10-day SMA**; plus "top monthly gainers" by absolute strength and ADR. Deepvue says it "partnered with" Kullamägi, but the numbers are its own implementation, not quoted rules | deepvue.com (secondary, vendor) |
 | Intraday watch scan | "above yesterday's highs, up 1% on the day" | streams 1–5 (secondary notes) |
 | Vehicle character | "clean, linear price action", respects the 10/20-day, "momentum leaders"; prefers liquid, higher-priced names; avoids pump stocks; triple-leveraged ETFs (SOXL) acceptable over slow underlyings | streams 1–5, 30 Jun 2020 stream, CWT 212 (secondary) |
 | Event hygiene | Check earnings dates and avoid holding through them; biotech: check for pending FDA/data | CWT 212 notes (secondary) |
@@ -83,6 +84,7 @@ Qualitative, not a rule set:
 - **The Trading Resource Hub** (Substack) — stream notes (2020–2024 posts) and CWT interview notes.
 - **Financial Wisdom TV** — strategy summary (2021, updated Dec 2025) and the Aug 2026 "top 100 winners" case study.
 - **Tikam Singh Alma** (Substack, Apr 2024) — scan-oriented summary.
+- **Deepvue** (charting/screening vendor) — "Qullamaggie screens" page (Jul 2025) claiming a partnership with Kullamägi; numeric filters are Deepvue's.
 - **Leif Soreide / TraderLion** — high tight flag masterclass (adjacent, O'Neil framing; see method 33 in the sweep).
 - **Thomas Bulkowski** (thepatternsite.com) — the statistical reference for the high and tight flag pattern.
 - Open-source replications: TradingView "Qullamaggie Breakout" (millerrh, May 2021), "Qullamaggie Breakout V2" (LuxAlgo library mirror, 404 at fetch time), "Qullamaggie High Tight Flag Table" (protected), "QULLAMAGGIE Trades Database 2014–2022" (trend-wolf, Jul 2025: 1,700+ trade entries, no statistics); GitHub sofus-nl/swing-trading-strategies (MIT) / EasySwing.trading; Stonks Capital "Modeling Kullamägi" series.
@@ -100,6 +102,7 @@ Qualitative, not a rule set:
 |---|---|---|---|
 | Stonks Capital, "Modeling Kullamägi part 2" (Niv Goren, 17 Feb 2025) | Top 1–2% ROC over 1/3/6/12 m and ≥+30% over the lookback; 2 w–2 m tightening range near 10/20/50-day with higher lows; break of recent highs or gap; SPY > 140 EMA; stop > 1 ATR (1 ATR "didn't work"); trail 10/20-day close | Daily bars, end-2007 → 2025; 2,382 trades | CAGR 19%, max DD −21%; win rate / PF not disclosed |
 | EasySwing.trading performance panel (updated 7 Jul 2026) + sofus-nl GitHub | Prior leg ≥30%, base 5–15 bars with narrow-range bars, high RS rank, breakout above base high on volume surge | ~2,000 US stocks, 5-year walk-forward, raw exits, no fees/slippage; 16,943 trades | **Win rate 27%, avg +0.1R, profit factor 1.10, avg hold 7 days**. Same panel: Cup & Handle PF 1.57, Trend Pullback 1.45, 52w-high-proximity pullback 1.33 |
+| EasySwing blog detector write-up (May 2026) | RS rank ≥ 80; close > SMA200; 60-day return ≥ +25%; 6-month return ≥ +20%; 20-bar range ≤ 20% of close; close within 10% of EMA20; close > 20-day high; volume ≥ 1.4x 50-day avg; stop 1.5 ATR; exit first close < EMA20 or 60-bar time stop | 24-year walk-forward (rules differ from the panel row above; vendor has iterated) | Only figure disclosed: **Sharpe −3.59 in 2007–2010 (GFC)** — the regime-failure mode in numbers; no win rate/PF given |
 | Financial Wisdom TV case study (Aug 2026) | Hand-classified clean setups among the **top 100 performers of the prior 12 months** (prior advance ≥30%, 2 w–2 m consolidation, 10/20/50 EMA support, higher lows, ADR > 5%, $vol > $10M) | 100 winners → 58 clean setups | Avg initial risk ≈3%, avg return 62%, avg R:R > 20:1; ~60% of setups in Jul–Oct 2025 (AI, biotech, semis). **Survivorship-conditioned: not an expectancy estimate** |
 
 ### Pattern statistics (Bulkowski, thepatternsite.com)
@@ -133,7 +136,8 @@ The raw pattern has a thin, positive edge (PF ≈ 1.1, 27% wins) when coded naiv
 ## 2025–2026 fit
 - **What the data says.** Financial Wisdom TV's 12-month survey (published Aug 2026) found the clean flag breakouts concentrated in **Jul–Oct 2025** in AI, biotech and semiconductor leaders — a classic "post-correction, theme-driven" window that the method is built for. EasySwing's live-detector panel (walk-forward through its mid-2025 → Apr 2026 holdout, updated 7 Jul 2026) shows the mechanical version still positive but thin (PF 1.10), ranking below cup-and-handle and trend-pullback detectors on the same universe.
 - **Practitioner mood.** Minervini is quoted (NotebookLM-style summaries of 2025 IBD Live/podcast appearances; unverified against primary) as saying more breakouts failed than in 2020 and that he responded with shorter holds, smaller reward targets and tighter stops rather than a new strategy — consistent with the thin mechanical edge above.
-- **No fresh primary commentary from Kullamägi for 2026 was found** in this run (search returned only 2019–2024 stream notes and the 2021 interview); his streaming cadence has dropped and the method is now mostly taught second-hand. Mark as unverifiable.
+- **Regime sensitivity, quantified.** EasySwing's May 2026 detector write-up reports a Sharpe of −3.59 for its Qullamaggie-breakout detector during 2007–2010 over a 24-year walk-forward: in a bear/crash regime the mechanical version is strongly negative, so the market gate is not optional in any year that turns corrective.
+- **No fresh primary commentary from Kullamägi for 2026 was found** in this run (re-checked 2026-10-06 with fresh searches: results were still the 2019–2020 stream notes, the 2021 CWT interview and vendor/blog explainers) (search returned only 2019–2024 stream notes and the 2021 interview); his streaming cadence has dropped and the method is now mostly taught second-hand. Mark as unverifiable.
 - **Verdict.** Still a valid bull-phase continuation setup; expect it to be feast-or-famine. In 2026 it should be run with the market gate on, only in leading themes, and with the engine's cost model (fees, slippage, halts) applied before any claim of edge.
 
 ---
@@ -158,7 +162,7 @@ The raw pattern has a thin, positive edge (PF ≈ 1.1, 27% wins) when coded naiv
 | Sizing | `risk.risk_per_trade_pct` (1.0 → consider 0.5), `max_position_pct` (10 vs his 10–20), `max_open_positions` (8 vs his 15–20); all flow through `risk/sizing.py` |
 | Cost model | gates.md: 10/20 bps per side + SEC/TAF fees; required because the universe is high-ADR |
 
-Closest existing modules: `strategies/breakout_52w.py` (52w-high break on ≥1.5x volume, optional `vcp_max_contraction`), `strategies/pullback_trend.py` (already cites Qullamaggie's 10/20-day surfing), `strategies/sr_breakout.py` (pivot-level break). Proposed new module via `.claude/skills/add-strategy`: `strategies/qullamaggie_flag.py` with params `prior_move_min=0.30`, `prior_move_lookback=63`, `flag_min_bars=10`, `flag_max_bars=40`, `adr_min=0.05`, `rank_pct_min=0.98`, `max_extension_adr=1.0`, `trail_ma=20`, `partial_fraction=0.33`, `partial_after_bars=4`, `min_market_trend_state=1`; register `enabled: false` until the walk-forward backtest and trial log clear `docs/gates.md`.
+Closest existing modules: `strategies/momentum_burst.py` (Stockbee 4% burst; same "momentum leader" universe but a 3–5-day time exit instead of an MA trail), `strategies/breakout_52w.py` (52w-high break on ≥1.5x volume, optional `vcp_max_contraction`), `strategies/pullback_trend.py` (already cites Qullamaggie's 10/20-day surfing), `strategies/sr_breakout.py` (pivot-level break). Proposed new module via `.claude/skills/add-strategy`: `strategies/qullamaggie_flag.py` with params `prior_move_min=0.30`, `prior_move_lookback=63`, `flag_min_bars=10`, `flag_max_bars=40`, `adr_min=0.05`, `rank_pct_min=0.98`, `max_extension_adr=1.0`, `trail_ma=20`, `partial_fraction=0.33`, `partial_after_bars=4`, `min_market_trend_state=1`; register `enabled: false` until the walk-forward backtest and trial log clear `docs/gates.md`.
 
 ### Discretionary (cannot be fully coded; keep as Claude review enums or human steps)
 - "Clean chart", "leader of the theme", "has a reason to go up" — candidate ranking / `agent` review layer, not a rule.
@@ -195,6 +199,9 @@ Evidence / replications
 - https://www.luxalgo.com/library/indicator/5bTajWQM-qullamaggie-breakout-v2/ — V2 mirror (HTTP 404 at fetch time)
 - https://www.tradingview.com/script/vOiC5X5k-QULLAMAGGIE-Trades-Database-2014-2022/ — 1,700+ trade entries, no statistics (trend-wolf, 29 Jul 2025)
 - https://it.tradingview.com/script/WogdhAJH-Qullamaggie-High-Tight-Flag-Table — protected script; description carries ADR > 5%, $vol > $10M, "50x account size" (unverified attribution)
+- https://easyswing.trading/blog/qullamaggie-breakout-continuation-setup/ — detector rules (RS ≥ 80, 60-d ≥ +25%, range ≤ 20%, vol ≥ 1.4x, 1.5 ATR stop, EMA20/60-bar exit) and GFC Sharpe −3.59 (May 2026)
+- https://deepvue.com/screener/qullamaggie-screens/ — vendor screens (25 Jul 2025): +25%/1 m, volume dry-up, within 2% of 10-day SMA
+- https://www.ebc.com/forex/qullamaggie-strategy-3-trading-setups — "do the setups still work?" explainer (HTTP 403 at fetch time; not used)
 - https://thepatternsite.com/htf.html — Bulkowski high and tight flag statistics
 - https://thepatternsite.com/HTFStudy.html — Bulkowski HTF study (1995–2009, 2,588 patterns)
 - https://www.nber.org/papers/w20439 — Daniel & Moskowitz, "Momentum Crashes"
