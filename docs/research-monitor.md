@@ -23,7 +23,7 @@ Matcher: ahocorasick over tickers + company aliases (SEC company_tickers.json) +
 
 ## Stage-1 rules (versioned constants)
 - holdings/watchlist hit; 8-K items 1.01 2.02 5.02 8.01 + 4.02 3.01 1.03 4.01 2.04 2.05 2.06 3.02 1.02 5.01 7.01; NT 10-K/10-Q; SC 13D; Form 144; S-1/S-3/424B/ATM supplements.
-- Form 4 open-market buys (code P, A); insider cluster = >= 3 distinct insiders within 30 days, reject clusters with >= 80% identical date+price.
+- Form 4 open-market buys (transaction code P, acquired; code A is a grant/award, not a buy); insider cluster = >= 3 distinct insiders within 30 days, reject clusters with >= 80% identical date+price.
 - halts T1/T2/T12/H10 and LULD pauses; SSR trigger; index-inclusion phrases ("Set to Join S&P").
 - RVOL (time-of-day-adjusted cumulative volume / 10-20 day profile) >= 2 as the gate (>= 3 to escalate) for: pre-market gap >= 8%; Stockbee burst `c/c1>=1.04 and v>v1 and v>=100000` (feature only); 52w/ATH break on >= 1.5x volume; PEG `gain>=10% and vol>=3x avg50 and eps_surprise>=20%` holding day-1 low at 15:30 ET.
 - Suppress single-name alerts on market-wide circuit-breaker / FOMC / CPI days unless held.
