@@ -23,11 +23,13 @@ def make_signal(**overrides) -> Signal:
     return Signal(**base)
 
 
-def test_schwab_example_is_250_shares():
+def test_schwab_example_sized_on_the_worst_case_fill():
+    # Schwab: $50,000 x 1% = $500 / $2 = 250 shares at the reference entry. The engine's marketable limit is $10.10,
+    # so it sizes on $2.10 of risk per share: floor(500 / 2.10) = 238 shares, risk at the limit $499.80 <= $500.
     intent = size_signal(make_signal(), EQUITY, RiskConfig(risk_per_trade_pct=1.0), open_positions=[])
     assert intent is not None
-    assert intent.qty == 250
-    assert intent.risk_dollars == 500.0
+    assert intent.qty == 238
+    assert intent.risk_dollars == 499.8 and intent.risk_dollars <= EQUITY * 0.01
     assert intent.stop == 8.0 and intent.target == 16.0
     assert intent.entry_limit == 10.1  # reference entry + 1% marketable buffer
     assert intent.side == Side.LONG and intent.strategy == "sr_bounce"
@@ -50,7 +52,7 @@ def test_rejects_low_reward_risk():
 
 def test_uses_explicit_reward_risk_when_no_target():
     intent = size_signal(make_signal(target=None, reward_risk=2.5), EQUITY, RiskConfig())
-    assert intent is not None and intent.target is None and intent.qty == 250
+    assert intent is not None and intent.target is None and intent.qty == 238
 
 
 def test_rejects_when_reward_risk_cannot_be_verified():
@@ -59,16 +61,16 @@ def test_rejects_when_reward_risk_cannot_be_verified():
 
 
 def test_vol_target_caps_size():
-    # 50k * 20% / 8 slots = $1250 vol budget; / 0.5 vol = $2500 notional; / 10.1 = 247 shares (< 250 fixed-fractional)
-    sig = make_signal(features={"vol_21d": 0.5})
+    # 50k * 20% / 8 slots = $1250 vol budget; / 0.6 vol = $2083 notional; / 10.1 = 206 shares (< 238 fixed-fractional)
+    sig = make_signal(features={"vol_21d": 0.6})
     intent = size_signal(sig, EQUITY, RiskConfig(vol_target_annual_pct=20.0, max_open_positions=8))
-    assert intent is not None and intent.qty == 247
-    assert "vol=247" in intent.notes
+    assert intent is not None and intent.qty == 206
+    assert "vol=206" in intent.notes
 
 
 def test_vol_target_skipped_when_feature_missing():
     intent = size_signal(make_signal(), EQUITY, RiskConfig(vol_target_annual_pct=20.0))
-    assert intent is not None and intent.qty == 250
+    assert intent is not None and intent.qty == 238
 
 
 def test_open_symbol_and_full_book_are_rejected():
@@ -99,7 +101,7 @@ def test_bad_geometry_rejected_and_short_side_sized():
     short = make_signal(side=Side.SHORT, entry=10.0, stop=11.0, target=7.0)
     intent = size_signal(short, EQUITY, RiskConfig())
     assert intent is not None
-    assert intent.side == Side.SHORT and intent.entry_limit == 9.9 and intent.qty == 500
+    assert intent.side == Side.SHORT and intent.entry_limit == 9.9 and intent.qty == 454  # 500 / (11.0 - 9.9)
 
 
 def test_size_rounding_to_zero_is_rejected():
@@ -134,5 +136,15 @@ def test_per_strategy_min_reward_risk_override_admits_rule_exit_strategies():
     floor = strategy_min_reward_risk({"rsi2_meanrev": {"enabled": True, "min_reward_risk": 0.0}}, "rsi2_meanrev")
     assert floor == 0.0
     intent, reason = size_signal_detail(sig, 50_000, cfg, min_reward_risk=floor)
-    assert intent is not None and intent.qty == 125  # 50,000 x 1% = 500 / 4 risk per share
+    assert intent is not None and intent.qty == 100  # 50,000 x 1% = 500 / (101 limit - 96 stop = 5 risk at the limit)
     assert strategy_min_reward_risk({"other": {}}, "rsi2_meanrev") is None
+
+
+
+def test_fill_at_the_limit_never_exceeds_the_risk_budget():
+    """Finding: sizing on the reference entry let a fill at the 1% marketable limit risk up to ~2x the budget."""
+    for entry, stop in ((100.0, 98.0), (100.0, 99.5), (10.0, 9.9), (50.0, 45.0)):
+        sig = make_signal(entry=entry, stop=stop, target=entry + 3 * (entry - stop))
+        intent = size_signal(sig, EQUITY, RiskConfig(risk_per_trade_pct=1.0, max_position_pct=100.0))
+        assert intent is not None
+        assert intent.qty * (intent.entry_limit - stop) <= EQUITY * 0.01 + 1e-9

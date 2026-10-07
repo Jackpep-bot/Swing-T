@@ -2,7 +2,8 @@
 
 Every number here comes from the ``Signal`` (strategy code) and ``RiskConfig``; nothing is read from a model
 or an LLM. The Schwab example in ``docs/sources-schwab-massive.md``: $50,000 x 1% = $500 risk; $2 risk per
-share -> 250 shares.
+share -> 250 shares at the reference entry. The engine sizes on the worst-case fill at its marketable limit
+(entry + 1%), so the same trade is 238 shares ($500 / $2.10) and a fill anywhere up to the limit risks <= $500.
 
 Caps applied, in order (the smallest wins): fixed-fractional risk, ``max_position_pct`` of equity, optional
 volatility target (``vol_target_annual_pct`` against ``signal.features["vol_21d"]``, annualized decimal), and
@@ -116,8 +117,11 @@ def size_signal_detail(
         return None, f"max open positions reached ({len(positions)}/{risk_cfg.max_open_positions})"
 
     limit = entry_limit_for(signal)
+    # Size on the worst-case fill: the marketable limit sits ENTRY_LIMIT_BUFFER_PCT through the reference entry,
+    # so a fill at the limit must still lose no more than the risk budget at the stop.
+    rps_worst = abs(limit - signal.stop)
     risk_budget = equity * risk_cfg.risk_per_trade_pct / PCT
-    qty_ff = math.floor(risk_budget / rps)
+    qty_ff = math.floor(risk_budget / rps_worst)
     qty_cap = math.floor(equity * risk_cfg.max_position_pct / PCT / limit)
     caps: dict[str, int] = {"ff": qty_ff, "cap": qty_cap}
 
@@ -140,7 +144,7 @@ def size_signal_detail(
         binding = min(caps, key=caps.get)  # type: ignore[arg-type]
         return None, f"size rounds to zero (binding cap: {binding})"
 
-    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + f" rr={rr:.2f} rps={rps:.4f}"
+    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + f" rr={rr:.2f} rps={rps:.4f} rps_at_limit={rps_worst:.4f}"
     intent = OrderIntent(
         symbol=signal.symbol,
         side=signal.side,
@@ -150,7 +154,7 @@ def size_signal_detail(
         target=round(signal.target, PRICE_DECIMALS) if signal.target is not None else None,
         strategy=signal.strategy,
         client_order_id=make_client_order_id(signal),
-        risk_dollars=round(qty * rps, PRICE_DECIMALS),
+        risk_dollars=round(qty * rps_worst, PRICE_DECIMALS),
         notes=notes,
     )
     return intent, "ok"
