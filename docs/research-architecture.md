@@ -11,6 +11,26 @@
 | Quiver Quant | Hobbyist / Trader | $30 / $75 | REST api.quiverquant.com (55 paths, bearer token), official MCP mcp.quiverquant.com (18 tools; Hobbyist 10). Tier 2 ($75) has Form 4 insiders which is the dataset with academic evidence (Cohen-Malloy-Pomorski 2012: opportunistic insider long-short ~82 bps/mo VW alpha; buys +90 bps/mo vs all insider trades). Congressional trades: no post-STOCK-Act alpha, 30-45 day lag. Timestamp on ReportDate/Filed/Quiver_Upload_Time, never TransactionDate; drop ExcessReturn/PriceChange fields (look-ahead). |
 | SEC EDGAR | free | $0 | Form 4 (parse XML: transactionCode P + acquiredDisposedCode A), current filings Atom feed, EFTS full-text. 10 req/s, User-Agent with contact required. |
 
+### SEC EDGAR fundamentals (`swing ingest-edgar`, data/edgar.py + data/fundamentals.py)
+- Sources: `data.sec.gov/submissions/CIK##########.json` (+ older pages under `filings.files`) for 8-K Item 2.02
+  earnings releases, `data.sec.gov/api/xbrl/companyfacts/CIK##########.json` for 10-Q/10-K XBRL facts. Ticker -> CIK
+  via `www.sec.gov/files/company_tickers.json`; one fetch per CIK, resumable (`edgar_ingest_meta`, 7-day refresh).
+  Refuses the placeholder `EDGAR_USER_AGENT`.
+- `acceptanceDateTime` is UTC (checked 2026-10-08 on MSFT: Item 2.02 8-Ks read 20:04Z in summer, 21:04Z in winter,
+  i.e. ~16:04 ET). The parser converts it to Eastern and floors the reaction session at the filingDate session.
+  Reaction `session`: same day when
+  accepted before that day's close, else the next session.
+- Panel hook `fundamentals.edgar_panel_features(store, index)`: `sue` and `rev_surprise` (seasonal random walk on
+  diluted EPS / revenue, std of the 8 preceding seasonal differences, >= 4 required), `gross_prof` (TTM gross profit /
+  latest total assets), `shares_outstanding` (cover page, classes summed), `turnover` (volume / shares),
+  `days_since_earnings`, `is_earnings_window` (reaction session and the next). Companyfacts `filed` has no time of
+  day, so fundamentals become visible the session after the filed date; never keyed on period end.
+- Known gaps: tickers with no CIK in company_tickers.json (mostly delisted names) get no rows (`no_cik_symbols` in
+  the ingest summary; their bars stay in the universe, features are NaN). No GrossProfit fallback (filers that
+  report only revenue and cost of revenue get `gross_prof` NaN). Operating cash flow is stored as reported, i.e.
+  year-to-date in 10-Qs; only Q1 is a true quarter, so no OCF feature yet. Q4 is derived as annual minus Q1-Q3.
+  8-K/A amendments are ignored; earnings released only by press release without an Item 2.02 8-K are missed.
+
 ## Backtest / ML stack
 - vectorbt 1.1.1 (Python 3.11-3.14) for vectorized sweeps + rolling/expanding walk-forward; plain pandas engine as fallback.
 - backtrader unmaintained (last release 2023-04). zipline-reloaded/backtesting.py research-only. Lumibot 4.6.4 if event-driven live parity on Alpaca is wanted.

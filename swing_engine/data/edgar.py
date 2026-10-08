@@ -56,10 +56,12 @@ HTTP_NOT_FOUND = 404
 EARNINGS_ITEM = "2.02"  # 8-K Item 2.02 "Results of Operations and Financial Condition"
 EARNINGS_FORMS: frozenset[str] = frozenset({"8-K"})  # 8-K/A amendments are not new announcements
 ITEMS_SEPARATOR = ","
-#: submissions JSON `acceptanceDateTime` carries a trailing "Z" but the wall-clock is US Eastern (EDGAR quirk).
-#: Reading it as Eastern is also the conservative choice: if it were real UTC, an Eastern reading only moves the
-#: timestamp later (never maps an after-close filing into the same session).
+#: submissions JSON `acceptanceDateTime` ends in "Z" and is UTC. Checked 2026-10-08 on CIK 789019 (MSFT): Item 2.02
+#: 8-Ks read 20:04Z (EDT) / 21:04Z (EST), i.e. ~16:04 ET, MSFT's after-close release. AAPL's read 00:30Z the next
+#: UTC day (20:30 ET on the filingDate), also after the close. `parse_submissions` also floors the reaction session
+#: at the filingDate session, so a filing can never move earlier than the date EDGAR stamped.
 ACCEPTANCE_TZ = TZ
+ACCEPTANCE_UTC_HOPS = 1
 EARNINGS_COLUMNS = ["symbol", "cik", "accepted_at", "filing_date", "accession", "form", "session"]
 
 
@@ -83,7 +85,20 @@ def _acceptance_ts(value: Any) -> pd.Timestamp:
     ts = pd.to_datetime(text.rstrip("Zz"), errors="coerce")
     if pd.isna(ts):
         return pd.NaT
-    return ts.tz_convert(ACCEPTANCE_TZ) if ts.tzinfo is not None else ts.tz_localize(ACCEPTANCE_TZ)
+    ts = ts.tz_localize(None) if ts.tzinfo is not None else ts
+    for _ in range(ACCEPTANCE_UTC_HOPS):  # see ACCEPTANCE_TZ
+        ts = ts.tz_localize("UTC").tz_convert(ACCEPTANCE_TZ).tz_localize(None)
+    return ts.tz_localize(ACCEPTANCE_TZ)
+
+
+def _reaction_session(accepted: pd.Timestamp, filing_date: Any) -> date:
+    """`earnings_session(accepted)`, never earlier than the first session on or after EDGAR's filingDate."""
+    session = earnings_session(accepted)
+    if pd.isna(filing_date):
+        return session
+    fd = filing_date.date()
+    floor = fd if session_bounds(fd) is not None else next_trading_day(fd)
+    return max(session, floor)
 
 
 def _filings_block(payload: dict[str, Any]) -> dict[str, Any]:
@@ -127,7 +142,7 @@ def parse_submissions(payload: dict[str, Any], symbols: Iterable[str], cik: str 
                     "filing_date": filing_date.date() if pd.notna(filing_date) else None,
                     "accession": accession,
                     "form": str(form),
-                    "session": earnings_session(accepted),
+                    "session": _reaction_session(accepted, filing_date),
                 }
             )
     df = pd.DataFrame(rows, columns=EARNINGS_COLUMNS)

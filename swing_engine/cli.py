@@ -836,6 +836,32 @@ def ingest(
     _print_mapping(f"Ingest via {provider_name}", dict(result or {}))
 
 
+@app.command("ingest-edgar")
+def ingest_edgar(
+    ctx: typer.Context,
+    symbols: Annotated[
+        list[str] | None, typer.Option("--symbols", "-s", help="repeat or comma-separate; default every stored symbol")
+    ] = None,
+    limit: Annotated[int | None, typer.Option("--limit", help="fetch at most N CIKs this run")] = None,
+    refresh_days: Annotated[
+        int | None, typer.Option("--refresh-days", help="skip CIKs fetched OK within N days (default 7)")
+    ] = None,
+) -> None:
+    """Fetch SEC 8-K earnings dates and XBRL fundamentals into the store (data.fundamentals.run_edgar_ingest)."""
+    settings = _state(ctx).settings
+    agent = load_secrets().edgar_user_agent or ""
+    if "@" not in agent or agent == Secrets.model_fields["edgar_user_agent"].default:
+        _fail("set EDGAR_USER_AGENT in .env to 'name contact-email' (SEC fair-access policy); the placeholder is refused",
+              EXIT_REFUSED)
+    edgar = _load("data.edgar.Edgar")(agent)
+    run_edgar_ingest = _load("data.fundamentals.run_edgar_ingest")
+    syms = _split_list(symbols)
+    store = _open_store(settings, must_exist=syms is None)  # the default universe is the stored bars
+    extra = {"refresh_days": refresh_days} if refresh_days is not None else {}
+    result = run_edgar_ingest(store, edgar, syms, limit=limit, progress=_ingest_progress, **extra)
+    _print_mapping("EDGAR ingest (ticker -> CIK)", dict(result or {}))
+
+
 def _ingest_progress(line: str) -> None:
     """`run_ingest(progress=)` sink: estimate and every-N-sessions progress lines go to the console."""
     _console().print(escape(line))
@@ -1105,7 +1131,8 @@ def backtest(
     n_trials = int(trial_count(strategy) or 0)
     n_obs, skew, kurt = _returns_moments(result, metrics)
     sharpe = float(metrics.get("sharpe") or 0.0)
-    deflated = deflated_sharpe(sharpe, max(n_trials, 1), n_obs, skew, kurt) if n_obs else None
+    n_trials_all = int(trial_count(None) or 0)  # gate 2: deflate by EVERY logged trial, not just this strategy's
+    deflated = deflated_sharpe(sharpe, max(n_trials_all, 1), n_obs, skew, kurt) if n_obs else None
 
     _print_mapping(
         f"Backtest {strategy} {start_d}..{end_d}",
@@ -1127,7 +1154,7 @@ def backtest(
             "sharpe": sharpe,
             "deflated sharpe": deflated,
             "trials logged for this strategy": n_trials,
-            "trials logged in total": int(trial_count(None) or 0),
+            "trials logged in total": n_trials_all,
             "n_obs / skew / kurtosis": f"{n_obs} / {skew:.3f} / {kurt:.3f}",
         },
     )
