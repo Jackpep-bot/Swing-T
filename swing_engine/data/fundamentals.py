@@ -404,10 +404,11 @@ def fundamental_events(fund: pd.DataFrame, symbols: Iterable[str] | None = None)
     cols = ["symbol", "filed", "avail_ts", "sue", "rev_surprise", "gross_prof", "shares_outstanding"]
     if fund is None or fund.empty:
         return pd.DataFrame(columns=cols)
-    syms = sorted(set(fund["symbol"]) if symbols is None else {s.upper() for s in symbols})
+    wanted = None if symbols is None else {s.upper() for s in symbols}
     rows: list[dict[str, Any]] = []
-    for sym in syms:
-        sub = fund[fund["symbol"] == sym]
+    for sym, sub in fund.groupby("symbol", sort=True):  # one pass over the table, not one scan per symbol
+        if wanted is not None and sym not in wanted:
+            continue
         for filed in sorted(set(sub["filed"])):
             rows.append(
                 {
