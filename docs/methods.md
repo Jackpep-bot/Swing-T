@@ -2670,3 +2670,146 @@ Adversarial check of the 12 most consequential claims in the deep dives.
   Evidence: Win rates, R, PFs and holds match (17 detectors). Trade counts (1,092, 16,943, etc.) were not visible in the fetch and are unverified. Vendor data, gross of costs. https://easyswing.trading/performance
 - **confirmed**: Zweig thrust: 38% on 10 Apr 2025 to 61.7% at the 24 Apr 2025 close; Detrick '19 for 19' higher at 6 and 12 months (doc 06).  
   Evidence: Sherwood News (25 Apr 2025) gives the rule, the readings and Detrick's record. S&P closed at 5,484.77 that day (Yahoo), matching doc 06. https://sherwood.news/markets/unusual-technical-indicator-with-perfect-track-record-sends-buy-signal-on-us
+
+## Optimization and overfitting controls (2026-10 research)
+
+Why this matters here: `docs/leaderboard.md` has no survivors over 750 trials. Before adding more strategies,
+the tests themselves need to be right. They should be strict where it counts (selection, costs) and not
+needlessly strict where trials overlap. Code references are to `swing_engine/research/metrics.py`
+(`metrics`), `research/leaderboard.py` (`leaderboard`), `research/cards.py` (`cards`), `research/cv.py` and
+`risk/`.
+
+### 1. Selection-bias tests
+
+**Deflated Sharpe ratio** (Bailey and Lopez de Prado 2014, JPM 40(5) 94-107;
+https://papers.ssrn.com/abstract=2460551). This is the probabilistic Sharpe ratio measured against the
+expected maximum Sharpe of N zero-skill trials. It also corrects for skew and kurtosis.
+- Implemented: `metrics.deflated_sharpe`, `probabilistic_sharpe`, `expected_max_sharpe`, and
+  `multiple_testing` (counts ALL logged trials, per gate 2).
+- Missing: (a) `sharpe_var` defaults to `1/n_obs`, the null estimator variance. The paper's input is the
+  variance of Sharpe ratios across the trials actually run. The leaderboard already holds 750 trial Sharpes,
+  so pass their variance. (b) The leaderboard reports only the Harvey-Liu haircut. Add a DSR column computed
+  from the block-return series that the t-stat already uses.
+
+**Probability of backtest overfitting via CSCV** (Bailey, Borwein, Lopez de Prado and Zhu 2017, J. Comp.
+Finance 20(4); https://papers.ssrn.com/abstract=2326253 ; open copy
+https://escholarship.org/content/qt4w1110bb/qt4w1110bb.pdf). Split the time-by-trials return matrix into S
+blocks. For every half/half split, check where the in-sample winner ranks out of sample. PBO is the share of
+splits where it lands below the median.
+- Implemented: `metrics.probability_backtest_overfit` (default 16 partitions, logits, degradation slope).
+- Missing: nothing calls it. The leaderboard can build the matrix itself: one column per (strategy,
+  horizon), one row per h-session block on a shared calendar, net R block means, and 0 where a strategy did
+  not trade. Report PBO for the whole board and for each family (Connors variants, breakouts). A PBO above 0.5
+  means picking the best leaderboard row is worse than picking at random.
+
+**White's Reality Check** (White 2000, Econometrica 68(5) 1097-1126; https://doi.org/10.1111/1468-0262.00152)
+and **Hansen's SPA test** (Hansen 2005, JBES 23, 365-380; https://ideas.repec.org/a/bes/jnlbes/v23y2005p365-380.html).
+These test whether the best of many strategies beats a benchmark, using a bootstrap of the joint return
+series. SPA studentizes and removes clearly bad strategies from the null, so it is less conservative than RC.
+The stepwise version (Romano and Wolf 2005, Econometrica 73(4) 1237-1282;
+https://www.econometricsociety.org/publications/econometrica/browse/2005/07/01/stepwise-multiple-testing-formalized-data-snooping)
+names which strategies pass, not only whether the best does.
+- Missing entirely. This is the most useful addition. The board's 750 trials are highly correlated (the
+  Connors/RSI-2 family, many breakout variants, 3 horizons of the same signal). Bonferroni treats them as
+  750 independent looks, which over-penalizes. A stationary block bootstrap of the block-return matrix above
+  captures the dependence. Use the same matrix as PBO, with a benchmark of 0 net R per block. Gate 2 stays
+  as written. RC/SPA is an extra test, not a looser replacement for the haircut.
+
+**Harvey-Liu-Zhu multiple-testing hurdle and the Harvey-Liu haircut.** HLZ (2016, RFS 29(1) 5-68;
+https://papers.ssrn.com/abstract=2513152) argue a new factor needs a t-statistic above 3.0. Harvey and Liu
+(2015, JPM; https://people.duke.edu/~charvey/Research/Published_Papers/P120_Backtesting.PDF) give three
+p-value adjustments: Bonferroni (inflates every p-value by M), Holm (step-down), and BHY (false-discovery
+rate, which tolerates more false discoveries as M grows). They convert the adjusted p-value back into a
+haircut Sharpe.
+- Implemented: `metrics.haircut_sharpe` (Bonferroni, the strictest); `leaderboard.edge_stats` applies it to
+  every row with `n_trials = max(logged, strategies x horizons x windows)`.
+- Missing: Holm and BHY. Both are a few lines on the sorted p-values of the whole board. Show all three. A
+  strategy that passes BHY and RC/SPA but not Bonferroni is a candidate for forward paper testing, not for
+  enabling.
+
+### 2. Robust parameter selection
+
+- **Plateaus over peaks.** Pick parameters from the middle of a flat, high region of the grid, not the
+  single best cell. This is a practitioner rule (Pardo, *The Evaluation and Optimization of Trading
+  Strategies*, Wiley 2008; https://www.wiley-vch.de/en/areas-interest/finance-economics-law/the-evaluation-and-optimization-of-trading-strategies-978-0-470-12801-5).
+  It has no formal test, but CSCV makes it measurable: a peak shows a steep negative IS-to-OOS degradation
+  slope. Engine: not implemented. For any sweep, also log the grid neighbours' net R, and require the chosen
+  cell to exceed the neighbour median by less than its own standard error.
+- **Walk-forward efficiency** (out-of-sample over in-sample performance). The term is a practitioner one
+  associated with Pardo. Walk-forward itself is described at https://en.wikipedia.org/wiki/Walk_forward_optimization ;
+  the exact ratio definition was not verified in Pardo's text. Engine: `research/cv.py` has
+  `purged_walk_forward`, `purged_kfold` and CPCV splitters, and the `walk-forward` skill uses them. Missing:
+  a stored IS/OOS ratio per walk-forward run in the trial log. `metrics.probability_backtest_overfit` already
+  returns a `degradation_slope` that serves the same purpose.
+- **Monte Carlo trade reshuffling** (practitioner). Shuffling the order of closed trades changes the path,
+  not the mean. It gives a drawdown and risk-of-ruin distribution and says nothing about whether the edge is
+  real. Use it only for sizing (for example, the 95th percentile drawdown sets `max_drawdown` kill criteria,
+  gate 4). For the edge question, use a block bootstrap of returns (RC/SPA above). Engine: not implemented.
+
+### 3. Sizing and portfolio construction for many weak signals
+
+- **Volatility targeting.** Moreira and Muir (2017, JF 72(4) 1611-1644; https://www.nber.org/papers/22208)
+  find that scaling factor exposure down when volatility is high raises Sharpe ratios. Barroso and Santa-Clara
+  (2015, JFE 116(1) 111-120; https://ideas.repec.org/a/eee/jfinec/v116y2015i1p111-120.html) report that
+  risk-managed momentum "virtually eliminates crashes and nearly doubles the Sharpe ratio". Counter-evidence:
+  Cederburg, O'Doherty, Wang and Yan (2020, JFE 138, 95-117; https://www.lehigh.edu/~xuy219/research/COWY.pdf)
+  find that across 103 strategies, real-time volatility-managed versions do not systematically beat the
+  unmanaged ones. Engine: per-position `vol_target_annual_pct` and book-level `book_vol_scale` (off by
+  default, `risk/sizing.py`). Treat it as a drawdown control, judged on drawdown, and do not count it as
+  alpha.
+- **Signal combination.** Chen and Velikov (2023, JFQA 58(3) 968-1004;
+  https://www.federalreserve.gov/econres/feds/zeroing-in-on-the-expected-returns-of-anomalies.htm) find that
+  after spreads and post-publication decay, the average anomaly nets 4 bps/month, the strongest about 10 bps,
+  and combinations of anomalies about 20 bps. Combining beats picking. Engine: each strategy is scored alone.
+  The LightGBM ranker in `research/` is the place for combination. A cheaper step is a z-scored composite of
+  the top-t board rows, tested as ONE new trial. That is one look instead of 125.
+- **Correlation-aware caps.** Many signals fire on the same names on the same day (the RSI-2 family, for
+  example). Engine: sector exposure caps (`risk/limits.sector_exposure_dollars`), Turtle unit limits, and rank
+  hysteresis (`risk/selection.py`, Novy-Marx and Velikov 2016 buy/hold spread). Missing: a cap per
+  correlation cluster (one symbol counted once across strategies, and a limit on summed risk across names
+  whose 60-day return correlation exceeds a threshold, set in `settings.yaml`).
+- **Turnover.** Novy-Marx and Velikov (2016, RFS 29(1) 104-147;
+  https://ideas.repec.org/a/oup/rfinst/v29y2016i1p104-147..html) find the buy/hold spread is the most
+  effective simple cost mitigation, and few high-turnover anomalies survive costs. Most board strategies hold
+  5-20 sessions, which is high turnover by their standard.
+
+### 4. Realistic retail cost modelling on Alpaca
+
+- **Regulatory fees.** SEC Section 31 is $20.60 per $1M sold from 2026-04-04. It was $0.00 before that date in
+  FY2026, and the rate holds until 60 days after the FY2027 appropriation
+  (https://www.sec.gov/rules-regulations/fee-rate-advisories/2026-2). FINRA TAF is $0.000195/share, capped at
+  $9.79 per trade, from 2026-01-01, per broker fee schedules (https://www.investrade.com/fees/). FINRA's own
+  rulebook page still showed $0.000166 / $8.30 when fetched
+  (https://www.finra.org/rules-guidance/rulebooks/corporate-organization/section-1-member-regulatory-fees),
+  so recheck it. Alpaca charges both on sells only, rounded up to the cent, plus a pass-through CAT fee per
+  executed share (https://alpaca.markets/support/regulatory-fees). The 2026 CAT rate of $0.000001 per
+  executed equivalent share comes from a secondary summary of exchange filings
+  (https://policyrisk.com/federal-register/2026-09860). Engine: `backtest.CostModel` has SEC and TAF with the
+  2026 numbers. CAT is negligible. All of these are tiny next to spread.
+- **Spread and slippage dominate.** Engine: `backtest.py` uses 10 bps per side for large caps and 20 bps
+  otherwise (gate 1). But `cards.cost_r`, which every leaderboard number uses, charges a flat
+  `NET_SLIPPAGE_BPS_PER_SIDE = 10` to every signal regardless of price or liquidity. That understates costs for
+  small and low-priced names, which is exactly where the mean-reversion rows (RSI-2, Connors, IBS) trade.
+  Fix: per-signal spread estimates from our own daily OHLC, with EDGE (Ardia, Guidotti and Kroencke 2024, JFE
+  161, 103916; https://ftp.fau.de/cran/web/packages/bidask/readme/README.html), Abdi-Ranaldo (2017, RFS
+  30(12) 4437-4480; https://ideas.repec.org/d/g/sbfsgch.html) or Corwin-Schultz (2012, JF;
+  https://projects.nber.org/confer/2009/mms09/Corwin_Schultz.pdf). Charge half the estimated spread plus an
+  impact term per side, floored at the gate 1 numbers. Buckets: price (<$5, $5-20, >$20) x 20-day dollar
+  volume tercile. Report net R by bucket on the board. This adds no trials and is the cheapest honesty fix
+  available.
+- **Payment for order flow.** Alpaca routes to wholesalers and receives revenue from liquidity providers
+  based on order flow, per its Rule 606 report
+  (https://files.alpaca.markets/disclosures/library/SEC+606a1+-+2026Q1.pdf; per-100-share amounts not
+  extracted here). Schwarz, Barber, Huang, Jorion and Odean (2025, JF 80(5) 2507-2541;
+  https://papers.ssrn.com/abstract=4189239) ran about 85,000 simultaneous market orders. Round-trip costs
+  excluding commissions ranged from about 0.07% to 0.46% across brokers, and PFOF did not explain the
+  difference. Implications: (a) paper fills on Alpaca are simulated and do not show the actual wholesaler
+  price, so gate 1's modelled costs must stay in force for paper P&L; (b) once live, log the arrival quote
+  next to every fill (`execution/`) and calibrate the bucket costs to realised slippage; (c) at-the-open
+  market entries (the engine default) meet the widest spreads of the day, so marketable limit orders deserve
+  a test.
+
+**Order of work, by expected effect on the board.** (1) Per-signal spread costs in `cards.cost_r`. (2) A
+block-return matrix in the leaderboard, feeding PBO, RC/SPA, DSR with real `sharpe_var`, and Holm/BHY
+columns. (3) Correlation-cluster caps. (4) A single composite-signal trial. Steps 1-2 will probably confirm
+"no survivors". Their value is that a survivor found after they are in place can be believed.
