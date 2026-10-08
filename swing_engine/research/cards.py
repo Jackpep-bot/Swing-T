@@ -36,6 +36,17 @@ BPS = 1e4
 NET_SLIPPAGE_BPS_PER_SIDE = 10.0
 
 
+def executable(frame: pd.DataFrame) -> pd.DataFrame:
+    """Signals whose stop sits at least strategies._base.MIN_STOP_FRACTION below the entry (the live rule since
+    2026-10-08); older ledgers still hold sub-tick stops whose R is meaningless."""
+    from swing_engine.strategies._base import MIN_STOP_FRACTION
+
+    if frame.empty or not {"entry", "stop"} <= set(frame.columns):
+        return frame
+    entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
+    return frame.loc[(entry - stop) >= entry * MIN_STOP_FRACTION]
+
+
 def cost_r(frame: pd.DataFrame, bps_per_side: float = NET_SLIPPAGE_BPS_PER_SIDE) -> pd.Series:
     """Round-trip slippage in R per signal: 2 x bps x entry / (entry - stop); NaN when the stop distance is not
     positive."""
@@ -129,7 +140,7 @@ def render_section(
     generated: date | None = None,
     n_strategies: int | None = None,
 ) -> str:
-    sh = shadow.loc[shadow["strategy"] == slug] if not shadow.empty else shadow
+    sh = executable(shadow.loc[shadow["strategy"] == slug]) if not shadow.empty else shadow
     tr = trades.loc[trades["strategy"] == slug] if not trades.empty else trades
     out = [
         SECTION,

@@ -178,7 +178,7 @@ def test_key_reversal_day():
 
 
 def test_nr7_range_contraction():
-    s = _strat("nr7_nr4_range_contraction")
+    s = _strat("nr7_nr4_range_contraction", min_stop_pct=0.0)  # a 0.1-point bar: below the default stop floor
     rows = trend_rows(240)
     c = rows[-1][3]
     narrow = [*rows[:-1], [c, c + 0.05, c - 0.05, c, 1e6]]

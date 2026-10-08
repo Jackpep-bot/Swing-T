@@ -23,4 +23,4 @@ def test_wide_range_lizard_still_fires():
 
 
 def test_min_range_param_is_tunable():
-    assert len(run("lizards_cooper", _lizard(0.0004), {"min_range_atr": 0.0})) == 1
+    assert len(run("lizards_cooper", _lizard(0.0004), {"min_range_atr": 0.0, "min_stop_pct": 0.0})) == 1

@@ -37,6 +37,11 @@ P_MIN_RR = "min_reward_risk"
 #: float slack on the reward/risk floor: a target placed at exactly N R must pass a floor of N
 RR_TOLERANCE = 1e-9
 P_MIN_TREND = "min_trend_state"
+#: Stop distance floor as a fraction of entry, every strategy (param `min_stop_pct` overrides): a stop tighter than
+#: the spread plus a few bp of slippage is not executable, and its R is noise (replay 2026-10-08 found signals with
+#: 0.0002% stops grading at 1e10 R). research.cards / research.leaderboard apply the same floor to old ledgers.
+P_MIN_STOP_PCT = "min_stop_pct"
+MIN_STOP_FRACTION = 0.0025
 P_MIN_MARKET_TREND = "min_market_trend_state"
 
 
@@ -176,6 +181,8 @@ class PanelStrategy(Strategy):
             return None
         entry_f, stop_f = float(entry), float(stop)
         risk = entry_f - stop_f
+        if risk < entry_f * float(self.params.get(P_MIN_STOP_PCT, MIN_STOP_FRACTION)):
+            return None
         target_f: float | None = None
         reward_risk: float | None = None
         if target is not None:

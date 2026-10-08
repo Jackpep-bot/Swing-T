@@ -153,3 +153,24 @@ def test_build_signal_rejects_bad_geometry():
     assert sig is not None and sig.reward_risk == pytest.approx(2.0) and sig.features == {"y": 2.0}
     open_ended = probe.build_signal(row, today, entry=100.0, stop=95.0, target=None, score=1.0)
     assert open_ended is not None and open_ended.target is None and open_ended.reward_risk is None
+
+
+def test_stop_closer_than_the_floor_is_rejected() -> None:
+    from datetime import date
+
+    from swing_engine.strategies._base import MIN_STOP_FRACTION, PanelStrategy
+
+    class Probe(PanelStrategy):
+        name = "probe"
+        default_params = {"min_reward_risk": 0.0}
+
+        def signals(self, panel, as_of):  # noqa: ANN001, ANN201 - not used
+            return []
+
+    row = pd.Series({"symbol": "AAA"})
+    s = Probe({})
+    assert s.build_signal(row, date(2026, 1, 2), entry=100.0, stop=100.0 * (1 - MIN_STOP_FRACTION / 2),
+                          target=None, score=1.0) is None
+    assert s.build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.0, target=None, score=1.0) is not None
+    assert Probe({"min_stop_pct": 0.0}).build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.99, target=None,
+                                                    score=1.0) is not None
