@@ -1616,6 +1616,34 @@ class LiveData:
                     updated = cand if updated is None or cand > updated else updated
         return ok({"by": by, "rows": rows, "updated_at": iso_utc(updated), "signals": int(len(frame))}, stale=stale)
 
+    def drift(self) -> dict[str, Any]:
+        """research.drift over the store's live and replay shadow ledgers, as of the latest live signal."""
+        import pandas as pd
+
+        def q(con: Any) -> Any:
+            if not duck_has_table(con, "shadow_signals"):
+                raise Unavailable("the shadow ledger is empty (the nightly's shadow step creates shadow_signals)")
+            replay = (con.execute("SELECT * FROM shadow_signals_replay").df()
+                      if duck_has_table(con, "shadow_signals_replay") else pd.DataFrame())
+            return con.execute("SELECT * FROM shadow_signals").df(), replay
+
+        try:
+            (live, replay), stale = self.duck.read("drift", q)
+        except Unavailable as exc:
+            return unavailable(str(exc))
+        if live is None or len(live) == 0:
+            return unavailable("the shadow ledger has no rows yet")
+        try:
+            from swing_engine.research.drift import DRIFT_MIN_N, DRIFT_SE_BAND, DRIFT_WINDOW_DAYS, drift_table
+
+            as_of = pd.to_datetime(live["as_of"]).max().date()
+            table = drift_table(live, replay, as_of)
+        except Exception as exc:  # noqa: BLE001 - module mid-edit / schema drift
+            return unavailable(f"drift computation failed ({_err(exc)})")
+        return ok({"as_of": as_of.isoformat(), "window_days": DRIFT_WINDOW_DAYS, "min_n": DRIFT_MIN_N,
+                   "band": DRIFT_SE_BAND, "replay_rows": int(len(replay)),
+                   "rows": clean(table.to_dict(orient="records"))}, stale=stale)
+
     # ------------------------------------------------------------------------------------------ alerts
     def alerts(self, hours: float = 48) -> dict[str, Any]:
         if not self.event_log_path.exists():

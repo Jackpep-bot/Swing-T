@@ -430,6 +430,30 @@ class DemoData:
                          "total_r": round(exp * n, 2)})
         return ok({"by": by, "rows": rows, "updated_at": "2026-10-06T10:31:40Z"})
 
+    def drift(self) -> dict[str, Any]:
+        """Shaped like ``data.LiveData.drift`` (research.drift.drift_table rows)."""
+        rows = []
+        for g in STRATEGIES:
+            rng = _rng(f"drift:{g}")
+            row: dict[str, Any] = {"strategy": g, "signals": rng.randint(5, 90)}
+            flags = []
+            for h in (5, 10, 20):
+                n = max(0, row["signals"] - rng.randint(0, 8) - h // 5)
+                live, rep = rng.gauss(0.02, 0.25), rng.gauss(0.03, 0.08)
+                se = 1.1 / math.sqrt(max(n, 1))
+                flag = "" if n < 20 or abs(live - rep) <= 2 * se else ("below" if live < rep else "above")
+                row.update({f"n_{h}d": n, f"win_{h}d": round(0.35 + rng.random() * 0.25, 4),
+                            f"live_r_{h}d": round(live, 4), f"replay_n_{h}d": rng.randint(200, 4000),
+                            f"replay_r_{h}d": round(rep, 4), f"diff_{h}d": round(live - rep, 4),
+                            f"se_{h}d": round(se, 4), f"flag_{h}d": flag})
+                flags.append(flag)
+            row["flag"] = "below" if "below" in flags else "above" if "above" in flags else ""
+            rows.append(row)
+        rows[0].update({"n_10d": 48, "live_r_10d": -0.31, "replay_r_10d": 0.06, "diff_10d": -0.37, "se_10d": 0.16,
+                        "flag_10d": "below", "flag": "below"})
+        return ok({"as_of": DEMO_AS_OF.isoformat(), "window_days": 90, "min_n": 20, "band": 2.0,
+                   "replay_rows": 48210, "rows": rows})
+
     def alerts(self, hours: float = 48) -> dict[str, Any]:
         with self._lock:
             ratings = dict(self._ratings)

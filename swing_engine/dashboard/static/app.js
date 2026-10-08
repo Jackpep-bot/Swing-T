@@ -21,7 +21,7 @@
   const SHADOW_MIN_N = 20;                // fewer graded signals than this = dimmed "too few to judge"
   const EVENT_DRIVEN_FEED = /account/i;   // trade-update feeds are silent until something fills: never "stale"
   const ET = "America/New_York";
-  const TABS = ["overview", "charts", "signals", "shadow", "alerts", "journal", "replay", "settings"];
+  const TABS = ["overview", "charts", "signals", "shadow", "drift", "alerts", "journal", "replay", "settings"];
   const THEME_KEY = "swing.theme";
 
   const REGIMES = {
@@ -1713,6 +1713,52 @@
   }
 
   // ------------------------------------------------------------------------------------------------
+  // Drift (live shadow ledger vs replay, research.drift)
+  // ------------------------------------------------------------------------------------------------
+  const DRIFT_HORIZONS = [5, 10, 20];
+  async function loadDrift() {
+    const node = $("#drift-body");
+    showSkeleton(node, 5);
+    const res = await api("/api/drift", { key: "drift", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    setNote("dr-note", res.ok && res.stale ? res : null);
+    if (!res.ok) { showUnavailable(node, res); return; }
+    const d = res.data || {};
+    $("#dr-updated").textContent = d.as_of ? "live window: " + d.window_days + " days to " + d.as_of + (d.replay_rows ? "" : " (no replay ledger in this store)") : "";
+    renderDrift(node, Array.isArray(d.rows) ? d.rows : []);
+  }
+  function driftChip(flag) {
+    if (flag === "below") return el("span", { class: "chip chip--bad", text: "below" });
+    if (flag === "above") return el("span", { class: "chip chip--ok", text: "above" });
+    return null;
+  }
+  function renderDrift(node, rows) {
+    if (!rows.length) { replace(node, emptyBox("No live shadow signals in the window yet.")); return; }
+    const rank = { below: 0, above: 1, "": 2 };
+    const sorted = rows.slice().sort((a, b) => (rank[a.flag || ""] - rank[b.flag || ""]) || ((toNum(a.diff_10d) ?? Infinity) - (toNum(b.diff_10d) ?? Infinity)));
+    const head = [el("th", { text: "Strategy" }), el("th", { text: "Flag" })];
+    DRIFT_HORIZONS.forEach((h) => {
+      ["n", "Win", "Live", "Replay", "Diff"].forEach((t) => head.push(el("th", { class: "r", text: t + " " + h + "d" })));
+    });
+    const body = sorted.map((r) => {
+      const cells = [el("td", { class: "strat", title: String(r.strategy || ""), text: strategyName(r.strategy) }), el("td", null, driftChip(r.flag))];
+      DRIFT_HORIZONS.forEach((h) => {
+        const n = toNum(r["n_" + h + "d"]) || 0;
+        const flag = r["flag_" + h + "d"];
+        cells.push(
+          el("td", { class: "r" + (n < SHADOW_MIN_N ? " muted" : ""), text: fmtInt(n) }),
+          el("td", { class: "r", text: fmtRatioPct(r["win_" + h + "d"], 0) }),
+          el("td", { class: "r " + signClass(r["live_r_" + h + "d"]), text: fmtSigned(r["live_r_" + h + "d"], 2, "R") }),
+          el("td", { class: "r muted", title: "replay trades: " + fmtInt(r["replay_n_" + h + "d"]), text: fmtSigned(r["replay_r_" + h + "d"], 2, "R") }),
+          el("td", { class: "r " + (flag ? (flag === "below" ? "neg" : "pos") : "muted"), title: "standard error " + fmtSigned(r["se_" + h + "d"], 2, "R"), text: fmtSigned(r["diff_" + h + "d"], 2, "R") }),
+        );
+      });
+      return el("tr", { class: (toNum(r.n_10d) || 0) < SHADOW_MIN_N ? "is-dim" : "" }, cells);
+    });
+    replace(node, el("table", { class: "data" }, [el("thead", null, el("tr", null, head)), el("tbody", null, body)]));
+  }
+
+  // ------------------------------------------------------------------------------------------------
   // Alerts (titles come from the internet: textContent only; links only http/https)
   // ------------------------------------------------------------------------------------------------
   function safeUrl(u) {
@@ -2208,6 +2254,7 @@
         break;
       }
       case "shadow": if (first) loadShadow(); break;
+      case "drift": if (first) loadDrift(); break;
       case "alerts": if (first) loadAlerts(); break;
       case "journal": {
         const date = arg && /^\d{4}-\d{2}-\d{2}$/.test(arg) ? arg : null;
@@ -2266,6 +2313,7 @@
     refreshSlow();
     if (state.loaded.signals && state.tab === "signals") loadSignals(state.signals && state.signals.date ? toDay(state.signals.date) : null);
     if (state.loaded.shadow && state.tab === "shadow") loadShadow();
+    if (state.loaded.drift && state.tab === "drift") loadDrift();
     if (state.loaded.journal && state.tab === "journal") loadJournal(state.journalDate);
     if (state.loaded.replay && state.tab === "replay") loadReplay();
     if (state.tab === "settings") loadHealth();

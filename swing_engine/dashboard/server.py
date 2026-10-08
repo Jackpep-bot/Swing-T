@@ -265,6 +265,7 @@ class DashboardApp:
             (re.compile(r"^/api/chart/(?P<symbol>[^/]+)$"), self._chart),
             (re.compile(r"^/api/signals$"), self._signals),
             (re.compile(r"^/api/shadow$"), self._shadow),
+            (re.compile(r"^/api/drift$"), self._drift),
             (re.compile(r"^/api/alerts$"), self._alerts),
             (re.compile(r"^/api/journal$"), self._journal),
             (re.compile(r"^/api/replay$"), self._replay),
@@ -378,6 +379,9 @@ class DashboardApp:
 
     def _shadow(self, q: dict[str, str]) -> Any:
         return self.provider.shadow(parse_choice(q.get("by"), "by", SHADOW_GROUPS, "strategy"))
+
+    def _drift(self, q: dict[str, str]) -> Any:
+        return self.provider.drift()
 
     def _alerts(self, q: dict[str, str]) -> Any:
         return self.provider.alerts(parse_int(q.get("hours"), "hours", 48, 1, MAX_HOURS))

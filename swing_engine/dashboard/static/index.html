@@ -99,6 +99,7 @@
       <button role="tab" id="tab-charts" aria-controls="panel-charts" aria-selected="false" tabindex="-1" data-tab="charts">Positions &amp; charts</button>
       <button role="tab" id="tab-signals" aria-controls="panel-signals" aria-selected="false" tabindex="-1" data-tab="signals">Signals</button>
       <button role="tab" id="tab-shadow" aria-controls="panel-shadow" aria-selected="false" tabindex="-1" data-tab="shadow">Shadow ledger</button>
+      <button role="tab" id="tab-drift" aria-controls="panel-drift" aria-selected="false" tabindex="-1" data-tab="drift">Drift</button>
       <button role="tab" id="tab-alerts" aria-controls="panel-alerts" aria-selected="false" tabindex="-1" data-tab="alerts">Alerts <span id="alerts-count" class="tab-count" hidden></span></button>
       <button role="tab" id="tab-journal" aria-controls="panel-journal" aria-selected="false" tabindex="-1" data-tab="journal">Journal</button>
       <button role="tab" id="tab-replay" aria-controls="panel-replay" aria-selected="false" tabindex="-1" data-tab="replay">Replay</button>
@@ -251,6 +252,20 @@
           </section>
         </div>
         <p class="footnote">n = graded signals (taken and not taken alike). Expectancy = average R per graded signal. Profit factor = gross wins / gross losses. Rows with fewer than 20 graded signals are dimmed: too few to judge. Pending = not resolved yet. Taken = sized into an order intent that survived Claude's review (the daily order cap can still stop it; the Signals tab shows what was actually sent).</p>
+      </article>
+    </section>
+
+    <!-- ===================== DRIFT ===================== -->
+    <section role="tabpanel" id="panel-drift" aria-labelledby="tab-drift" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="dr-title">
+        <header class="card__head">
+          <h2 id="dr-title">Live vs replay drift</h2>
+          <span id="dr-updated" class="card__meta"></span>
+        </header>
+        <p class="card__intro">Each strategy's live shadow ledger over the recent window next to its replay, both net of round-trip slippage, in R per traded signal. A flag means the live average sits outside the replay average &plusmn; 2 standard errors (only once there are at least 20 live trades at that horizon): <em>below</em> = the strategy is doing worse live than it did in replay.</p>
+        <p id="dr-note" class="data-note" hidden></p>
+        <div id="drift-body" class="table-wrap"></div>
+        <p class="footnote">n = live trades at the horizon (signals that were entered and resolved). Win = share of those with positive net R. Live / Replay = average net R. Diff = live &minus; replay. Rows without a replay ledger in this store show dashes.</p>
       </article>
     </section>
 

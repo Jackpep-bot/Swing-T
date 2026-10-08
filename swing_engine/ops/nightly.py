@@ -4,7 +4,8 @@ ingest (incremental) -> features (liquidity-screened panel + market breadth) -> 
 playbook router -> allowed strategies) -> rank predict (when a model exists) -> size (when equity is known; the
 router's per-strategy multiplier scales risk_per_trade_pct) -> review (ANTHROPIC key, not dry-run) -> shadow
 (every signal into the shadow ledger, taken or not, and grading of matured ones) -> positions (exit decisions,
-when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal. A failing step is recorded and the pipeline carries on with
+when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal -> weekly (agent.weekly, last session of the ISO
+week only). A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
 
@@ -91,6 +92,7 @@ ERROR_PREVIEW_CHARS = 200
 
 STEP_NAMES = (
     "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
+    "weekly",
 )
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
@@ -1085,6 +1087,15 @@ def _step_journal(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"entry written ({'prose' if narrative else 'tables only'}){f' to {path}' if path else ''}", data
 
 
+def _step_weekly(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """agent.weekly's one-page report, only on the last session of the ISO week (no LLM call)."""
+    if not _load("agent.weekly.is_last_session_of_week")(ctx.as_of):
+        raise Skip("not the last session of the week")
+    path = str(_load("agent.weekly.write_report")(ctx.settings, ctx.as_of, ctx.store, ctx.journal_root))
+    ctx.report.files["weekly"] = path
+    return f"weekly report written to {path}", {"path": path}
+
+
 def _accepts(fn: Any, name: str) -> bool:
     try:
         params = inspect.signature(fn).parameters
@@ -1172,6 +1183,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("positions", _step_positions),
     ("execute", _step_execute),
     ("journal", _step_journal),
+    ("weekly", _step_weekly),
 )
 
 

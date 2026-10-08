@@ -1698,6 +1698,25 @@ def journal(
     _console().print(str(out), markup=False)
 
 
+@app.command("weekly-report")
+def weekly_report(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+) -> None:
+    """Write data/journal/weekly-<ISO week>.md: paper trades, shadow ledger, drift, rule-based recommendations."""
+    settings = _state(ctx).settings
+    as_of_d = _parse_date(as_of, date.today())
+    path = _store_path(settings)
+    if not path.exists():
+        _fail(f"store {path} does not exist; run `swing ingest` first", EXIT_NO_DATA)
+    store = _load("data.store.Store")(str(path), read_only=True)
+    try:
+        out = _load("agent.weekly.write_report")(settings, as_of_d, store)
+    finally:
+        store.close()
+    _console().print(f"wrote {out}")
+
+
 @app.command()
 def trials(
     ctx: typer.Context,

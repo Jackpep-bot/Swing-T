@@ -122,6 +122,13 @@ def test_shadow(app: DashboardApp, by: str) -> None:
                for r in sh["rows"])
 
 
+def test_drift(app: DashboardApp) -> None:
+    d = get(app, "/api/drift")
+    assert d["rows"] and d["rows"][0]["flag"] == "below" and d["min_n"] == 20
+    assert all({"strategy", "flag", "n_10d", "win_10d", "live_r_10d", "replay_r_10d", "diff_10d"} <= set(r)
+               for r in d["rows"])
+
+
 def test_alerts_and_rating(app: DashboardApp) -> None:
     alerts = get(app, "/api/alerts?hours=48")
     assert {a["priority"] for a in alerts} >= {"P1", "P2", "P3"}

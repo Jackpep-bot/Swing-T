@@ -34,7 +34,7 @@ ENDPOINTS = ["/api/health", "/api/summary", "/api/regime", "/api/regime?date=202
              "/api/orders?status=closed&limit=10", "/api/chart/AAA", "/api/chart/SPY?days=30", "/api/chart/QQQ",
              "/api/signals", "/api/signals?date=2026-10-05", "/api/signals?date=2026-01-01", "/api/shadow",
              "/api/shadow?by=regime", "/api/alerts", "/api/alerts?hours=200", "/api/journal",
-             "/api/journal?date=2026-10-02", "/api/journal?date=2026-01-01", "/api/replay"]
+             "/api/journal?date=2026-10-02", "/api/journal?date=2026-01-01", "/api/replay", "/api/drift"]
 
 
 def _no_broker() -> Any:
@@ -321,6 +321,15 @@ def test_shadow(app: DashboardApp) -> None:
     assert sh["updated_at"] == "2026-10-05T10:31:00Z"
     reg = {r["group"]: r for r in get(app, "/api/shadow?by=regime")["data"]["rows"]}
     assert reg["healthy_uptrend"]["profit_factor"] is None and reg["healthy_uptrend"]["profit_factor_infinite"]
+
+
+def test_drift_reads_the_live_ledger_without_a_replay_table(app: DashboardApp) -> None:
+    d = get(app, "/api/drift")["data"]
+    assert d["as_of"] == "2026-10-05" and d["replay_rows"] == 0 and d["window_days"] == 90
+    rows = {r["strategy"]: r for r in d["rows"]}
+    assert set(rows) == {"pullback_trend", "rsi2_meanrev"}  # no per-horizon columns in this fixture: no trades
+    assert rows["pullback_trend"]["n_10d"] == 0 and rows["pullback_trend"]["live_r_10d"] is None
+    assert rows["pullback_trend"]["flag"] == ""
 
 
 def test_alerts(app: DashboardApp) -> None:
