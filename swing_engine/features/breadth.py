@@ -175,11 +175,19 @@ def zbt_thrust(
 ) -> pd.Series:
     """Zweig Breadth Thrust event (doc 06 A): 1 on session ``t`` when ``ema10[t] > signal_above``,
     ``ema10[t-1] <= signal_above`` (the first close above) and some session in ``t-window .. t-1`` closed below
-    ``setup_below`` (a recovery slower than ``window`` sessions does not count); else 0. Causal."""
-    x = ema10.astype("float64")
-    setup_recent = x.shift(1).rolling(window, min_periods=1).min() < setup_below
-    first_cross = (x > signal_above) & ~(x.shift(1) > signal_above)
-    return (first_cross & setup_recent).astype("int64")
+    ``setup_below`` after the last session above ``signal_above`` (one signal per setup; a recovery slower than
+    ``window`` sessions does not count); else 0. Causal."""
+    x = ema10.astype("float64").to_numpy()
+    out = np.zeros(len(x), dtype="int64")
+    last_setup = last_above = -(10**9)
+    for t, v in enumerate(x):
+        if v > signal_above:
+            if last_above != t - 1 and last_setup > last_above and t - last_setup <= window:
+                out[t] = 1
+            last_above = t
+        elif v < setup_below:
+            last_setup = t
+    return pd.Series(out, index=ema10.index)
 
 
 def mcclellan(net_advances: pd.Series) -> tuple[pd.Series, pd.Series]:
