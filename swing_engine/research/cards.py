@@ -4,7 +4,7 @@ Sources: the replay shadow ledger (``shadow_signals_replay``: every signal, grad
 signal's own stop / target) and the saved ``runs/replay/*.json`` files (the replay's own trades, net of costs but
 competing for 8 slots with the other strategies of the same run). Run after the research replays::
 
-    uv run python -m swing_engine.research.cards --settings config/replay.yaml
+    uv run python -m swing_engine.research.cards --settings config/replay.yaml --store data/live/replay_b.duckdb ...
 
 Numbers only, no prose verdicts: the reader (and Claude) judge them against docs/gates.md.
 """
@@ -29,6 +29,19 @@ CARDS_DIR = ROOT / "docs" / "strategies"
 SECTION = "## Empirical (replay)"
 RUNS_SUBDIR = ("runs", "replay")
 PCT = 100.0
+BPS = 1e4
+#: Round-trip cost charged on each graded signal for the net columns: slippage per side (backtest.CostModel
+#: default) on the entry and the exit, expressed in R of the signal's own stop distance. Fees (SEC, TAF) are
+#: under 0.1 bp on these prices and are left out.
+NET_SLIPPAGE_BPS_PER_SIDE = 10.0
+
+
+def cost_r(frame: pd.DataFrame, bps_per_side: float = NET_SLIPPAGE_BPS_PER_SIDE) -> pd.Series:
+    """Round-trip slippage in R per signal: 2 x bps x entry / (entry - stop); NaN when the stop distance is not
+    positive."""
+    entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
+    risk = (entry - stop).where(entry > stop)
+    return 2.0 * bps_per_side / BPS * entry / risk
 
 
 @dataclass(frozen=True)
@@ -57,14 +70,15 @@ def _pct(x: Any) -> str:
 
 
 def shadow_table(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS) -> str:
-    """Markdown table: one row per regime plus ``all``; gross avg R and win rate at each horizon."""
+    """Markdown table: one row per regime plus ``all``; win rate, gross and net avg R at each horizon."""
     if frame.empty:
         return "_No signals in this window._"
+    costs = cost_r(frame) if {"entry", "stop"} <= set(frame.columns) else pd.Series(0.0, index=frame.index)
     longest = max(horizons)
     groups = [*sorted(frame["regime"].fillna("unknown").astype(str).unique()), "all"]
     head = ["regime", "signals", "skipped"]
     for h in horizons:
-        head += [f"win {h}d", f"avg R {h}d"]
+        head += [f"win {h}d", f"avg R {h}d", f"net R {h}d"]
     head += [f"PF {longest}d"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for g in groups:
@@ -74,10 +88,23 @@ def shadow_table(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS
         first = stats[horizons[0]]
         cells += [str(int(first["n_signals"])), str(int(first["n_skipped"]))]
         for h in horizons:
-            cells += [_pct(stats[h]["win_rate"]), _fmt(stats[h]["avg_r"], "+.2f")]
+            net = _net_avg(sub, costs, h)
+            cells += [_pct(stats[h]["win_rate"]), _fmt(stats[h]["avg_r"], "+.2f"), _fmt(net, "+.2f")]
         cells += [_fmt(stats[longest]["profit_factor"])]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
+
+
+def _net_avg(sub: pd.DataFrame, costs: pd.Series, horizon: int) -> float:
+    """Mean of result_r - cost_r over the signals that became trades at ``horizon`` (not skipped or pending)."""
+    from swing_engine.research.shadow import TRADE_HITS, horizon_column
+
+    hit, r = horizon_column("hit", horizon), horizon_column("result_r", horizon)
+    if hit not in sub.columns:
+        return math.nan
+    traded = sub[hit].astype(str).isin(TRADE_HITS)
+    net = sub.loc[traded, r].astype(float) - costs.reindex(sub.index)[traded].fillna(0.0)
+    return float(net.mean()) if len(net) else math.nan
 
 
 def portfolio_line(trades: pd.DataFrame) -> str:
@@ -107,10 +134,10 @@ def render_section(
     out = [
         SECTION,
         f"_Generated {(generated or date.today()).isoformat()} by `swing_engine.research.cards` from "
-        "`swing replay --no-router` on real data._ Gross R per signal from the replay shadow ledger: every signal, "
-        "entered the next session by its entry type, exited at its own stop or target or at the horizon close, "
-        "no costs (round-trip costs run roughly 0.05-0.3R for these setups). Regimes are the playbook router's "
-        "labels on the signal day.",
+        "`swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, "
+        "entered the next session by its entry type, exited at its own stop or target or at the horizon close. "
+        f"`avg R` is gross; `net R` subtracts round-trip slippage ({NET_SLIPPAGE_BPS_PER_SIDE:.0f} bp a side) in R "
+        "of each signal's stop distance. Regimes are the playbook router's labels on the signal day.",
     ]
     if n_strategies:
         out.append(
@@ -141,7 +168,8 @@ def replace_section(text: str, section: str) -> str:
 
 def load_trades(runs_dir: Path) -> pd.DataFrame:
     frames = []
-    for path in sorted(runs_dir.glob("*_nr*.json")):  # the chunked --no-router research runs
+    paths = sorted({*runs_dir.glob("*_nr*.json"), *runs_dir.glob("*_edgar.json")})  # --no-router research runs
+    for path in paths:
         payload = json.loads(path.read_text())
         trades = pd.DataFrame(payload.get("trades") or [])
         if not trades.empty:
@@ -168,17 +196,34 @@ def write_cards(
     return written
 
 
+def read_shadow(paths: Iterable[Path]) -> pd.DataFrame:
+    """The replay shadow ledgers of several stores (parallel replay lanes run on store copies), one row per
+    (strategy, symbol, as_of): the last store listed wins a duplicate key."""
+    from swing_engine.data.store import Store
+
+    frames = []
+    for path in paths:
+        store = Store(str(path), read_only=True)
+        try:
+            frames.append(store.read_table(REPLAY_SHADOW_TABLE))
+        finally:
+            store.close()
+    frames = [f for f in frames if not f.empty]
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True).drop_duplicates(["strategy", "symbol", "as_of"], keep="last")
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     from swing_engine.core.config import load_settings
-    from swing_engine.data.store import Store
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--settings", default="config/replay.yaml")
+    ap.add_argument("--store", action="append", default=[], help="extra replay store (repeatable)")
     args = ap.parse_args(argv)
     settings = load_settings.__wrapped__(Path(args.settings))
     store_path = ROOT / settings.data.store_path
-    store = Store(str(store_path), read_only=True)
-    shadow = store.read_table(REPLAY_SHADOW_TABLE)
+    shadow = read_shadow([store_path, *(ROOT / s for s in args.store)])
     trades = load_trades(store_path.parent.joinpath(*RUNS_SUBDIR))
     slugs = sorted(set(shadow["strategy"].astype(str))) if not shadow.empty else []
     written = write_cards(shadow, trades, slugs)

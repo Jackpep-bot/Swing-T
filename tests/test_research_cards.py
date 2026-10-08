@@ -15,7 +15,7 @@ def shadow_rows() -> pd.DataFrame:
         (date(2025, 3, 3), "choppy", 1.0), (date(2025, 3, 4), "choppy", -1.0), (date(2025, 6, 2), "healthy_uptrend", 2.0),
         (date(2019, 5, 1), "healthy_uptrend", -0.5),
     ]:
-        row = {"strategy": "demo", "as_of": as_of, "regime": regime, "taken": False}
+        row = {"strategy": "demo", "as_of": as_of, "regime": regime, "taken": False, "entry": 100.0, "stop": 90.0}
         for h in (5, 10, 20):
             row |= {f"hit_{h}d": "time_exit", f"result_r_{h}d": r, f"mfe_r_{h}d": max(r, 0.0), f"mae_r_{h}d": min(r, 0.0)}
         rows.append(row)
@@ -33,9 +33,10 @@ def trades() -> pd.DataFrame:
 def test_render_splits_windows_and_regimes() -> None:
     text = cards.render_section("demo", shadow_rows(), trades(), generated=date(2026, 10, 8), n_strategies=127)
     short, long_ = text.split("### 2017-01-01")
-    assert "| choppy | 2 | 0 | 50% | +0.00 |" in short and "| **all** | 3 | 0 | 67% | +0.67 |" in short
+    # cost per signal: 2 x 10bp x 100 / 10 = 0.02R
+    assert "| choppy | 2 | 0 | 50% | +0.00 | -0.02 |" in short and "| **all** | 3 | 0 | 67% | +0.67 | +0.65 |" in short
     assert "1 trades, win 100%, avg +1.50R" in short and "About 127 strategies" in text
-    assert "| **all** | 1 | 0 | 0% | -0.50 |" in long_ and "no trades taken" in long_
+    assert "| **all** | 1 | 0 | 0% | -0.50 | -0.52 |" in long_ and "no trades taken" in long_
     assert "other" not in text
 
 
