@@ -1126,7 +1126,7 @@ def regime_markdown(payload: dict[str, Any]) -> str:
 
 SAMPLE_PROVIDER = "sample"  # data.providers sample: deterministic offline bars for tests and smoke runs
 FLOAT_REFRESH_MIN_AGE_DAYS = 7  # a float row refreshed this recently is left alone
-FLOAT_REFRESH_MAX_PER_NIGHT = 600  # EDGAR companyfacts at <=10 req/s: ~1-2 minutes; the rest roll to later nights
+FLOAT_REFRESH_MAX_PER_NIGHT = 25  # each symbol also costs a Massive free-tier call (5/min): ~5 minutes; the rest roll to later nights
 FLOAT_CANDIDATE_MIN_DOLLAR_VOL = 1_000_000.0  # 20-day average dollar volume; illiquid shells are not candidates
 FLOAT_CANDIDATE_LOOKBACK_DAYS = 30
 
