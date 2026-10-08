@@ -40,3 +40,14 @@ def test_strong_edge_survives_both_windows_and_noise_does_not() -> None:
 def test_no_survivors_is_said_plainly() -> None:
     board, n = lb.leaderboard(frame("noise", "2024-01-02", 0.0), WINDOWS[:1])
     assert "None." in lb.render(board, n, WINDOWS[:1])
+
+
+def test_board_looks_are_logged_once(tmp_path, monkeypatch) -> None:
+    from swing_engine.research import trials
+
+    path = tmp_path / "trials.jsonl"
+    monkeypatch.setattr(lb, "iter_trials", lambda: trials.iter_trials(path))
+    monkeypatch.setattr(lb, "log_trial", lambda *a, **k: trials.log_trial(*a, path=path, **k))
+    board, _ = lb.leaderboard(frame("noise", "2024-01-02", 0.0), WINDOWS[:1])
+    assert lb.log_board_trials(board) == 3 and lb.log_board_trials(board) == 0
+    assert trials.trial_count(None, path) == 3

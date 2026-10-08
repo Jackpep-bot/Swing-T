@@ -25,7 +25,7 @@ import pandas as pd
 from swing_engine.research.cards import ROOT, WINDOWS, Window, cost_r, executable, read_shadow
 from swing_engine.research.metrics import haircut_sharpe
 from swing_engine.research.shadow import DEFAULT_HORIZONS, TRADE_HITS, horizon_column
-from swing_engine.research.trials import trial_count
+from swing_engine.research.trials import iter_trials, log_trial, trial_count
 
 SESSIONS_PER_YEAR = 252
 MIN_BLOCKS = 8  # fewer independent blocks than this: no t-stat (too few to say anything)
@@ -127,6 +127,26 @@ def render(board: pd.DataFrame, n_trials: int, windows: Sequence[Window] = WINDO
     return "\n".join(lines) + "\n"
 
 
+LEADERBOARD_TAG = "leaderboard"
+
+
+def log_board_trials(board: pd.DataFrame) -> int:
+    """Log each (strategy, window, horizon) look as a trial once, so research.metrics.multiple_testing and
+    `swing backtest` deflate by every look the leaderboard took, not only the runs logged elsewhere."""
+    seen = {(r.get("name"), (r.get("params") or {}).get("window"), (r.get("params") or {}).get("horizon"))
+            for r in iter_trials() if LEADERBOARD_TAG in (r.get("tags") or [])}
+    n = 0
+    for r in board.itertuples():
+        key = (str(r.strategy), int(r.window), int(r.horizon))
+        if key in seen:
+            continue
+        log_trial(key[0], {"window": key[1], "horizon": key[2]},
+                  {"n": float(r.n), "net_r": float(r.net_r), "t": float(r.t)}, tags=[LEADERBOARD_TAG],
+                  notes="research.leaderboard look (replay shadow ledger)")
+        n += 1
+    return n
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     from swing_engine.core.config import load_settings
 
@@ -138,6 +158,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     settings = load_settings.__wrapped__(Path(args.settings))
     shadow = read_shadow([ROOT / settings.data.store_path, *(ROOT / s for s in args.store)])
     board, n_trials = leaderboard(shadow, logged_trials=trial_count(None))
+    log_board_trials(board)
     (ROOT / args.out).write_text(render(board, n_trials))
     print(f"{len(board)} rows, {n_trials} trials, {len(survivors(board))} survivor rows -> {args.out}")
 
