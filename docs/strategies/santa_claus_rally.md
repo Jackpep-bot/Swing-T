@@ -71,15 +71,15 @@ Tie-breaker only; do not override `correction` (no new longs).
 - https://harbourfrontquant.substack.com/p/do-calendar-anomalies-still-work
 
 ## Empirical (replay)
-_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
 About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 1 | 0 | 0% | -0.29 | -0.35 | 100% | +0.07 | +0.01 | 100% | +0.06 | -0.00 | inf |
-| narrow_uptrend | 1 | 0 | 0% | -0.52 | -0.59 | 0% | -0.34 | -0.41 | 0% | -1.07 | -1.13 | 0.00 |
-| **all** | 2 | 0 | 0% | -0.41 | -0.47 | 50% | -0.14 | -0.20 | 50% | -0.51 | -0.57 | 0.06 |
+| healthy_uptrend | 1 | 0 | 0% | -0.29 | -0.37 | 100% | +0.07 | -0.01 | 100% | +0.06 | -0.02 | inf |
+| narrow_uptrend | 1 | 0 | 0% | -0.52 | -0.68 | 0% | -0.34 | -0.50 | 0% | -1.07 | -1.22 | 0.00 |
+| **all** | 2 | 0 | 0% | -0.41 | -0.52 | 50% | -0.14 | -0.25 | 50% | -0.51 | -0.62 | 0.06 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
@@ -87,8 +87,8 @@ Portfolio replay: no trades taken (every signal lost the slot race or was skippe
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | correction | 1 | 0 | 100% | +0.13 | +0.09 | 100% | +0.37 | +0.34 | 100% | +0.93 | +0.90 | inf |
-| healthy_uptrend | 4 | 0 | 75% | +0.12 | +0.03 | 100% | +0.70 | +0.62 | 100% | +1.76 | +1.67 | inf |
-| narrow_uptrend | 1 | 0 | 100% | +0.15 | +0.10 | 0% | -0.31 | -0.35 | 0% | -1.07 | -1.12 | 0.00 |
-| **all** | 6 | 0 | 83% | +0.12 | +0.05 | 83% | +0.48 | +0.41 | 83% | +1.15 | +1.08 | 7.41 |
+| healthy_uptrend | 4 | 0 | 75% | +0.12 | +0.02 | 100% | +0.70 | +0.61 | 100% | +1.76 | +1.66 | inf |
+| narrow_uptrend | 1 | 0 | 100% | +0.15 | +0.01 | 0% | -0.31 | -0.45 | 0% | -1.07 | -1.22 | 0.00 |
+| **all** | 6 | 0 | 83% | +0.12 | +0.03 | 83% | +0.48 | +0.39 | 83% | +1.15 | +1.06 | 7.41 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

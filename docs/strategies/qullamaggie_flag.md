@@ -166,22 +166,22 @@ reference target or set 0.0 like `rsi2_meanrev`.
 - Repo: `docs/methods/05-qullamaggie-breakout.md`, `docs/methods.md` (1a #11, 6.5, 7b #4), `swing_engine/strategies/qullamaggie_flag.py`, `swing_engine/features/patterns2.py`
 
 ## Empirical (replay)
-_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
 About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 3 | 0 | 33% | -0.52 | -0.54 | 0% | -0.84 | -0.86 | 0% | -0.84 | -0.86 | 0.00 |
-| **all** | 3 | 0 | 33% | -0.52 | -0.54 | 0% | -0.84 | -0.86 | 0% | -0.84 | -0.86 | 0.00 |
+| healthy_uptrend | 3 | 0 | 33% | -0.52 | -0.66 | 0% | -0.84 | -0.98 | 0% | -0.84 | -0.98 | 0.00 |
+| **all** | 3 | 0 | 33% | -0.52 | -0.66 | 0% | -0.84 | -0.98 | 0% | -0.84 | -0.98 | 0.00 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 19 | 0 | 58% | +0.36 | +0.33 | 42% | +0.07 | +0.04 | 26% | -0.42 | -0.45 | 0.47 |
-| narrow_uptrend | 2 | 0 | 50% | +0.03 | +0.00 | 0% | -1.56 | -1.59 | 0% | -1.56 | -1.59 | 0.00 |
-| **all** | 21 | 0 | 57% | +0.33 | +0.30 | 38% | -0.08 | -0.12 | 24% | -0.53 | -0.56 | 0.39 |
+| healthy_uptrend | 19 | 0 | 58% | +0.36 | +0.22 | 42% | +0.07 | -0.07 | 26% | -0.42 | -0.57 | 0.47 |
+| narrow_uptrend | 2 | 0 | 50% | +0.03 | -0.23 | 0% | -1.56 | -1.82 | 0% | -1.56 | -1.82 | 0.00 |
+| **all** | 21 | 0 | 57% | +0.33 | +0.17 | 38% | -0.08 | -0.24 | 24% | -0.53 | -0.69 | 0.39 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

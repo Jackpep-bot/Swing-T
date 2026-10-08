@@ -82,7 +82,7 @@ Fraction of trades stopped below D within 3 bars; any edge vanishing when tolera
 - https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/harmonic-patterns
 
 ## Empirical (replay)
-_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
 About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
@@ -90,20 +90,20 @@ About 125 strategies were replayed together, so a few will look good by chance: 
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
 | choppy | 1 | 0 | 0% | -1.44 | -1.46 | 0% | -1.44 | -1.46 | 0% | -1.44 | -1.46 | 0.00 |
 | healthy_uptrend | 1 | 0 | 100% | +0.17 | +0.13 | 0% | -0.92 | -0.96 | 0% | -0.92 | -0.96 | 0.00 |
-| high_vol_selloff | 1 | 0 | 0% | -0.01 | -0.05 | 100% | +0.71 | +0.66 | 100% | +1.72 | +1.68 | inf |
+| high_vol_selloff | 1 | 0 | 0% | -0.01 | -0.19 | 100% | +0.71 | +0.52 | 100% | +1.72 | +1.54 | inf |
 | narrow_uptrend | 1 | 0 | 0% | -0.83 | -0.85 | 0% | -0.83 | -0.85 | 0% | -0.83 | -0.85 | 0.00 |
-| **all** | 4 | 0 | 25% | -0.53 | -0.56 | 25% | -0.62 | -0.65 | 25% | -0.37 | -0.40 | 0.54 |
+| **all** | 4 | 0 | 25% | -0.53 | -0.59 | 25% | -0.62 | -0.68 | 25% | -0.37 | -0.43 | 0.54 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| choppy | 7 | 0 | 57% | +0.10 | +0.04 | 43% | +0.23 | +0.18 | 29% | +0.00 | -0.05 | 1.00 |
-| correction | 5 | 0 | 80% | +0.16 | +0.13 | 40% | +0.56 | +0.53 | 80% | +1.13 | +1.10 | 9.53 |
-| healthy_uptrend | 9 | 0 | 33% | -0.39 | -0.45 | 22% | -0.61 | -0.67 | 11% | -0.86 | -0.93 | 0.22 |
-| high_vol_selloff | 2 | 0 | 0% | -0.39 | -0.46 | 50% | -0.35 | -0.41 | 50% | +0.81 | +0.75 | 3.14 |
-| narrow_uptrend | 7 | 0 | 14% | -0.59 | -0.66 | 0% | -0.69 | -0.76 | 0% | -0.77 | -0.85 | 0.00 |
-| **all** | 30 | 0 | 40% | -0.23 | -0.29 | 27% | -0.22 | -0.28 | 27% | -0.20 | -0.25 | 0.72 |
+| choppy | 7 | 0 | 57% | +0.10 | -0.10 | 43% | +0.23 | +0.04 | 29% | +0.00 | -0.19 | 1.00 |
+| correction | 5 | 0 | 80% | +0.16 | +0.03 | 40% | +0.56 | +0.42 | 80% | +1.13 | +1.00 | 9.53 |
+| healthy_uptrend | 9 | 0 | 33% | -0.39 | -0.54 | 22% | -0.61 | -0.76 | 11% | -0.86 | -1.02 | 0.22 |
+| high_vol_selloff | 2 | 0 | 0% | -0.39 | -0.47 | 50% | -0.35 | -0.42 | 50% | +0.81 | +0.74 | 3.14 |
+| narrow_uptrend | 7 | 0 | 14% | -0.59 | -0.75 | 0% | -0.69 | -0.86 | 0% | -0.77 | -0.94 | 0.00 |
+| **all** | 30 | 0 | 40% | -0.23 | -0.39 | 27% | -0.22 | -0.38 | 27% | -0.20 | -0.35 | 0.72 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

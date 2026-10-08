@@ -20,7 +20,7 @@ def shadow_rows() -> pd.DataFrame:
         for h in (5, 10, 20):
             row |= {f"hit_{h}d": "time_exit", f"result_r_{h}d": r, f"mfe_r_{h}d": max(r, 0.0), f"mae_r_{h}d": min(r, 0.0)}
         rows.append(row)
-    rows.append({"strategy": "other", "as_of": date(2025, 3, 3), "regime": "choppy", "taken": False,
+    rows.append({"strategy": "zz_other", "as_of": date(2025, 3, 3), "regime": "choppy", "taken": False,
                  **{f"{c}_{h}d": v for h in (5, 10, 20) for c, v in
                     (("hit", "stop_hit"), ("result_r", -1.0), ("mfe_r", 0.0), ("mae_r", -1.0))}})
     return pd.DataFrame(rows)
@@ -38,7 +38,7 @@ def test_render_splits_windows_and_regimes() -> None:
     assert "| choppy | 2 | 0 | 50% | +0.00 | -0.02 |" in short and "| **all** | 3 | 0 | 67% | +0.67 | +0.65 |" in short
     assert "1 trades, win 100%, avg +1.50R" in short and "About 127 strategies" in text
     assert "| **all** | 1 | 0 | 0% | -0.50 | -0.52 |" in long_ and "no trades taken" in long_
-    assert "other" not in text
+    assert "zz_other" not in text
 
 
 def test_replace_section_keeps_the_rest_of_the_card(tmp_path: Path) -> None:

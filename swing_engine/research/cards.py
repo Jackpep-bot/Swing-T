@@ -67,11 +67,13 @@ def planned_r(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def cost_r(frame: pd.DataFrame, bps_per_side: float = NET_SLIPPAGE_BPS_PER_SIDE) -> pd.Series:
-    """Round-trip slippage in R per signal: 2 x bps x entry / (entry - stop); NaN when the stop distance is not
+    """Round-trip cost in R per signal: 2 x bps x entry / (entry - stop), with bps per side from a ``cost_bps``
+    column (research.costs: half-spread, floored at gate 1) when present; NaN when the stop distance is not
     positive."""
     entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
     risk = (entry - stop).where(entry > stop)
-    return 2.0 * bps_per_side / BPS * entry / risk
+    bps = frame["cost_bps"].astype(float).fillna(bps_per_side) if "cost_bps" in frame.columns else bps_per_side
+    return 2.0 * bps / BPS * entry / risk
 
 
 @dataclass(frozen=True)
@@ -166,8 +168,9 @@ def render_section(
         f"_Generated {(generated or date.today()).isoformat()} by `swing_engine.research.cards` from "
         "`swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, "
         "entered the next session by its entry type, exited at its own stop or target or at the horizon close. "
-        f"`avg R` is gross; `net R` subtracts round-trip slippage ({NET_SLIPPAGE_BPS_PER_SIDE:.0f} bp a side) in R "
-        "of each signal's stop distance. Regimes are the playbook router's labels on the signal day.",
+        "`avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread "
+        "(Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp "
+        "otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.",
     ]
     if n_strategies:
         out.append(
@@ -226,6 +229,22 @@ def write_cards(
     return written
 
 
+def with_costs(shadow: pd.DataFrame, store_path: Path) -> pd.DataFrame:
+    """Attach per-signal ``cost_bps`` (research.costs) from the bars in ``store_path``."""
+    from swing_engine.data.store import Store
+    from swing_engine.research.costs import attach_costs, cost_table
+
+    if shadow.empty:
+        return shadow
+    store = Store(str(store_path), read_only=True)
+    try:
+        d = pd.to_datetime(shadow["as_of"]).dt.date
+        bars = store.read_bars(sorted(set(shadow["symbol"].astype(str))), min(d) - pd.Timedelta(days=60), max(d))
+    finally:
+        store.close()
+    return attach_costs(shadow, cost_table(bars))
+
+
 def read_shadow(paths: Iterable[Path]) -> pd.DataFrame:
     """The replay shadow ledgers of several stores (parallel replay lanes run on store copies), one row per
     (strategy, symbol, as_of): the last store listed wins a duplicate key."""
@@ -253,7 +272,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     args = ap.parse_args(argv)
     settings = load_settings.__wrapped__(Path(args.settings))
     store_path = ROOT / settings.data.store_path
-    shadow = read_shadow([store_path, *(ROOT / s for s in args.store)])
+    shadow = with_costs(read_shadow([store_path, *(ROOT / s for s in args.store)]), store_path)
     trades = load_trades(store_path.parent.joinpath(*RUNS_SUBDIR))
     slugs = sorted(set(shadow["strategy"].astype(str))) if not shadow.empty else []
     written = write_cards(shadow, trades, slugs)

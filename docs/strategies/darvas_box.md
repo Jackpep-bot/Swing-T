@@ -92,29 +92,29 @@ Box-break failure rate (stopped within 5 bars); average boxes per winning trade.
 - https://www.cis.upenn.edu/~mkearns/finread/trend.pdf
 
 ## Empirical (replay)
-_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
 About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| choppy | 85 | 0 | 61% | +0.11 | +0.07 | 56% | +0.11 | +0.07 | 59% | +0.17 | +0.13 | 1.67 |
-| correction | 7 | 0 | 43% | -0.23 | -0.26 | 43% | -0.14 | -0.18 | 43% | -0.04 | -0.08 | 0.79 |
-| healthy_uptrend | 552 | 1 | 48% | -0.01 | -0.05 | 44% | -0.01 | -0.05 | 48% | +0.03 | -0.01 | 1.07 |
-| high_vol_selloff | 49 | 0 | 47% | -0.09 | -0.13 | 61% | -0.06 | -0.10 | 41% | -0.10 | -0.14 | 0.73 |
-| narrow_uptrend | 28 | 0 | 35% | -0.18 | -0.22 | 48% | -0.12 | -0.16 | 45% | -0.25 | -0.29 | 0.44 |
-| **all** | 721 | 1 | 49% | -0.01 | -0.05 | 47% | -0.01 | -0.05 | 49% | +0.03 | -0.01 | 1.07 |
+| choppy | 85 | 0 | 61% | +0.11 | -0.01 | 56% | +0.11 | -0.01 | 59% | +0.17 | +0.05 | 1.67 |
+| correction | 7 | 0 | 43% | -0.23 | -0.62 | 43% | -0.14 | -0.53 | 43% | -0.04 | -0.43 | 0.79 |
+| healthy_uptrend | 552 | 1 | 48% | -0.01 | -0.09 | 44% | -0.01 | -0.10 | 48% | +0.03 | -0.06 | 1.07 |
+| high_vol_selloff | 49 | 0 | 47% | -0.09 | -0.18 | 61% | -0.06 | -0.14 | 41% | -0.10 | -0.19 | 0.73 |
+| narrow_uptrend | 28 | 0 | 35% | -0.18 | -0.24 | 48% | -0.12 | -0.18 | 45% | -0.25 | -0.32 | 0.44 |
+| **all** | 721 | 1 | 49% | -0.01 | -0.10 | 47% | -0.01 | -0.10 | 49% | +0.03 | -0.06 | 1.07 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
 | regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|
-| choppy | 303 | 1 | 48% | -0.06 | -0.08 | 51% | -0.02 | -0.05 | 53% | +0.04 | +0.02 | 1.13 |
-| correction | 82 | 0 | 51% | -0.02 | -0.06 | 46% | -0.12 | -0.16 | 41% | -0.09 | -0.13 | 0.77 |
-| healthy_uptrend | 1996 | 10 | 50% | +0.01 | -0.02 | 49% | -0.01 | -0.03 | 48% | +0.00 | -0.03 | 1.01 |
-| high_vol_selloff | 234 | 1 | 50% | -0.05 | -0.07 | 47% | -0.08 | -0.10 | 50% | -0.06 | -0.09 | 0.83 |
-| narrow_uptrend | 231 | 0 | 54% | +0.04 | +0.01 | 53% | +0.05 | +0.03 | 53% | +0.11 | +0.08 | 1.30 |
-| **all** | 2846 | 12 | 50% | -0.00 | -0.03 | 49% | -0.01 | -0.04 | 49% | +0.01 | -0.02 | 1.02 |
+| choppy | 303 | 1 | 48% | -0.06 | -0.12 | 51% | -0.02 | -0.08 | 53% | +0.04 | -0.02 | 1.13 |
+| correction | 82 | 0 | 51% | -0.02 | -0.08 | 46% | -0.12 | -0.18 | 41% | -0.09 | -0.16 | 0.77 |
+| healthy_uptrend | 1996 | 10 | 50% | +0.01 | -0.06 | 49% | -0.01 | -0.07 | 48% | +0.00 | -0.06 | 1.01 |
+| high_vol_selloff | 234 | 1 | 50% | -0.05 | -0.11 | 47% | -0.08 | -0.14 | 50% | -0.06 | -0.12 | 0.83 |
+| narrow_uptrend | 231 | 0 | 54% | +0.04 | -0.03 | 53% | +0.05 | -0.01 | 53% | +0.11 | +0.04 | 1.30 |
+| **all** | 2846 | 12 | 50% | -0.00 | -0.07 | 49% | -0.01 | -0.08 | 49% | +0.01 | -0.06 | 1.02 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
