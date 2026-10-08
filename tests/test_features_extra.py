@@ -227,3 +227,181 @@ def test_future_bars_do_not_change_past_values(name, full_and_cut):
     full, cut = full_and_cut
     assert cut[name].notna().any(), f"{name} never warms up in 290 bars"
     _close(full[name], cut[name])
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 2
+def _with_spy(stock: list[float], spy: list[float]) -> pd.DataFrame:
+    return pd.concat([_bars(stock, stock, stock), _bars(spy, spy, spy, symbol="SPY")], ignore_index=True)
+
+
+def test_stress_and_rsmk_hand_checked():
+    out = ex.ensure_extra(_with_spy([1, 2, 3, 2, 1, 2, 3], [1, 2, 3, 4, 5, 6, 7]), ["stress_3", "market_close"])
+    aaa = out[out["symbol"] == "AAA"]
+    # stoch3(stock) = [., ., 100, 0, 0, 100, 100], stoch3(SPY ramp) = 100 -> d = [., ., 0, -100, -100, 0, 0]
+    _close(_col(aaa, "stress_3"), [np.nan, np.nan, np.nan, np.nan, 0.0, 100.0, 100.0])
+    _close(_col(aaa, "market_close"), [1, 2, 3, 4, 5, 6, 7])
+    out = ex.ensure_extra(_with_spy([10, 10, 20, 20], [10, 10, 10, 10]), ["rsmk_2_1"])
+    _close(_col(out[out["symbol"] == "AAA"], "rsmk_2_1"), [np.nan, np.nan, 100 * np.log(2), 100 * np.log(2)])
+
+
+def test_szo_rolling_extremes_and_pctile_hand_checked():
+    out = ex.ensure_extra(_bars([1, 2, 2, 1], [1, 2, 2, 1], [1, 2, 2, 1]), ["szo_1"])
+    _close(_col(out, "szo_1"), [np.nan, 100.0, 0.0, -100.0])  # TEMA(1) is the identity: 100 x sign(dC) / 1
+    c = [3, 1, 2, 5]
+    out = ex.ensure_extra(_bars(c, c, c), ["max_2_of_close", "min_2_of_close", "pctile_3_of_close"])
+    _close(_col(out, "max_2_of_close"), [np.nan, 3, 2, 5])
+    _close(_col(out, "min_2_of_close"), [np.nan, 1, 1, 2])
+    _close(_col(out, "pctile_3_of_close"), [np.nan, np.nan, 2 / 3, 1.0])
+
+
+def test_down_days_hand_checked():
+    c = [5, 4, 4, 3, 4, 2]
+    out = ex.ensure_extra(_bars(c, c, c), ["down_days_3"])
+    _close(_col(out, "down_days_3"), [np.nan, np.nan, np.nan, 2, 1, 2])  # unchanged closes are not down
+
+
+def test_ha_ohlc4_is_mean_of_heikin_ashi_bar():
+    out = ex.ensure_extra(build_panel(gbm_bars(["AAA"], n_bars=30, seed=5)),
+                          ["ha_ohlc4", "ha_open", "ha_high", "ha_low", "ha_close"])
+    _close(out["ha_ohlc4"], out[["ha_open", "ha_high", "ha_low", "ha_close"]].mean(axis=1))
+
+
+def test_seas_month_hand_checked():
+    days = pd.bdate_range("2022-01-03", "2024-03-29", tz=NY)
+    closes = np.where(days.month == 3, 110.0, 100.0)  # March closes at 110 in every year, 100 otherwise
+    bars = _bars(closes, closes, closes).assign(ts=days)
+    out = ex.ensure_extra(bars, ["seas_month_1_2", "seas_month_1_1"])
+    month = out["ts"].dt.strftime("%Y-%m")
+    one = out.groupby(month)[["seas_month_1_2", "seas_month_1_1"]].first()
+    assert np.isnan(one.loc["2023-01", "seas_month_1_2"])  # Jan 2022 has no prior month: one year < 2 needed
+    assert one.loc["2023-03", "seas_month_1_1"] == pytest.approx(0.10)
+    assert np.isnan(one.loc["2023-03", "seas_month_1_2"])
+    assert one.loc["2024-03", "seas_month_1_2"] == pytest.approx(0.10)  # mean(Mar 2023, Mar 2022) = +10%
+    assert one.loc["2024-02", "seas_month_1_2"] == pytest.approx(0.0)
+    assert one.loc["2023-04", "seas_month_1_1"] == pytest.approx(100 / 110 - 1)
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 1
+def test_vwma_and_hl_mid_hand_checked():
+    bars = _bars(highs=[11, 12, 13], lows=[9, 8, 10], closes=[10, 11, 12]).assign(volume=[1.0, 3.0, 1.0])
+    out = ex.ensure_extra(bars, ["vwma_2", "hl_mid_2", "sma_2_of_hl_mid_2"])
+    _close(_col(out, "vwma_2"), [np.nan, (10 + 33) / 4, (33 + 12) / 4])
+    _close(_col(out, "hl_mid_2"), [np.nan, (12 + 8) / 2, (13 + 8) / 2])
+    _close(_col(out, "sma_2_of_hl_mid_2"), [np.nan, np.nan, (10 + 10.5) / 2])
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 4
+def test_last_pivot_strict_and_confirmed_late():
+    h = [1, 2, 3, 5, 4, 3, 2, 1, 0]
+    level, idx = ex.last_pivot(np.asarray(h, dtype=float), 2, 2, highs=True)
+    _close(level, [np.nan] * 5 + [5.0] * 4)  # pivot at bar 3 is known from bar 5 (right strength 2)
+    assert list(idx[5:]) == [3, 3, 3, 3]
+    flat = ex.last_pivot(np.asarray([1, 2, 2, 1, 0], dtype=float), 1, 1, highs=True)[0]
+    assert np.isnan(flat).all()  # ties are not pivots (strictly above each neighbour)
+    lows = [5, 4, 2, 3, 4, 1, 2, 3]
+    out = ex.ensure_extra(_bars(lows, lows, lows), ["last_pivot_low_2_1"])
+    _close(_col(out, "last_pivot_low_2_1"), [np.nan, np.nan, np.nan, 2, 2, 2, 1, 1])
+
+
+def test_sqz_mom_is_linreg_endpoint():
+    panel = build_panel(gbm_bars(["AAA"], n_bars=80, seed=6))
+    out = ex.ensure_extra(panel, ["sqz_mom_20"])
+    h, lo, c = out["high"], out["low"], out["close"]
+    delta = c - ((h.rolling(20).max() + lo.rolling(20).min()) / 2 + c.rolling(20).mean()) / 2
+    y = delta.iloc[-20:].to_numpy()
+    slope, icpt = np.polyfit(np.arange(20.0), y, 1)
+    assert out["sqz_mom_20"].iloc[-1] == pytest.approx(icpt + slope * 19)
+
+
+def test_weekly_macd_hist_uses_completed_weeks_only():
+    panel = build_panel(gbm_bars(["AAA"], n_bars=260, seed=8))
+    out = ex.ensure_extra(panel, ["wk_macd_hist", "wk_macd_hist_prev"])
+    day = out["ts"].dt.tz_localize(None).dt.normalize()
+    weekly = out.set_index(day)["close"].resample("W-FRI").last().dropna()
+    hist = ema(weekly, 12) - ema(weekly, 26)
+    hist = hist - ema(hist, 9)
+    fri = out.index[day.dt.dayofweek == 4][-1]
+    wed = out.index[(day.dt.dayofweek == 2) & (out.index > fri - 5) & (out.index < fri)][-1]
+    friday = day[fri]
+    assert out.loc[fri, "wk_macd_hist"] == pytest.approx(hist[friday])
+    assert out.loc[fri, "wk_macd_hist_prev"] == pytest.approx(hist.shift(1)[friday])
+    assert out.loc[wed, "wk_macd_hist"] == pytest.approx(hist.shift(1)[friday])  # same week, before Friday
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 3
+def test_linreg_slope_of_and_lbr_rsi_hand_checked():
+    c = [1.0, 2.0, 4.0, 4.0, 7.0]
+    out = ex.ensure_extra(_bars(c, c, c), ["linreg_slope_3_of_close", "linreg_slope_3", "lbr_rsi_2"])
+    _close(_col(out, "linreg_slope_3_of_close"), [np.nan, np.nan, 1.5, 1.0, 1.5])
+    _close(_col(out, "linreg_slope_3_of_close"), _col(out, "linreg_slope_3"))
+    _close(_col(out, "lbr_rsi_2"), rsi(pd.Series(c).diff(), 2))  # RSI of the 1-day change, not of price
+    assert ex.is_extra("linreg_slope_5_of_stoch_k_14") and not ex.is_extra("linreg_slope_5_of_nope")
+
+
+def test_stiffness_hand_checked():
+    c = [10.0, 10.0, 12.0, 9.0, 13.0]
+    out = ex.ensure_extra(_bars(c, c, c), ["stiffness_2_2"])
+    # thr_t = mean(c[t-1:t+1]) + 0.2 x population SD: t1 10 (10 not above), t2 11.2 (12 above), t3 10.8 (9 below),
+    # t4 11.4 (13 above) -> 2-bar share of closes above
+    _close(_col(out, "stiffness_2_2"), [np.nan, np.nan, 50.0, 50.0, 50.0])
+
+
+def test_zigzag_confirms_swings_without_repainting():
+    c = np.array([100, 110, 99, 105, 120, 108, 125, 130.0])
+    trend, hi, lo = ex.zigzag_np(c, 0.05)
+    # 100 low at t1 (110 >= 105); 110 high at t2 (99 <= 104.5); 99 low at t3 (105 >= 103.95); 120 high at t5;
+    # 108 low at t6 -> highs 110 < 120 and lows 99 < 108: uptrend (t5: higher high, lower low: 0)
+    _close(hi, [np.nan, np.nan, 110, 110, 110, 120, 120, 120])
+    _close(lo, [np.nan, 100, 100, 99, 99, 99, 108, 108])
+    _close(trend, [np.nan] * 5 + [0.0, 1.0, 1.0])
+    _close(ex.zigzag_np(c[:6], 0.05)[1], hi[:6])  # appending bars never revises an earlier value
+
+
+def test_month_end_flag_on_last_nyse_session():
+    c = [1.0] * 6
+    out = ex.ensure_extra(_bars(c, c, c, start="2024-11-25"), ["month_end"])  # Nov 29 2024 is the last session
+    _close(_col(out, "month_end"), [0, 0, 0, 0, 1, 0])  # Nov 28 (Thanksgiving) is no session: 0
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 0
+def test_rms_of_column_hand_checked():
+    out = ex.ensure_extra(_bars([3, 4, 0], [3, 4, 0], [3, 4, 0]), ["rms_2_of_close"])
+    _close(_col(out, "rms_2_of_close"), [np.nan, np.sqrt(12.5), np.sqrt(8.0)])
+
+
+def test_vpn_matches_direct_formula():
+    panel = build_panel(gbm_bars(["AAA"], n_bars=80, seed=6))
+    out = ex.ensure_extra(panel, ["vpn_5"])
+    tp = (out["high"] + out["low"] + out["close"]) / 3.0
+    dtp, band, v = tp.diff(), 0.1 * out["atr_14"], out["volume"]
+    signed = (v * ((dtp >= band).astype(float) - (dtp <= -band).astype(float))).where(dtp.notna() & band.notna())
+    raw = 100.0 * signed.rolling(5).sum() / v.rolling(5).sum()
+    _close(out["vpn_5"], ema(raw, 3))
+
+
+def test_resid_mom_matches_ols_residuals():
+    bars = gbm_bars(["AAA", "SPY"], n_bars=60, seed=8)
+    out = ex.ensure_extra(build_panel(bars), ["resid_mom_30_10_3"])
+    aaa, spy = (out[out["symbol"] == s].reset_index(drop=True) for s in ("AAA", "SPY"))
+    r, m = aaa["close"].pct_change().to_numpy(), spy["close"].pct_change().to_numpy()
+    t = 59
+    beta, alpha = np.polyfit(m[t - 29 : t + 1], r[t - 29 : t + 1], 1)
+    e = r[t - 12 : t - 2] - alpha - beta * m[t - 12 : t - 2]  # bars t-3-10+1 .. t-3
+    assert aaa["resid_mom_30_10_3"].iloc[t] == pytest.approx(e.sum() / e.std(), rel=1e-6)
+    assert out.loc[out["symbol"] == "AAA", "resid_mom_30_10_3"].iloc[:30].isna().all()
+
+
+def test_weekly_features_use_completed_weeks_only():
+    c = list(range(1, 16))  # Mon 2024-02-05 .. Fri 2024-02-23: three full weeks, closes 1..15
+    stock = _bars(c, c, c, start="2024-02-05")
+    spy = _bars(c, c, c, start="2024-02-05", symbol="SPY")
+    names = ["wk_close", "wk_close_max_1", "wk_roc_1", "wk_fresh", "wk_stoch_2_1", "mkt_wk_above_2"]
+    out = ex.ensure_extra(pd.concat([stock, spy], ignore_index=True), names)
+    aaa = out[out["symbol"] == "AAA"]
+    nan4 = [np.nan] * 4
+    _close(_col(aaa, "wk_close"), nan4 + [5] * 5 + [10] * 5 + [15])
+    _close(_col(aaa, "wk_fresh"), [0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    _close(_col(aaa, "wk_close_max_1"), [np.nan] * 9 + [5] * 5 + [10])
+    _close(_col(aaa, "wk_roc_1"), [np.nan] * 9 + [100.0] * 5 + [50.0])
+    _close(_col(aaa, "wk_stoch_2_1"), [np.nan] * 9 + [100.0] * 6)  # (10 - 1) / (10 - 1), (15 - 6) / (15 - 6)
+    _close(_col(aaa, "mkt_wk_above_2"), [np.nan] * 9 + [1.0] * 6)

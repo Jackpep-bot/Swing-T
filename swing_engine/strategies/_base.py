@@ -34,6 +34,8 @@ TREND_DOWN = -1
 
 #: Parameter names shared by every strategy (each strategy still lists them in `default_params`).
 P_MIN_RR = "min_reward_risk"
+#: float slack on the reward/risk floor: a target placed at exactly N R must pass a floor of N
+RR_TOLERANCE = 1e-9
 P_MIN_TREND = "min_trend_state"
 P_MIN_MARKET_TREND = "min_market_trend_state"
 
@@ -177,7 +179,7 @@ class PanelStrategy(Strategy):
                 return None
             target_f = float(target)
             reward_risk = (target_f - entry_f) / risk
-            if reward_risk < float(self.params.get(P_MIN_RR, 0.0)):
+            if reward_risk < float(self.params.get(P_MIN_RR, 0.0)) - RR_TOLERANCE:
                 return None
         feats = {k: float(v) for k, v in (features or {}).items() if _finite(v)}
         return Signal(

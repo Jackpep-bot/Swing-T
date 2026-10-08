@@ -146,6 +146,10 @@ def _geometry_error(signal: Signal) -> str | None:
     return None
 
 
+#: float slack on the reward/risk floor (strategies._base.RR_TOLERANCE)
+RR_TOLERANCE = 1e-9
+
+
 def size_signal_detail(
     signal: Signal,
     equity: float,
@@ -170,9 +174,9 @@ def size_signal_detail(
     if rps <= 0:
         return None, "risk per share is zero"
     rr = reward_risk_for(signal)
-    if rr is None:
+    if rr is None and rr_floor > 0:
         return None, "reward_risk unknown (signal has neither reward_risk nor target)"
-    if rr < rr_floor:
+    if rr is not None and rr < rr_floor - RR_TOLERANCE:
         return None, f"reward_risk {rr:.2f} below min {rr_floor}"
     if any(p.symbol == signal.symbol for p in positions):
         return None, f"{signal.symbol} already has an open position"
@@ -214,7 +218,7 @@ def size_signal_detail(
         binding = min(caps, key=caps.get)  # type: ignore[arg-type]
         return None, f"size rounds to zero (binding cap: {binding})"
 
-    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + f" rr={rr:.2f} rps={rps:.4f} rps_at_limit={rps_worst:.4f}"
+    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + (f" rr={rr:.2f}" if rr is not None else " rr=rule-exit") + f" rps={rps:.4f} rps_at_limit={rps_worst:.4f}"
     intent = OrderIntent(
         symbol=signal.symbol,
         side=signal.side,

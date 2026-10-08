@@ -569,14 +569,22 @@ def _read_bars(
     return bars
 
 
-def _with_extras(panel: pd.DataFrame, market: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Attach every registered strategy's `extra_features` the panel lacks (cached panels carry none)."""
+def _with_extras(
+    panel: pd.DataFrame, settings: Settings, strategies: list[Any] | None, market: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Attach the `extra_features` of ``strategies`` (names or instances; names are built with their settings
+    params, so non-default lengths resolve) that the panel lacks. Cached panels carry none."""
+    if not strategies:
+        return panel
     ensure_extra, required_extras = _load("features.extra.ensure_extra"), _load("features.extra.required_extras")
-    return ensure_extra(panel, required_extras(), market)
+    objs = [_make_strategy(s, settings) if isinstance(s, str) else s for s in strategies]
+    return ensure_extra(panel, required_extras(objs), market)
 
 
-def _read_panel(store: Any, settings: Settings, start: date | None, end: date | None) -> pd.DataFrame:
-    """Cached `panel` table when present, else build it from bars on the fly."""
+def _read_panel(
+    store: Any, settings: Settings, start: date | None, end: date | None, strategies: list[Any] | None = None
+) -> pd.DataFrame:
+    """Cached `panel` table when present, else build it from bars on the fly; plus ``strategies``' extras."""
     panel: pd.DataFrame | None = None
     try:
         panel = store.read_table(PANEL_TABLE)
@@ -589,7 +597,7 @@ def _read_panel(store: Any, settings: Settings, start: date | None, end: date | 
         bars = _read_bars(store, settings, None, start_d, end_d)
         build_panel = _load("features.panel.build_panel")
         panel = build_panel(bars, _market_slice(bars))
-    panel = _with_extras(panel)
+    panel = _with_extras(panel, settings, strategies)
     panel = _slice_dates(panel, start, end)
     if panel.empty:
         _fail(f"panel has no rows for {start}..{end}", EXIT_NO_DATA)
@@ -953,7 +961,7 @@ def scan(
     if not names:
         _fail("no strategies enabled in settings and none registered", EXIT_USAGE)
     store = _open_store(settings)
-    panel = _read_panel(store, settings, None, as_of_d)
+    panel = _read_panel(store, settings, None, as_of_d, names)
     full_panel, universe = panel, None
     listing = _store_listing(store)
     if listing is not None:  # screened, point-in-time universe (ETFs/OTC/delisted-before-as_of drop out)
@@ -1001,7 +1009,13 @@ def _save_scan_routing(
 
 
 def _panel_from_provider(
-    name: str, settings: Settings, secrets: Secrets, symbols: list[str] | None, start: date, end: date
+    name: str,
+    settings: Settings,
+    secrets: Secrets,
+    symbols: list[str] | None,
+    start: date,
+    end: date,
+    strategies: list[Any] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
     prov = _make_provider(name, settings, secrets)
     if symbols is None:
@@ -1023,7 +1037,7 @@ def _panel_from_provider(
             log.info("market_bars_unavailable", provider=name, error=str(e))
             market = None
     build_panel = _load("features.panel.build_panel")
-    return _with_extras(build_panel(bars, market), market), market
+    return _with_extras(build_panel(bars, market), settings, strategies, market), market
 
 
 def _returns_moments(result: Any, metrics: dict[str, Any]) -> tuple[int, float, float]:
@@ -1092,11 +1106,11 @@ def backtest(
 
     if provider:
         panel, market = _panel_from_provider(
-            provider, settings, secrets, _split_list(symbols), start_d, end_d
+            provider, settings, secrets, _split_list(symbols), start_d, end_d, [strat]
         )
     else:
         store = _open_store(settings)
-        panel = _read_panel(store, settings, start_d - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS), end_d)
+        panel = _read_panel(store, settings, start_d - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS), end_d, [strat])
         market = _market_slice(panel)  # before the universe screen drops the ETF
         wanted = _split_list(symbols)
         if wanted:
@@ -1254,7 +1268,7 @@ def _signals_for(settings: Settings, as_of: date, strategies: list[str] | None) 
         return sorted(signals, key=lambda s: s.score, reverse=True)  # cap keeps the best candidates
     names = strategies or _enabled_strategies(settings)
     store = _open_store(settings)
-    panel = _read_panel(store, settings, None, as_of)
+    panel = _read_panel(store, settings, None, as_of, names)
     return _run_scan(settings, panel, as_of, names)
 
 

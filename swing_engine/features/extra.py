@@ -850,6 +850,447 @@ def _rank(ctx: _Ctx, col: str) -> pd.Series:
     return ctx.col(col).groupby(session_key(ctx.df[TS_COL]), sort=False).rank(pct=True)
 
 
+# ----------------------------------------------------------------------------------------------- catalog batch 2
+SEAS_MIN_YEARS = 3  # heston_sadka_seasonality card: average needs >= 3 of the lag years (fewer when the set is shorter)
+MONTHS_PER_YEAR = 12
+
+
+def _rolling_ext(ctx: _Ctx, fn: str, n: str, col: str) -> pd.Series:
+    """``max_<n>_of_<col>`` / ``min_<n>_of_<col>``: rolling extreme of any column over the last ``n`` bars."""
+    return ctx.ps(ctx.col(col), rolling_max if fn == "max" else rolling_min, int(n))
+
+
+def _pctile(ctx: _Ctx, n: str, col: str) -> pd.Series:
+    """``pctile_<n>_of_<col>``: percentile rank (0, 1] of the bar's value within its own last ``n`` bars (inclusive)."""
+    w = int(n)
+    return ctx.ps(ctx.col(col), lambda s: s.rolling(w, min_periods=w).rank(pct=True))
+
+
+def _seas_month(ctx: _Ctx, a: str, b: str) -> pd.Series:
+    """Heston-Sadka same-calendar-month seasonality: mean return of the row's calendar month in years Y-a .. Y-b.
+
+    Month return = last close of the month / last close of the previous month - 1 (a missing month is NaN). Only
+    months at least a year old enter, so the current month never leaks in.
+    """
+    s = session_key(ctx.df[TS_COL])
+    mnum = (s.dt.year * MONTHS_PER_YEAR + s.dt.month).to_numpy()
+    key = ctx.key.to_numpy()
+    last = pd.Series(ctx.c.to_numpy(), index=pd.MultiIndex.from_arrays([key, mnum])).groupby(level=[0, 1]).last()
+    k, m = last.index.get_level_values(0), last.index.get_level_values(1)
+    prev = last.reindex(pd.MultiIndex.from_arrays([k, m - 1])).to_numpy()
+    ret = pd.Series(last.to_numpy() / prev - 1.0, index=last.index)
+    years = range(int(a), int(b) + 1)
+    lags = np.vstack([ret.reindex(pd.MultiIndex.from_arrays([key, mnum - MONTHS_PER_YEAR * y])).to_numpy()
+                      for y in years])
+    count = (~np.isnan(lags)).sum(axis=0)
+    total = np.nansum(lags, axis=0)
+    ok = count >= min(SEAS_MIN_YEARS, len(years))
+    return ctx.series(np.where(ok, total / np.maximum(count, 1), np.nan))
+
+
+def _stoch_close(x: pd.Series, n: int) -> pd.Series:
+    lo, hi = rolling_min(x, n), rolling_max(x, n)
+    return (PCT * (x - lo) / (hi - lo)).where(hi > lo)
+
+
+def _stress(ctx: _Ctx, n: str) -> pd.Series:
+    """Kaufman Stress: stochastic(n) of [stochastic(n) of close - stochastic(n) of the market close] (kaufman_stress)."""
+    w = int(n)
+    d = ctx.ps(ctx.c, _stoch_close, w) - ctx.ps(ctx.col("market_close"), _stoch_close, w)
+    return ctx.ps(d, _stoch_close, w)
+
+
+def _rsmk(ctx: _Ctx, n: str, m: str) -> pd.Series:
+    """Katsanos RSMK = 100 x EMA_m(ln(C/B) - ln(C/B)[n]) with B the market close (katsanos_rsmk card)."""
+    rs = np.log(ctx.c / ctx.col("market_close"))
+    return PCT * ctx.ps(rs - ctx.shift(rs, int(n)), ema, int(m))
+
+
+def _szo(ctx: _Ctx, n: str) -> pd.Series:
+    """Sentiment Zone Oscillator = 100 x TEMA_n(sign(close - prev close)) / n (sentiment_zone_oscillator card)."""
+    w = int(n)
+    r = np.sign(ctx.c - ctx.prev_close())
+    return PCT * ctx.ps(r, _tema, w) / w
+
+
+def _down_days(ctx: _Ctx, n: str) -> pd.Series:
+    """``down_days_<n>``: count of closes below the previous close over the last ``n`` bars (connors_hpetf card)."""
+    pc = ctx.prev_close()
+    return ctx.rsum((ctx.c < pc).astype(float).where(pc.notna()), int(n))
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 1
+def _vwma(ctx: _Ctx, n: str) -> pd.Series:
+    """``vwma_<n>``: volume-weighted MA sum(close x volume) / sum(volume) over ``n`` bars (ma_crossover_family)."""
+    vol = ctx.rsum(ctx.v, int(n))
+    return (ctx.rsum(ctx.c * ctx.v, int(n)) / vol).where(vol > 0)
+
+
+def _hl_mid(ctx: _Ctx, n: str) -> pd.Series:
+    """``hl_mid_<n>``: (highest high + lowest low) / 2 of the last ``n`` bars (Apirine MHL MA input)."""
+    return (ctx.col(f"high_{n}") + ctx.col(f"low_{n}")) / 2.0
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 5
+#: traditional point-and-figure box table (upper price bound inclusive, box); point_and_figure_signals card
+#: ("$5.01-$20 -> $0.50; $20.01-$100 -> $1.00; higher bands larger"), remaining bands from the StockCharts table
+PF_BOX_TABLE: tuple[tuple[float, float], ...] = (
+    (0.25, 0.0625), (1.0, 0.125), (5.0, 0.25), (20.0, 0.5), (100.0, 1.0), (200.0, 2.0), (500.0, 4.0),
+    (1000.0, 5.0), (25000.0, 50.0), (np.inf, 500.0),
+)
+PF_REVERSAL = 3  # 3-box reversal
+PF_COLUMNS = ("pf_dir", "pf_top", "pf_bot", "pf_box", "pf_prev_x_top", "pf_prev_x_top2", "pf_prev_o_bot")
+TD_LOOKBACK = 4  # td_sequential card: setup compares the close 4 bars earlier ...
+TD_SETUP = 9  # ... for 9 consecutive bars
+TD_CD_LOOKBACK = 2  # countdown: close <= low 2 bars earlier ...
+TD_COUNTDOWN = 13  # ... 13 times (not consecutive)
+TD_QUALIFIER_BAR = 8  # countdown 13 needs low <= close of countdown bar 8
+TD_COLUMNS = ("td_buy_setup", "td_buy_perfected", "td_tdst", "td_buy_countdown", "td_risk_level")
+
+
+def _pf_box(price: float) -> float:
+    return next(box for bound, box in PF_BOX_TABLE if price <= bound)
+
+
+def _pf_np(h: np.ndarray, lo: np.ndarray) -> tuple[np.ndarray, ...]:
+    """High/low point-and-figure columns, updated bar by bar (causal). The box comes from the table at each column's
+    start price; the first column is treated as an X column. Row t: state after bar t (see PF_COLUMNS)."""
+    out = [np.full(len(h), np.nan) for _ in PF_COLUMNS]
+    d, top, bot, box, px1, px2, po = 0, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan
+    for t in range(len(h)):
+        if not (np.isfinite(h[t]) and np.isfinite(lo[t])):
+            continue
+        if d == 0:
+            box = _pf_box(lo[t])
+            d, bot = 1, np.ceil(lo[t] / box) * box
+            top = max(np.floor(h[t] / box) * box, bot)
+        elif d > 0:
+            if np.floor(h[t] / box) * box >= top + box:
+                top = np.floor(h[t] / box) * box
+            elif top - np.ceil(lo[t] / box) * box >= PF_REVERSAL * box:  # reverse into an O column
+                px2, px1, d = px1, top, -1
+                top, box = top - box, _pf_box(lo[t])
+                bot = np.ceil(lo[t] / box) * box
+        elif np.ceil(lo[t] / box) * box <= bot - box:
+            bot = np.ceil(lo[t] / box) * box
+        elif np.floor(h[t] / box) * box - bot >= PF_REVERSAL * box:  # reverse into an X column
+            po, d = bot, 1
+            bot, box = bot + box, _pf_box(h[t])
+            top = np.floor(h[t] / box) * box
+        for arr, v in zip(out, (d, top, bot, box, px1, px2, po), strict=True):
+            arr[t] = v
+    return tuple(out)
+
+
+def _td_np(h: np.ndarray, lo: np.ndarray, c: np.ndarray, tr: np.ndarray) -> tuple[np.ndarray, ...]:
+    """DeMark TD Sequential, buy side (td_sequential card). Setup: consecutive closes < close 4 bars earlier, bar 1
+    a price flip (prior close > close 4 bars before it); bar 9 completes it (perfected when min(low 8, low 9) <=
+    min(low 6, low 7)); TDST = its highest high; risk = its lowest low minus that bar's true range. Countdown from
+    setup bar 9: closes <= low 2 bars earlier, 13 needed, bar 13 deferred until low <= close of countdown bar 8;
+    cancelled by a close above TDST or a completed sell setup; a new buy setup restarts it. On 13 the risk level is
+    the countdown's lowest low minus that bar's true range."""
+    n = len(c)
+    setup, perf, tdst, cd, risk = (np.full(n, np.nan) for _ in TD_COLUMNS)
+    bs = ss = cdn = 0
+    counting, cur_tdst, cur_risk, bar8, cd_low, cd_tr = False, np.nan, np.nan, np.nan, np.inf, np.nan
+    lb = TD_LOOKBACK
+    for t in range(lb + 1, n):
+        dn, up = c[t] < c[t - lb], c[t] > c[t - lb]
+        bs = (bs + 1 if bs else int(c[t - 1] > c[t - 1 - lb])) if dn else 0
+        ss = (ss + 1 if ss else int(c[t - 1] < c[t - 1 - lb])) if up else 0
+        perf[t] = 0.0
+        if bs == TD_SETUP:
+            seg = slice(t - TD_SETUP + 1, t + 1)
+            i = t - TD_SETUP + 1 + int(np.argmin(lo[seg]))
+            cur_tdst, cur_risk = float(np.max(h[seg])), lo[i] - tr[i]
+            perf[t] = float(min(lo[t], lo[t - 1]) <= min(lo[t - 2], lo[t - 3]))
+            counting, cdn, bar8, cd_low, cd_tr = True, 0, np.nan, np.inf, np.nan
+        if ss == TD_SETUP or (counting and c[t] > cur_tdst):
+            counting, cdn = False, 0
+        if counting and c[t] <= lo[t - TD_CD_LOOKBACK]:
+            if lo[t] < cd_low:
+                cd_low, cd_tr = lo[t], tr[t]
+            if cdn < TD_COUNTDOWN - 1:
+                cdn += 1
+                bar8 = c[t] if cdn == TD_QUALIFIER_BAR else bar8
+            elif lo[t] <= bar8:
+                cdn = TD_COUNTDOWN
+        setup[t], cd[t], tdst[t] = bs, cdn, cur_tdst
+        if cdn == TD_COUNTDOWN:
+            cur_risk, counting, cdn = cd_low - cd_tr, False, 0
+        risk[t] = cur_risk
+    return setup, perf, tdst, cd, risk
+
+
+def _pf(ctx: _Ctx, name: str) -> pd.Series:
+    return ctx.series(ctx.memo("_pf", lambda: ctx.loop(_pf_np, ctx.h, ctx.l))[PF_COLUMNS.index(name)])
+
+
+def _td(ctx: _Ctx, name: str) -> pd.Series:
+    res = ctx.memo("_td", lambda: ctx.loop(_td_np, ctx.h, ctx.l, ctx.c, ctx.tr()))
+    return ctx.series(res[TD_COLUMNS.index(name)])
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 4
+EPOCH_DOW = 3  # 1970-01-01 was a Thursday (Monday = 0)
+FRIDAY = 4
+
+
+def last_pivot(x: np.ndarray, left: int, right: int, highs: bool) -> tuple[np.ndarray, np.ndarray]:
+    """Most recent confirmed pivot as of each bar: (level, pivot index), NaN / -1 before the first one.
+
+    Bar i is a pivot high when ``x[i]`` is strictly above each of the ``left`` bars before and ``right`` bars after
+    it (TradeStation Pivot Reversal "strength"; lows mirror); it is known only from bar ``i + right``.
+    """
+    n = len(x)
+    level, idx = np.full(n, np.nan), np.full(n, -1, dtype=int)
+    if n < left + right + 1:
+        return level, idx
+    win = sliding_window_view(x, left + right + 1)
+    centre = win[:, left]
+    others = np.delete(win, left, axis=1)
+    mask = (centre > others.max(axis=1)) if highs else (centre < others.min(axis=1))
+    piv = np.flatnonzero(mask) + left  # pivot bar indices
+    conf = piv + right  # bar on which each pivot becomes known
+    k = np.searchsorted(conf, np.arange(n), side="right") - 1
+    ok = k >= 0
+    idx[ok] = piv[k[ok]]
+    level[ok] = x[idx[ok]]
+    return level, idx
+
+
+def _last_pivot(ctx: _Ctx, side: str, left: str, right: str) -> pd.Series:
+    """``last_pivot_(high|low)_<L>_<R>``: level of the latest confirmed pivot (pivot_reversal_breakout card)."""
+    src = ctx.h if side == "high" else ctx.l
+    return ctx.series(ctx.loop(lambda a: last_pivot(a, int(left), int(right), side == "high")[0], src))
+
+
+def _sqz_mom(ctx: _Ctx, n: str) -> pd.Series:
+    """TTM / LazyBear squeeze momentum: endpoint of the n-bar least-squares line of
+    ``close - ((highest high_n + lowest low_n) / 2 + sma_n) / 2`` (ttm_squeeze card)."""
+    w = int(n)
+    delta = ctx.c - ((ctx.col(f"high_{w}") + ctx.col(f"low_{w}")) / 2.0 + ctx.col(f"sma_{w}")) / 2.0
+    slope = ctx.ps(delta, _linreg, w, "slope")
+    return ctx.ps(delta, rolling_mean, w) + slope * (w - 1) / 2.0
+
+
+def _wk_macd_hist(ctx: _Ctx, lag: int) -> pd.Series:
+    """Weekly (W-FRI) MACD(12,26,9) histogram of completed weeks: lag 0 = the latest week whose Friday is on or
+    before the row's session, lag 1 = the week before (elder_triple_screen card: no unfinished week)."""
+
+    def build() -> tuple[np.ndarray, np.ndarray]:
+        from .indicators import macd
+
+        day = session_key(ctx.df[TS_COL]).to_numpy("datetime64[D]")
+        dow = (day.astype(np.int64) + EPOCH_DOW) % 7
+        wk_end = day + ((FRIDAY - dow) % 7).astype("timedelta64[D]")
+        c = ctx.c.to_numpy(dtype=float)
+        out = (np.full(len(day), np.nan), np.full(len(day), np.nan))
+        for s, e in ctx.bounds:
+            we = wk_end[s:e]
+            last = np.flatnonzero(np.r_[we[1:] != we[:-1], True])
+            hist = macd(pd.Series(c[s:e][last]))["macd_hist"].to_numpy()
+            k = np.searchsorted(we[last], day[s:e], side="right") - 1
+            for j, arr in enumerate(out):
+                kk = k - j
+                arr[s:e] = np.where(kk >= 0, hist[np.maximum(kk, 0)], np.nan)
+        return out
+
+    return ctx.series(ctx.memo("_wk_macd", build)[lag])
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 3
+STIFFNESS_NUM_DEV = 0.2  # katsanos_stiffness card: close must clear SMA + 0.2 x StDev (thinkorswim reading of the offset)
+
+
+def _linreg_slope_of(ctx: _Ctx, n: str, col: str) -> pd.Series:
+    """``linreg_slope_<n>_of_<col>``: OLS slope of any column over its last ``n`` bars (kaufman_three_period_divergence,
+    slope_performance_trend)."""
+    return ctx.ps(ctx.col(col), _linreg, int(n), "slope")
+
+
+def _lbr_rsi(ctx: _Ctx, n: str) -> pd.Series:
+    """``lbr_rsi_<n>``: Raschke LBR/RSI = RSI(n) of the 1-day change close - prev close (momentum_pinball card)."""
+    return ctx.ps(ctx.c - ctx.prev_close(), rsi, int(n))
+
+
+def _stiffness(ctx: _Ctx, n: str, ma: str) -> pd.Series:
+    """``stiffness_<n>_<ma>``: Katsanos Stiffness = 100 x share of the last ``n`` closes above
+    SMA(ma) + 0.2 x StDev(ma) (population SD, as thinkorswim StDev)."""
+    m = int(ma)
+    thr = ctx.col(f"sma_{m}") + STIFFNESS_NUM_DEV * ctx.ps(ctx.c, lambda s: s.rolling(m, min_periods=m).std(ddof=0))
+    return PCT * ctx.ps(_flag(ctx.c > thr, thr.notna()), rolling_mean, int(n))
+
+
+def zigzag_np(c: np.ndarray, pct: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Non-repainting close ZigZag: (trend, last confirmed swing high, last confirmed swing low) after each bar.
+
+    A swing high is confirmed on the bar whose close is ``pct`` below the highest close since the last confirmed low
+    (lows mirror), so nothing is revised later. trend = +1 when the last two confirmed highs and lows both rise, -1 when
+    both fall, else 0; NaN until two of each exist (rsi_trend_zigzag_luo card).
+    """
+    n = len(c)
+    trend, hi_out, lo_out = np.full(n, np.nan), np.full(n, np.nan), np.full(n, np.nan)
+    highs: list[float] = []
+    lows: list[float] = []
+    mode, ext_hi, ext_lo = 0, np.nan, np.nan
+    for t in range(n):
+        x = c[t]
+        if not np.isfinite(x):
+            continue
+        if np.isnan(ext_hi):
+            ext_hi = ext_lo = x
+        if mode >= 0:
+            ext_hi = max(ext_hi, x)
+        if mode <= 0:
+            ext_lo = min(ext_lo, x)
+        if mode >= 0 and x <= ext_hi * (1.0 - pct):
+            highs.append(ext_hi)
+            mode, ext_lo = -1, x
+        elif mode <= 0 and x >= ext_lo * (1.0 + pct):
+            lows.append(ext_lo)
+            mode, ext_hi = 1, x
+        if highs:
+            hi_out[t] = highs[-1]
+        if lows:
+            lo_out[t] = lows[-1]
+        if len(highs) >= 2 and len(lows) >= 2:
+            up = highs[-1] > highs[-2] and lows[-1] > lows[-2]
+            down = highs[-1] < highs[-2] and lows[-1] < lows[-2]
+            trend[t] = 1.0 if up else (-1.0 if down else 0.0)
+    return trend, hi_out, lo_out
+
+
+def _zigzag(ctx: _Ctx, part: str, pct: str) -> pd.Series:
+    """``zz_(trend|high|low)_<pct>``: :func:`zigzag_np` on close with a ``pct`` percent reversal."""
+    res = ctx.memo(f"_zz_{pct}", lambda: ctx.loop(lambda c: zigzag_np(c, float(pct) / PCT), ctx.c))
+    return ctx.series(res[("trend", "high", "low").index(part)])
+
+
+# ----------------------------------------------------------------------------------------------- catalog batch 0
+VPN_ATR_FACTOR = 0.1  # katsanos_vpn_breakout card: volume counts when |dTP| >= 0.1 x ATR (ATR length unstated: atr_14)
+VPN_SMOOTH = 3  # katsanos_vpn_breakout card: EMA(3) smoothing (commonly cited, unverified)
+
+
+def _rms(ctx: _Ctx, n: str, col: str) -> pd.Series:
+    """``rms_<n>_of_<col>``: root mean square of any column over the last ``n`` bars (apirine_roc_bands card)."""
+    x = ctx.col(col)
+    return np.sqrt(ctx.ps(x * x, rolling_mean, int(n)))
+
+
+def _vpn(ctx: _Ctx, n: str) -> pd.Series:
+    """Katsanos VPN = EMA3(100 x (volume of up bars - volume of down bars) / total volume, ``n`` bars); a bar is up
+    (down) when typical price moved at least 0.1 x atr_14 above (below) the prior bar's (katsanos_vpn_breakout)."""
+    w = int(n)
+    tp = ctx.col("hlc3")
+    dtp, band = tp - ctx.shift(tp), VPN_ATR_FACTOR * ctx.col("atr_14")
+    signed = ctx.v * ((dtp >= band).astype(float) - (dtp <= -band).astype(float))
+    raw = (PCT * ctx.rsum(signed.where(dtp.notna() & band.notna()), w) / ctx.rsum(ctx.v, w)).replace(
+        [np.inf, -np.inf], np.nan)
+    return ctx.ps(raw, ema, VPN_SMOOTH)
+
+
+def _resid_mom(ctx: _Ctx, n: str, form: str, skip: str) -> pd.Series:
+    """Residual momentum, daily CAPM proxy of the residual_momentum card: fit r = a + b x r_mkt over the last ``n``
+    bars, then (sum of that fit's residuals over bars t-skip-form+1 .. t-skip) / (their population std)."""
+    w, f, s = int(n), int(form), int(skip)
+    r, m = ctx.ps(ctx.c, pct_return, 1), _market_close(ctx)[1]
+    ok = r.notna() & m.notna()
+    r, m = r.where(ok), m.where(ok)
+
+    def fit(x: pd.Series) -> pd.Series:
+        return ctx.ps(x, rolling_mean, w)
+
+    def form_mean(x: pd.Series) -> pd.Series:
+        return ctx.shift(ctx.ps(x, rolling_mean, f), s)
+
+    var_m = fit(m * m) - fit(m) ** 2
+    beta = ((fit(r * m) - fit(r) * fit(m)) / var_m).where(var_m > 0)
+    alpha = fit(r) - beta * fit(m)
+    fr, fm = form_mean(r), form_mean(m)
+    mean_e = fr - alpha - beta * fm
+    var_e = (form_mean(r * r) - fr**2) + beta**2 * (form_mean(m * m) - fm**2) - 2.0 * beta * (form_mean(r * m) - fr * fm)
+    return (f * mean_e / np.sqrt(var_e.where(var_e > 0))).astype(float)
+
+
+def _weeks(ctx: _Ctx) -> dict[str, np.ndarray]:
+    """Completed W-FRI weeks per symbol, as in ``_wk_macd_hist``: weekly high / low / close / market close (``key``
+    = symbol code) and, per row, ``pos`` = index of the latest week whose Friday is on or before the row's session
+    (-1 before the first). A week is read only once its Friday has passed, so no row sees a later bar."""
+
+    def build() -> dict[str, np.ndarray]:
+        day = session_key(ctx.df[TS_COL]).to_numpy("datetime64[D]")
+        dow = (day.astype(np.int64) + EPOCH_DOW) % 7
+        wk_end = day + ((FRIDAY - dow) % 7).astype("timedelta64[D]")
+        h, lo, c = (x.to_numpy(dtype=float) for x in (ctx.h, ctx.l, ctx.c))
+        mkt = _market_close(ctx)[0].to_numpy(dtype=float)
+        parts: dict[str, list[np.ndarray]] = {k: [] for k in ("key", "high", "low", "close", "mkt")}
+        pos = np.full(len(day), -1)
+        done = 0
+        for code, (s, e) in enumerate(ctx.bounds):
+            we = wk_end[s:e]
+            first = np.flatnonzero(np.r_[True, we[1:] != we[:-1]])
+            last = np.r_[first[1:] - 1, e - s - 1]
+            parts["key"].append(np.full(len(first), code))
+            parts["high"].append(np.maximum.reduceat(h[s:e], first))
+            parts["low"].append(np.minimum.reduceat(lo[s:e], first))
+            parts["close"].append(c[s:e][last])
+            parts["mkt"].append(mkt[s:e][last])
+            k = np.searchsorted(we[last], day[s:e], side="right") - 1
+            pos[s:e] = np.where(k >= 0, k + done, -1)
+            done += len(first)
+        out = {k: np.concatenate(v) if v else np.array([]) for k, v in parts.items()}
+        out["pos"] = pos
+        return out
+
+    return ctx.memo("_weeks", build)
+
+
+def _wk(ctx: _Ctx, stat: Callable[[pd.DataFrame], pd.Series]) -> pd.Series:
+    """Map a per-symbol weekly statistic onto the rows (value of the latest completed week)."""
+    wk = _weeks(ctx)
+    frame = pd.DataFrame({k: wk[k] for k in ("high", "low", "close", "mkt")})
+    cuts = np.flatnonzero(np.diff(wk["key"]) != 0) + 1
+    vals = np.concatenate([stat(frame.iloc[s:e].reset_index(drop=True)).to_numpy(dtype=float)
+                           for s, e in zip(np.r_[0, cuts], np.r_[cuts, len(frame)], strict=True)] or [np.array([])])
+    pos = wk["pos"]
+    return ctx.series(np.where(pos >= 0, vals[np.maximum(pos, 0)] if len(vals) else np.nan, np.nan))
+
+
+def _wk_stoch(ctx: _Ctx, n: str, smooth: str) -> pd.Series:
+    """``wk_stoch_<n>_<s>``: weekly slow stochastic %K, n weeks, s-week SMA smoothing (last_stochastic_weekly)."""
+    w, k = int(n), int(smooth)
+
+    def stat(g: pd.DataFrame) -> pd.Series:
+        hh, ll = rolling_max(g["high"], w), rolling_min(g["low"], w)
+        return rolling_mean((PCT * (g["close"] - ll) / (hh - ll)).where(hh > ll), k)
+
+    return _wk(ctx, stat)
+
+
+def _wk_roc(ctx: _Ctx, n: str) -> pd.Series:
+    """``wk_roc_<n>``: 100 x (weekly close / weekly close ``n`` weeks earlier - 1) (radge_weekend_trend_trader)."""
+    return _wk(ctx, lambda g: PCT * pct_return(g["close"], int(n)))
+
+
+def _wk_close_max(ctx: _Ctx, n: str) -> pd.Series:
+    """``wk_close_max_<n>``: highest weekly close of the ``n`` weeks BEFORE the latest completed one."""
+    return _wk(ctx, lambda g: rolling_max(g["close"].shift(1), int(n)))
+
+
+def _mkt_wk_above(ctx: _Ctx, n: str) -> pd.Series:
+    """``mkt_wk_above_<n>``: 1 when the market proxy's weekly close is above its ``n``-week SMA, else 0 (NaN while
+    warming up or without a market proxy)."""
+    w = int(n)
+    return _wk(ctx, lambda g: _flag(g["mkt"] > rolling_mean(g["mkt"], w), rolling_mean(g["mkt"], w).notna()))
+
+
+def _wk_fresh(ctx: _Ctx) -> pd.Series:
+    """``wk_fresh``: 1 on the row where a new completed week first becomes visible (normally the Friday), else 0."""
+    pos = pd.Series(_weeks(ctx)["pos"], index=ctx.df.index, dtype=float)
+    return ((pos >= 0) & (pos != ctx.shift(pos))).astype(float)
+
+
 # ----------------------------------------------------------------------------------------------- registry
 def _cal(name: str) -> Feature:
     return lambda ctx: _calendar(ctx)[name]
@@ -893,6 +1334,13 @@ EXTRA_FEATURES: dict[str, Feature] = {
     **{k: (lambda ctx, k=k: _pivots(ctx)[k]) for k in ("piv_p", "piv_r1", "piv_s1", "piv_r2", "piv_s2")},
     **{k: _cal(k) for k in ("tom_day", "tom_window", "tom_pre", "pre_holiday_1", "pre_holiday_2",
                             "santa_window", "day_of_week")},
+    "market_close": lambda ctx: _market_close(ctx)[0],
+    "ha_ohlc4": lambda ctx: sum(_heikin_ashi(ctx)[k] for k in ("ha_open", "ha_high", "ha_low", "ha_close")) / 4.0,
+    "wk_macd_hist": lambda ctx: _wk_macd_hist(ctx, 0),
+    "wk_macd_hist_prev": lambda ctx: _wk_macd_hist(ctx, 1),
+    **{k: (lambda ctx, k=k: _pf(ctx, k)) for k in PF_COLUMNS},
+    **{k: (lambda ctx, k=k: _td(ctx, k)) for k in TD_COLUMNS},
+    "month_end": lambda ctx: (_calendar(ctx)["tom_day"] == -1).astype(float),  # 1 on the month's last NYSE session
 }
 
 _N = r"(\d+)"
@@ -944,6 +1392,30 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"roof_{_N}_{_N}"), _roof, "roof_48_10", None),
     (re.compile(r"prev_(\w+)"), _prev, "prev_rsi_4", 0),
     (re.compile(r"(\w+)_rank"), _rank, "mom_12_1_rank", 0),
+    (re.compile(rf"(max|min)_{_N}_of_(\w+)"), _rolling_ext, "max_30_of_szo_14", 2),
+    (re.compile(rf"pctile_{_N}_of_(\w+)"), _pctile, "pctile_126_of_bb_width_20", 1),
+    (re.compile(rf"seas_month_{_N}_{_N}"), _seas_month, "seas_month_1_1", None),
+    (re.compile(rf"stress_{_N}"), _stress, "stress_20", None),
+    (re.compile(rf"rsmk_{_N}_{_N}"), _rsmk, "rsmk_90_3", None),
+    (re.compile(rf"szo_{_N}"), _szo, "szo_14", None),
+    (re.compile(rf"vwma_{_N}"), _vwma, "vwma_50", None),
+    (re.compile(rf"hl_mid_{_N}"), _hl_mid, "hl_mid_10", None),
+    (re.compile(rf"last_pivot_(high|low)_{_N}_{_N}"), _last_pivot, "last_pivot_low_4_4", None),
+    (re.compile(rf"sqz_mom_{_N}"), _sqz_mom, "sqz_mom_20", None),
+    (re.compile(rf"linreg_slope_{_N}_of_(\w+)"), _linreg_slope_of, "linreg_slope_5_of_stoch_k_14", 1),
+    (re.compile(rf"lbr_rsi_{_N}"), _lbr_rsi, "lbr_rsi_3", None),
+    (re.compile(rf"stiffness_{_N}_{_N}"), _stiffness, "stiffness_60_100", None),
+    (re.compile(rf"zz_(trend|high|low)_{_N}"), _zigzag, "zz_trend_5", None),
+    (re.compile(rf"down_days_{_N}"), _down_days, "down_days_5", None),
+    (re.compile(rf"rms_{_N}_of_(\w+)"), _rms, "rms_20_of_roc_12", 1),
+    (re.compile(rf"vpn_{_N}"), _vpn, "vpn_30", None),
+    (re.compile(rf"resid_mom_{_N}_{_N}_{_N}"), _resid_mom, "resid_mom_120_60_10", None),
+    (re.compile(rf"wk_stoch_{_N}_{_N}"), _wk_stoch, "wk_stoch_10_3", None),
+    (re.compile(rf"wk_roc_{_N}"), _wk_roc, "wk_roc_20", None),
+    (re.compile(rf"wk_close_max_{_N}"), _wk_close_max, "wk_close_max_20", None),
+    (re.compile(rf"mkt_wk_above_{_N}"), _mkt_wk_above, "mkt_wk_above_10", None),
+    (re.compile(r"wk_fresh"), _wk_fresh, "wk_fresh", None),
+    (re.compile(r"wk_close"), lambda ctx: _wk(ctx, lambda g: g["close"]), "wk_close", None),
 ]
 
 _BASE_COLUMNS = frozenset((*OHLCV, *FEATURE_COLUMNS, *PATTERNS2_COLUMNS))

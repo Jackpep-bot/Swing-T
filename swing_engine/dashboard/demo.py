@@ -39,6 +39,14 @@ STRATEGIES = ("pullback_trend", "sr_bounce", "sr_breakout", "breakout_52w", "rsi
 REGIMES = ("healthy_uptrend", "narrow_uptrend", "choppy", "correction", "high_vol_selloff")
 NARROW_TABLE = dict(default_playbook_table()["narrow_uptrend"])  # the same table the real router uses
 
+def _all_strategies() -> tuple[str, ...]:
+    """STRATEGIES plus every other registered strategy (catalog modules), so the shadow table covers them all."""
+    from swing_engine.core import registry
+
+    registry.discover()
+    return (*STRATEGIES, *sorted(set(registry.names("strategy")) - set(STRATEGIES)))
+
+
 
 def _rng(name: str) -> random.Random:
     return random.Random(zlib.crc32(name.encode()))
@@ -401,7 +409,7 @@ class DemoData:
                                      "at": _ts(target, 10, 31)}})
 
     def shadow(self, by: str = "strategy") -> dict[str, Any]:
-        groups = STRATEGIES if by == "strategy" else REGIMES
+        groups = _all_strategies() if by == "strategy" else REGIMES
         rows = []
         for g in groups:
             rng = _rng(f"shadow:{by}:{g}")

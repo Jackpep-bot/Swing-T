@@ -53,6 +53,132 @@ strategies:                    # name -> {enabled, params}; names come from swin
   power_gap:           {enabled: false, shadow_only: true}   # "volume gap" (no earnings dates); sma_20 trail
   qullamaggie_flag:    {enabled: false, shadow_only: true}   # sma_20 close trail; 10R reference target
   episodic_pivot:      {enabled: false, shadow_only: true}   # day-2 delayed EP, catalyst_verified=0; sma_10 trail
+  # Catalog strategies (docs/catalog/catalog.json, cards docs/strategies/<slug>.md), added 2026-10-08. Decision
+  # implement/approximate -> shadow_only; implement_disabled_for_comparison -> disabled (research and replay only).
+  # catalog batch 0 (docs/strategies/<slug>.md). min_reward_risk 0.0 = rule / time exit with no fixed target.
+  earnings_announcement_premium: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # needs optional days_since_earnings join; quarter-earlier proxy
+  opportunistic_insider_purchases_cmp: {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # needs optional opp_buy_value_21d (no Form 4 producer yet)
+  residual_momentum: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # daily CAPM-vs-SPY proxy, 756-bar fit; month-start top decile, 21d hold
+  pullback_ema_zone: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # 3rd+ ema_20/50 zone test; ema_50 close exit; engine_trail off
+  bollinger_band_mean_reversion: {enabled: false, min_reward_risk: 0.0}  # buy stop at bb_lower_20 after re-entry; exit at sma_20
+  calhoun_adx_breakout: {enabled: false}  # ADX14 crosses 40 at 15-bar high; buy stop high + 0.15 ATR; 2R
+  connors_3day_high_low: {enabled: false, min_reward_risk: 0.0}  # ETF method (set params.symbols); exit close > sma_5; next-open fill (no MOC)
+  consecutive_bars: {enabled: false}  # 3 higher closes; streak-low / 2 ATR stop; 2R
+  expansion_pivot_cooper: {enabled: false}  # widest range in 10 through sma_50; buy stop over the high; 2R
+  ibd_other_bases: {enabled: false}  # double bottom / ascending base via base_breakout entry and exits
+  katsanos_vpn_breakout: {enabled: false, min_reward_risk: 0.0}  # VPN30 cross 10; untuned card engine lengths
+  landry_bow_tie: {enabled: false, min_reward_risk: 1.0}  # first pullback after bow tie; single-exit 2R variant
+  open_volatility_breakout: {enabled: false, min_reward_risk: 0.0}  # close stands in for the next open; 5d exit
+  the_anti: {enabled: false, min_reward_risk: 0.0}  # stochastic (7,4,10) hook; buy stop; 4d exit
+  vcp_sepa_breakout: {enabled: false, min_reward_risk: 0.0}  # Trend Template + swing-pivot VCP; heavy-volume sma_50 exit
+  apirine_roc_bands: {enabled: false, min_reward_risk: 1.0}  # assumed zero-centred RMS bands; untuned lengths
+  fundamental_setup_technical_trigger: {enabled: false, min_reward_risk: 0.0}  # needs optional sue join; Chan 6-bar trigger
+  last_stochastic_weekly: {enabled: false, min_reward_risk: 0.0}  # weekly %K(39,3) cross 50; 180d cap; engine_trail off
+  radge_weekend_trend_trader: {enabled: false, min_reward_risk: 0.0}  # weekly; needs SPY; 40%/10% weekly trail; 40% initial stop
+  tac_dmi_trend_start: {enabled: false}  # DMI(3,4,5) cluster exhaustion long; 2R; 10d
+  # catalog batch 1 (docs/strategies/<slug>.md). min_reward_risk overrides the portfolio 2:1 floor for rule/time exits.
+  earnings_announcement_return_abr: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # month-end top-decile Abr, 21-day hold; needs days_since_earnings (edgar_panel_features)
+  pre_holiday_effect:             {enabled: false, min_reward_risk: 0.0}  # buy 2 sessions before an NYSE holiday, out after it; next-open entry (no MOC)
+  revenue_surprise:               {enabled: false, min_reward_risk: 0.0}  # month-end top-decile rev_surprise with sue > 0; needs edgar_panel_features
+  bollinger_pctb_mfi_trend:       {enabled: false, min_reward_risk: 0.0}  # %b > 0.8 and MFI(10) > 80; PSAR stop/trail
+  calhoun_atr_high_sma_breakout:  {enabled: false}                        # ATR(14) at 14-bar high, close > SMA100; buy stop, 2R target
+  cooper_123_pullback:            {enabled: false, min_reward_risk: 1.0}  # ADX > 30, three lower lows; buy stop over day 3, target swing high
+  fibonacci_retracement_pullback: {enabled: false, min_reward_risk: 1.5}  # 38.2-61.8% pullback + close > prior high; control: zone 0.45-0.55
+  ibs_mean_reversion:             {enabled: false, min_reward_risk: 0.0}  # ETFs, IBS < 0.2; next-open entry (no MOC), exit IBS > 0.8 / 3 days
+  kaufman_gap_momentum:           {enabled: false, min_reward_risk: 0.0}  # gap-momentum signal turns up (40/20); exit when it turns down
+  lizards_cooper:                 {enabled: false, min_reward_risk: 0.0}  # 10-day low, open/close top 25%; buy stop over high, 5 days
+  pendergast_long_haul:           {enabled: false, min_reward_risk: 0.0}  # RSI 30/70, 5-bar high, SMA10/50 (assumed defaults); 3-bar-low trail
+  rsi_divergence:                 {enabled: false, min_reward_risk: 0.0}  # regular bullish RSI(14) divergence, 5/5 pivots; 20-day time exit
+  three_bar_inside_bar_prathap:   {enabled: false, min_reward_risk: 1.5}  # up close, inside bar, higher close; 1.5R (engine variant b)
+  volatility_expansion_close:     {enabled: false, min_reward_risk: 0.0}  # buy stop close + 0.75 ATR5, trail close - 1.5 ATR5
+  canslim:                        {enabled: false}                        # base_breakout + RS 80 + sue > 0 (C proxy); 8% stop, +25% target
+  heikin_ashi_trend_ride:         {enabled: false, min_reward_risk: 1.0}  # first strong up HA candle after 2 down; exit first down candle
+  ma_crossover_family:            {enabled: false, min_reward_risk: 0.0}  # negative control, variant two_line (SMA9 x SMA18)
+  rich_simple_trend_channel:      {enabled: false, min_reward_risk: 0.0}  # close x SMA(high,8), exit < SMA(low,8); earnings filter off (no forward dates)
+  turtle_breakout_systems:        {enabled: false, min_reward_risk: 0.0}  # System 2 55/20 buy stop, 2N stop; no skip rule / pyramiding
+  # --- catalog batch 2 (docs/strategies/<slug>.md); williams_oops not built (needs a same-day stop entry after an unknown gap open)
+  heston_sadka_seasonality: {enabled: false, shadow_only: true}  # month's first session, top decile of seas_month_1_5; needs >= 3y history
+  santa_claus_rally: {enabled: false}  # SPY, close before the last 5 Dec sessions, 7-session hold
+  short_term_reversal_1m: {enabled: false}  # Friday: top-10% 1-month losers among liquid momentum names, 5-day hold
+  bollinger_squeeze_breakout: {enabled: false}  # BandWidth 126-bar bottom decile, close > upper band (Method I)
+  calhoun_four_day_breakout: {enabled: false}  # 4 bullish candles over sma_50, buy-stop entry over the pattern high
+  connors_hpetf_rsi_variants: {enabled: false}  # variant rsi_25_75 | multiple_days_down | rsi_10_6; ETF universe
+  darvas_box: {enabled: false}  # close above a complete Darvas box near the 52w high on 1.3x volume
+  full_gap_continuation_bar: {enabled: false}  # low > prior high, stop at prior high, 5-day hold
+  ichimoku_cloud_pullback: {enabled: false}  # above the cloud, Kijun dip, close back over the Tenkan
+  kaufman_stress: {enabled: false}  # stress_60 (stock vs SPY) crosses under 10 with SPY sma60 rising; needs SPY rows
+  macd_zero_line_swing_points: {enabled: false}  # MACD zero cross + first close over the last swing high, higher lows
+  pendergast_swingthree: {enabled: false}  # prior close > ema_50, close > SMA(high,5) + 0.1%, exit low <= SMA(low,5)
+  rsi_oversold_macd_confirm: {enabled: false}  # RSI(14) back over 30 within 5 bars of a MACD signal up-cross
+  tko_landry: {enabled: false}  # knockout bar in a Proper Order uptrend, first close over its high
+  donchian_channel_breakout: {enabled: false}  # close > prior 40-bar high, 15-bar low channel trail
+  katsanos_rsmk: {enabled: false}  # RSMK(90,3) vs SPY crosses above 0, 20-session time exit; needs SPY rows
+  oscillator_cross_family: {enabled: false}  # negative control; variant rsi_30_70 | stoch_20_80 | macd_signal | momentum_rising | dmi_osc
+  sentiment_zone_oscillator: {enabled: false}  # SZO(14) zone entries over EMA60, SZO rule exits
+  vervoort_heikin_ashi_family: {enabled: false}  # variant ha_typ_cross | svesc (lengths unverified)
+  # catalog batch 3 (docs/strategies/<name>.md). min_reward_risk repeats the module default where it is below the
+  # 2.0 portfolio floor (risk.sizing reads it from here). target-less modules: sizing rejects signals without a target
+  # ("reward_risk unknown"), so they reach the shadow ledger but not replay/execution until sizing handles target=None.
+  turn_of_month:                     {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # SPY day -2 close -> day +3 close; no target
+  high_turnover_short_term_momentum: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # month-end top-decile turnover x 21d return; relative-turnover proxy without EDGAR `turnover`
+  xs_momentum_rank:                  {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # month-end mom_12_1_rank >= 0.90, exit < 0.70 / 21d
+  bollinger_w_bottom_ii_reversal:    {enabled: false, min_reward_risk: 1.5}  # variant method3 | w_bottom; target upper band
+  calhoun_mean_reversion_swing:      {enabled: false, min_reward_risk: 1.5}  # tos dollar thresholds (units: atr for the normalised trial)
+  connors_pctb:                      {enabled: false, min_reward_risk: 0.0}  # %b < 0.2 x3 above sma_200, exit %b > 0.8 (trial 2: pctb_col bb_pctb_5)
+  derrico_price_swing:               {enabled: false, min_reward_risk: 0.0}  # swing_type 1-4 = four trials; 20-bar time exit
+  gandalf_project_research_system:   {enabled: false, min_reward_risk: 0.0}  # GA-mined candle pattern, noise benchmark; very frequent
+  inside_outside_bar_breakout:       {enabled: false}  # variant inside_breakout (buy stop) | inside_builtin | outside; 2R target
+  kaufman_three_period_divergence:   {enabled: false, min_reward_risk: 0.0}  # variant tos | textbook (two trials)
+  momentum_pinball:                  {enabled: false, min_reward_risk: 0.0}  # approx_daily: buy stop over the signal-day high (no first-hour bars)
+  pivot_extension_reversal:          {enabled: false, min_reward_risk: 1.5}  # raw 4/2 pivot low; min_trend_state: 1 = filtered trial
+  rsi_trend_zigzag_luo:              {enabled: false, min_reward_risk: 1.5}  # rsi_14 > 30 in a 5% ZigZag uptrend
+  trendline_break:                   {enabled: false}  # close over the line through 2 confirmed pivot highs; pivot-high or 2R target
+  williams_smash_day:                {enabled: false, min_reward_risk: 0.0}  # buy stop over the smash high for 3 sessions; trend_state 1
+  ehlers_dsp_family:                 {enabled: false, min_reward_risk: 1.0}  # variant roof_zero | ehlers_stoch x mode trend | reversal (reversal: max_hold_days 7)
+  katsanos_stiffness:                {enabled: false, min_reward_risk: 0.0}  # stiffness_60_100 x 90 with SPY EMA(100) rising; exit < 50 / 84 bars
+  parabolic_sar_reversal:            {enabled: false, min_reward_risk: 1.0}  # buy stop at the falling SAR, SAR trail, 4R reference target
+  slope_performance_trend:           {enabled: false, min_reward_risk: 0.0}  # 252-bar price + SPY-relative slopes; lookback 63 / 20 trials
+  weinstein_stage2_breakout:         {enabled: false, min_reward_risk: 0.0}  # Friday-close weekly Stage 2 breakout; exit close < sma_150
+  # catalog batch 4 (docs/strategies/<slug>.md). min_reward_risk overrides mirror each module's default_params; target-less
+  # (rule-exit) signals are still refused by risk.sizing ("reward_risk unknown") until a no-target sizing rule exists.
+  industry_momentum_overlay:       {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # sector-ETF proxy (no SIC map); month-end top third by ret_126d, 21-session hold
+  avwap_pullback_shannon:          {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # pivot-low AVWAP, daily trigger; target = prior 20-bar high
+  turnaround_tuesday:              {enabled: false, min_reward_risk: 0.0}  # SPY only; next-open fill, not MOC (card); 1-session hold
+  boomers_cooper:                  {enabled: false, min_reward_risk: 1.0}  # buy stop over 2nd inside day; fixed 2R reference target
+  cci_correction:                  {enabled: false, min_reward_risk: 0.0}  # daily CCI(100) bias (card's daily alternative); rule exit
+  connors_rsi2_variants:           {enabled: false, min_reward_risk: 0.0, variant: double_7s}  # also cumulative_rsi, r3, crsi_pullback (one trial each)
+  eighty_twenty_reversal:          {enabled: false, min_reward_risk: 0.0}  # confirmed at the close (no undercut-armed stop order); 2-session hold
+  harmonic_gartley:                {enabled: false, min_reward_risk: 1.5}  # causal zigzag, confirmation close over the D-bar high
+  intermarket_divergence_katsanos: {enabled: false, min_reward_risk: 0.0}  # secondary = SPY (no sector-ETF map); rule exits
+  keltner_channel_breakout:        {enabled: false, min_reward_risk: 0.0}  # TradeStation KC(20, 1.5 ATR); one-session buy stop; exit close < centre
+  moving_momentum_hill:            {enabled: false, min_reward_risk: 1.5}  # SMA20 > SMA150, %K(14,3) < 20, MACD-H turns up
+  pivot_reversal_breakout:         {enabled: false, min_reward_risk: 0.0}  # 4/4 pivot buy stop; trails confirmed pivot lows; control for sr_breakout
+  stochastic_pop_and_drop:         {enabled: false, min_reward_risk: 0.0}  # long "pop" only; exit %K14 < 50
+  ttm_squeeze:                     {enabled: false, min_reward_risk: 0.0}  # first fired bar, momentum > 0 and rising
+  wyckoff_spring_accumulation:     {enabled: false}  # spring_test + lps on a 60-bar TR box; min_reward_risk 3.0 in the module
+  elder_triple_screen:             {enabled: false, min_reward_risk: 1.0}  # weekly MACD-H tide (completed weeks), Force EMA2 < 0, buy stop; 2R target
+  katsanos_trend_strength_filters: {enabled: false, min_reward_risk: 0.0, meter: adx}  # replay meter: adx | er | vhf | r2
+  pe_valuation_reversion:          {enabled: false, min_reward_risk: 0.0}  # price proxy (close < 0.9 x SMA12): no TTM EPS in the panel
+  # catalog batch 5 (docs/strategies/<slug>.md); every catalog decision here is implement_disabled_for_comparison
+  chartschool_gap_first_hour:    {enabled: false}   # approx_daily: strong gap-day close for the first-hour break; 8% close trail
+  pead_sue:                      {enabled: false}   # needs sue / days_since_earnings from fundamentals.edgar_panel_features; [] without
+  bb_bullish_engulfing_kosinski: {enabled: false}   # engulfing at lower BB, 2 ATR stop, target/exit upper band
+  bull_flag_breakout:            {enabled: false}   # generic ATR flag (pole >= 5.5 ATR); qullamaggie_flag is the leader variant
+  classic_pattern_detector_lmw:  {enabled: false}   # LMW kernel inverse H&S / rectangle / double bottom neckline breakouts
+  connors_tps_scale_in:          {enabled: false}   # single full-size entry: no scale-in hook (10/20/30/40 not modelled)
+  elder_ma_penetration_channel:  {enabled: false}   # limit entry below ema_21 (EntryType.LIMIT), target upper channel
+  hudgin_golden_triangle:        {enabled: false}   # pivot -> drop under sma_50 -> sma_10 reclaim on top volume; target pivot
+  ipo_first_base_breakout:       {enabled: false}   # "new listing" = first bar after panel start (no IPO-date source)
+  key_reversal_day:              {enabled: false}   # broker KeyRevLE (N=1, loose, no volume rule), 4-day exit
+  nr7_nr4_range_contraction:     {enabled: false}   # NR7 buy stop (EntryType.STOP) over the NR high, 3-bar exit
+  point_and_figure_signals:      {enabled: false}   # 3-box P&F double top buy, vertical-count target
+  td_sequential:                 {enabled: false}   # buy countdown 13 (trigger: setup for perfected setup 9)
+  turtle_soup:                   {enabled: false}   # Plus One only (buy stop at the prior 20-day low next day)
+  zscore_mean_reversion_garner:  {enabled: false}   # z(20) < -1 with sma_20 > sma_200, exit z > -0.5
+  faber_sector_rotation:         {enabled: false}   # needs sector SPDRs + SPY in the universe; month-end top 3, ~1-month hold
+  kell_cycle_of_price_action:    {enabled: false}   # wedge_pop (setup: base_break); SPY trend stands in for QQQ > ema_20
+  price_zone_oscillator:         {enabled: false}   # PZO -40 / +15 crosses by ADX/EMA60 mode; row-based LX exits
+  supertrend_flip_strategy:      {enabled: false}   # ST(10,3) flip up; line is stop and trail
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]
