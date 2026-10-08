@@ -772,8 +772,9 @@ def chandelier_stop(
     """
     col = f"atr_{period}"
     frame = with_atr_column(panel, col)
-    hh = frame.groupby(SYMBOL, sort=False)["high"].transform(lambda s: s.rolling(period, min_periods=period).max())
-    return hh - atr_mult * frame[col]
+    ordered = frame.sort_values([SYMBOL, TS], kind="stable")  # rolling must run in time order per symbol
+    hh = ordered.groupby(SYMBOL, sort=False)["high"].transform(lambda s: s.rolling(period, min_periods=period).max())
+    return hh.reindex(frame.index) - atr_mult * frame[col]
 
 
 def size_floor_universe(
@@ -781,8 +782,9 @@ def size_floor_universe(
 ) -> UniverseAt:
     """``universe_at`` for ``run_backtest`` that drops names below the ``pctile`` size breakpoint of the day.
 
-    catalog microcap_control_vw_nyse (Hou-Xue-Zhang): the breakpoint comes from NYSE rows when the panel has an
-    ``exchange`` column, else from every row of the session (an approximation, say so in the write-up).
+    catalog microcap_control_vw_nyse (Hou-Xue-Zhang): the breakpoint comes from the session's NYSE rows when the
+    panel has an ``exchange`` column and that session has NYSE rows, else from every row of the session (an
+    approximation, say so in the write-up).
     ``size_column`` is market cap, or a liquidity proxy such as dollar volume when caps are unavailable.
     Point-in-time: each day uses only that session's rows.
     """
@@ -792,10 +794,11 @@ def size_floor_universe(
     if getattr(day.dt, "tz", None) is not None:
         day = day.dt.tz_localize(None)
     frame = panel.assign(_day=day.dt.date)
-    ref = frame
-    if SIZE_EXCHANGE_COLUMN in frame.columns and (frame[SIZE_EXCHANGE_COLUMN] == NYSE_LABEL).any():
-        ref = frame.loc[frame[SIZE_EXCHANGE_COLUMN] == NYSE_LABEL]
-    cut = ref.groupby("_day")[size_column].quantile(pctile / PCT)
+    q = pctile / PCT
+    cut = frame.groupby("_day")[size_column].quantile(q)
+    if SIZE_EXCHANGE_COLUMN in frame.columns:  # per day: NYSE rows when that session has them (point-in-time)
+        nyse = frame.loc[frame[SIZE_EXCHANGE_COLUMN] == NYSE_LABEL].groupby("_day")[size_column].quantile(q)
+        cut.update(nyse)
     keep = frame.loc[frame[size_column].astype(float) >= frame["_day"].map(cut).astype(float)]
     allowed = {d: frozenset(g[SYMBOL].astype(str)) for d, g in keep.groupby("_day")}
 

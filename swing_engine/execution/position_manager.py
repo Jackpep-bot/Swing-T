@@ -513,12 +513,14 @@ def _trail_stop(
         level = strategy_trail_level(strategy, frame.iloc[-1].drop(labels="_day", errors="ignore"))
         if level is not None:
             cands.append((level, ExitReason.STRATEGY_TRAIL, f"{getattr(strategy, 'name', 'strategy')} trail"))
+    # a candidate at/through the market is dropped (next session decides); it must not mask a valid one
+    cands = [
+        (round(c, PRICE_DECIMALS), r, w) for c, r, w in cands
+        if (long and round(c, PRICE_DECIMALS) < close) or (not long and round(c, PRICE_DECIMALS) > close)
+    ]
     if not cands:
         return None
     candidate, reason, why = max(cands, key=lambda c: c[0]) if long else min(cands, key=lambda c: c[0])
-    candidate = round(candidate, PRICE_DECIMALS)
-    if (long and candidate >= close) or (not long and candidate <= close):
-        return None  # would be through the market: let the next session decide
     if cur is not None:
         cur_r = round(cur, PRICE_DECIMALS)
         if (long and candidate <= cur_r) or (not long and candidate >= cur_r):
