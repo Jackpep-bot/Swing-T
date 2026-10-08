@@ -2023,6 +2023,9 @@ def replay(
         bool, typer.Option("--no-router", help="run every strategy every day at full risk (no playbook routing)")
     ] = False,
     equity: Annotated[float, typer.Option("--equity", help="starting equity")] = DEFAULT_REPLAY_EQUITY,
+    tag: Annotated[
+        str | None, typer.Option("--tag", help="suffix for the saved file (runs/replay/<start>_<end>_<tag>.json)")
+    ] = None,
     cost: Annotated[
         list[str] | None, typer.Option("--cost", help="CostModel field override k=v (repeatable)")
     ] = None,
@@ -2065,7 +2068,8 @@ def replay(
         **{attr: _jsonable(getattr(result, attr, None))
            for attr in ("by_strategy", "by_regime", "trades", "equity_curve", "daily")},
     }
-    path = _store_path(settings).parent / RUNS_DIRNAME / REPLAY_KIND / f"{start_d.isoformat()}_{end_d.isoformat()}.json"
+    stem = f"{start_d.isoformat()}_{end_d.isoformat()}" + (f"_{tag}" if tag else "")
+    path = _store_path(settings).parent / RUNS_DIRNAME / REPLAY_KIND / f"{stem}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, default=str))
     _console().print(f"saved replay to {path}")
