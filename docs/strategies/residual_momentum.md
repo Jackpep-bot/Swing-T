@@ -111,4 +111,25 @@ max_hold_days: 21 per monthly cohort. Min reward:risk: n/a.
 - Repo: `docs/catalog/catalog.json` (E04), `swing_engine/research/ranker.py`
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| narrow_uptrend | 108 | 0 | 0% | -0.74 | -0.77 | 0% | -0.74 | -0.77 | 0% | -0.74 | -0.77 | 0.00 |
+| **all** | 108 | 0 | 0% | -0.74 | -0.77 | 0% | -0.74 | -0.77 | 0% | -0.74 | -0.77 | 0.00 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 1686 | 6 | 53% | +0.08 | +0.04 | 50% | +0.07 | +0.03 | 43% | +0.05 | +0.01 | 1.09 |
+| correction | 1039 | 2 | 67% | +0.26 | +0.22 | 63% | +0.37 | +0.34 | 61% | +0.47 | +0.44 | 2.27 |
+| healthy_uptrend | 3613 | 10 | 49% | +0.02 | -0.01 | 46% | +0.09 | +0.06 | 40% | +0.08 | +0.04 | 1.14 |
+| high_vol_selloff | 1444 | 8 | 43% | -0.15 | -0.18 | 41% | -0.20 | -0.23 | 41% | -0.03 | -0.06 | 0.95 |
+| narrow_uptrend | 1168 | 1 | 55% | +0.08 | +0.04 | 59% | +0.29 | +0.26 | 40% | -0.04 | -0.07 | 0.93 |
+| **all** | 8950 | 27 | 52% | +0.04 | +0.01 | 50% | +0.10 | +0.06 | 43% | +0.09 | +0.05 | 1.16 |
+
+Portfolio replay (net of costs, slots shared with its run): 1 trades, win 0%, avg -0.01R, PF 0.00, P&L $-5 on $100k, avg hold 5.0 bars.

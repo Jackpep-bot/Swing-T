@@ -84,4 +84,29 @@ Hit rate at 1R below 50% after costs; mean R per trade <= 0 over 100+ trades.
 - https://www.whselfinvest.de/en/trading-platform/free-trading-strategies/tradingsystem/21-bib
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 2917 | 31 | 48% | +0.02 | -0.06 | 44% | +0.01 | -0.07 | 42% | -0.00 | -0.08 | 0.99 |
+| correction | 479 | 8 | 48% | +0.09 | +0.02 | 52% | +0.23 | +0.16 | 52% | +0.29 | +0.22 | 1.63 |
+| healthy_uptrend | 11830 | 217 | 42% | -0.08 | -0.17 | 40% | -0.09 | -0.17 | 39% | -0.08 | -0.17 | 0.87 |
+| high_vol_selloff | 2641 | 142 | 39% | -0.11 | -0.17 | 54% | +0.15 | +0.09 | 53% | +0.22 | +0.16 | 1.47 |
+| narrow_uptrend | 1426 | 20 | 34% | -0.21 | -0.28 | 31% | -0.23 | -0.31 | 31% | -0.21 | -0.28 | 0.68 |
+| **all** | 19293 | 418 | 42% | -0.08 | -0.15 | 42% | -0.05 | -0.12 | 41% | -0.03 | -0.11 | 0.95 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 10025 | 153 | 48% | +0.04 | -0.03 | 47% | +0.06 | -0.02 | 46% | +0.08 | +0.00 | 1.14 |
+| correction | 7796 | 135 | 50% | +0.06 | -0.00 | 49% | +0.11 | +0.05 | 47% | +0.12 | +0.06 | 1.22 |
+| healthy_uptrend | 39220 | 608 | 46% | +0.01 | -0.08 | 44% | +0.01 | -0.07 | 43% | +0.02 | -0.07 | 1.03 |
+| high_vol_selloff | 10129 | 140 | 48% | +0.03 | -0.03 | 46% | +0.07 | +0.01 | 46% | +0.09 | +0.03 | 1.18 |
+| narrow_uptrend | 8476 | 99 | 45% | +0.00 | -0.07 | 43% | +0.00 | -0.07 | 43% | +0.03 | -0.05 | 1.05 |
+| **all** | 75646 | 1135 | 47% | +0.02 | -0.06 | 45% | +0.03 | -0.04 | 44% | +0.05 | -0.03 | 1.08 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

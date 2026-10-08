@@ -122,4 +122,29 @@ young listings.
 - `docs/catalog/catalog.json` P51
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 228 | 0 | 59% | +0.12 | +0.10 | 62% | +0.23 | +0.20 | 60% | +0.28 | +0.26 | 2.01 |
+| correction | 19 | 0 | 37% | -0.14 | -0.16 | 74% | +0.31 | +0.29 | 68% | +0.46 | +0.44 | 3.07 |
+| healthy_uptrend | 912 | 4 | 51% | +0.03 | +0.00 | 48% | -0.01 | -0.04 | 49% | +0.08 | +0.05 | 1.19 |
+| high_vol_selloff | 83 | 0 | 60% | +0.03 | +0.01 | 58% | +0.10 | +0.08 | 45% | -0.03 | -0.06 | 0.93 |
+| narrow_uptrend | 75 | 0 | 51% | -0.07 | -0.13 | 52% | -0.01 | -0.07 | 25% | -0.35 | -0.41 | 0.41 |
+| **all** | 1317 | 4 | 53% | +0.04 | +0.01 | 52% | +0.05 | +0.01 | 50% | +0.10 | +0.06 | 1.24 |
+
+Portfolio replay (net of costs, slots shared with its run): 220 trades, win 38%, avg -0.08R, PF 0.74, P&L $-5,750 on $100k, avg hold 6.7 bars.
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 617 | 3 | 50% | +0.02 | -0.01 | 56% | +0.11 | +0.08 | 55% | +0.22 | +0.19 | 1.68 |
+| correction | 397 | 1 | 62% | +0.10 | +0.08 | 60% | +0.16 | +0.14 | 57% | +0.21 | +0.19 | 1.69 |
+| healthy_uptrend | 2373 | 3 | 52% | +0.03 | +0.01 | 51% | +0.06 | +0.03 | 49% | +0.09 | +0.06 | 1.21 |
+| high_vol_selloff | 352 | 1 | 53% | +0.01 | -0.01 | 48% | -0.05 | -0.07 | 46% | -0.00 | -0.03 | 0.99 |
+| narrow_uptrend | 500 | 2 | 55% | +0.07 | +0.05 | 56% | +0.09 | +0.06 | 55% | +0.19 | +0.16 | 1.56 |
+| **all** | 4239 | 10 | 53% | +0.04 | +0.01 | 53% | +0.07 | +0.04 | 51% | +0.12 | +0.10 | 1.32 |
+
+Portfolio replay (net of costs, slots shared with its run): 738 trades, win 43%, avg +0.03R, PF 1.12, P&L $22,011 on $100k, avg hold 7.2 bars.

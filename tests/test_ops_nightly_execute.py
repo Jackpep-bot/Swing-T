@@ -296,3 +296,13 @@ def test_llm_disabled_skips_review_and_journal_prose(settings: Settings, tmp_pat
                          False, journal_root=tmp_path)
     assert status(report, "review") == "skip" and "llm_enabled" in report.step("review").detail
     assert status(report, "journal") == "ok"
+
+
+def test_all_strategies_disabled_means_no_orders_but_shadow_keeps_grading(settings: Settings, tmp_path: Path) -> None:
+    off = {n: {**(c or {}), "enabled": False, "shadow_only": True} for n, c in settings.strategies.items()}
+    cfg = settings.model_copy(update={"strategies": off})
+    assert nightly._enabled_strategies(cfg) == []
+    broker = PaperSimBroker()
+    report = run_nightly(cfg, no_secrets(), AS_OF, "sample", 50_000.0, False, journal_root=tmp_path, broker=broker)
+    assert not broker.open_orders()
+    assert status(report, "shadow") == "ok"

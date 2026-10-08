@@ -13,3 +13,12 @@ execution:
   ledger_file: state/live/orders.sqlite
 agent:
   llm_enabled: false             # free tiers only until the system proves itself: no Claude calls in nightly/monitor
+# 2026-10-08 leaderboard (docs/leaderboard.md): no strategy keeps a positive net edge after the multiple-testing
+# haircut in both replay windows, so per the standing brief none trades on paper. The five former paper strategies
+# stay in the shadow ledger; open positions are still managed (the position manager reviews disabled strategies).
+strategies:
+  sr_bounce:      {enabled: false, shadow_only: true}
+  sr_breakout:    {enabled: false, shadow_only: true}
+  pullback_trend: {enabled: false, shadow_only: true}
+  breakout_52w:   {enabled: false, shadow_only: true}
+  rsi2_meanrev:   {enabled: false, shadow_only: true, min_reward_risk: 0.0}

@@ -151,4 +151,26 @@ A valid base:
   memory, not fetched.
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 4 | 0 | 0% | -0.98 | -1.00 | 0% | -0.98 | -1.00 | 0% | -0.98 | -1.00 | 0.00 |
+| healthy_uptrend | 56 | 0 | 41% | -0.04 | -0.08 | 5% | -0.28 | -0.32 | 59% | -0.02 | -0.06 | 0.92 |
+| **all** | 60 | 0 | 38% | -0.10 | -0.14 | 5% | -0.33 | -0.37 | 55% | -0.09 | -0.13 | 0.75 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 2 | 0 | 100% | +2.29 | +2.27 | 100% | +2.29 | +2.27 | 100% | +2.29 | +2.27 | inf |
+| correction | 1 | 0 | 100% | +0.23 | +0.20 | 0% | -1.25 | -1.28 | 0% | -1.25 | -1.28 | 0.00 |
+| healthy_uptrend | 20 | 0 | 55% | +0.36 | +0.34 | 50% | +0.36 | +0.33 | 50% | +0.41 | +0.39 | 1.98 |
+| high_vol_selloff | 2 | 1 | 100% | +0.06 | +0.03 | 0% | -1.31 | -1.33 | 0% | -1.31 | -1.33 | 0.00 |
+| narrow_uptrend | 7 | 0 | 86% | +0.59 | +0.56 | 86% | +0.53 | +0.51 | 57% | +0.80 | +0.78 | 3.24 |
+| **all** | 32 | 1 | 68% | +0.52 | +0.50 | 58% | +0.42 | +0.39 | 52% | +0.51 | +0.49 | 2.18 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

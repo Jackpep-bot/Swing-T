@@ -656,9 +656,8 @@ def _strategy_params(settings: Settings, name: str) -> dict[str, Any]:
 
 
 def _enabled_strategies(settings: Settings) -> list[str]:
-    names = [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
-    if names:
-        return names
+    if settings.strategies:  # configured: exactly the enabled ones (all disabled = none, never all)
+        return [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
     known = _registry_names("strategy")
     return known if isinstance(known, list) else []
 

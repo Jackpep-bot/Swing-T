@@ -292,8 +292,11 @@ class _StoreListing:
 
 
 def _enabled_strategies(settings: Settings) -> list[str]:
-    names = [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
-    return names or registry.names("strategy")
+    """Strategies enabled in settings; every registered one only when settings configure none at all (a config
+    that disables them all means no strategy trades, never all of them)."""
+    if not settings.strategies:
+        return registry.names("strategy")
+    return [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
 
 
 def _shadow_only_strategies(settings: Settings) -> list[str]:

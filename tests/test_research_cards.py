@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from swing_engine.research import cards
 
@@ -50,3 +51,11 @@ def test_replace_section_keeps_the_rest_of_the_card(tmp_path: Path) -> None:
     again = cards.write_cards(shadow_rows(), trades(), ["demo"], tmp_path)  # idempotent: one section, rest intact
     text = (tmp_path / "demo.md").read_text()
     assert again == ["demo"] and text.count("## Empirical (replay)") == 1 and text.endswith("## Sources\n- a\n")
+
+
+def test_planned_r_rescales_gap_fills_onto_the_stop() -> None:
+    frame = pd.DataFrame({"entry": [100.0, 100.0], "stop": [90.0, 90.0], "entry_price": [90.001, 95.0],
+                          "result_r_5d": [5000.0, 2.0]})
+    out = cards.planned_r(frame.copy())
+    # (95 - 90) / (100 - 90) = 0.5 -> 2.0R on filled risk is 1.0R on planned risk
+    assert out["result_r_5d"].tolist() == pytest.approx([0.5, 1.0])

@@ -44,7 +44,26 @@ def executable(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty or not {"entry", "stop"} <= set(frame.columns):
         return frame
     entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
-    return frame.loc[(entry - stop) >= entry * MIN_STOP_FRACTION]
+    out = frame.loc[(entry - stop) >= entry * MIN_STOP_FRACTION].copy()
+    return planned_r(out)
+
+
+#: R columns graded per unit of the FILLED risk (entry_price - stop) in research.shadow.
+_R_PREFIXES = ("result_r", "mfe_r", "mae_r")
+
+
+def planned_r(frame: pd.DataFrame) -> pd.DataFrame:
+    """Re-express graded R per unit of the PLANNED risk (signal entry - stop). The shadow ledger divides by the
+    filled risk (entry_price - stop), which goes to ~0 when the next open gaps down onto the stop and turned a
+    flat trade into +7e14 R (BOIL 2026-06-12). Rows without a fill keep their (empty) R."""
+    if not {"entry", "stop", "entry_price"} <= set(frame.columns):
+        return frame
+    planned = frame["entry"].astype(float) - frame["stop"].astype(float)
+    filled = frame["entry_price"].astype(float) - frame["stop"].astype(float)
+    factor = (filled / planned).where(planned > 0)
+    for col in [c for c in frame.columns if c.startswith(_R_PREFIXES)]:
+        frame[col] = frame[col].astype(float) * factor
+    return frame
 
 
 def cost_r(frame: pd.DataFrame, bps_per_side: float = NET_SLIPPAGE_BPS_PER_SIDE) -> pd.Series:

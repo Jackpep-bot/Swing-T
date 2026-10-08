@@ -172,8 +172,9 @@ def _as_date(value: date | datetime | str) -> date:
 
 
 def _enabled_names(settings: Settings) -> list[str]:
-    names = [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
-    return names or registry.names("strategy")
+    if not settings.strategies:  # no strategy config at all: every registered strategy
+        return registry.names("strategy")
+    return [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
 
 
 def _resolve_strategies(

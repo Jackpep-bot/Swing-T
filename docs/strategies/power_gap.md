@@ -157,4 +157,23 @@ hold-through-earnings question.
 - https://advantage.factset.com/hubfs/Website/Resources%20Section/Research%20Desk/Earnings%20Insight/EarningsInsight_080726.pdf
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 161 | 4 | 34% | -0.16 | -0.20 | 32% | -0.16 | -0.20 | 26% | -0.18 | -0.22 | 0.76 |
+| narrow_uptrend | 19 | 0 | 44% | -0.16 | -0.19 | 38% | -0.21 | -0.23 | 17% | -0.66 | -0.69 | 0.23 |
+| **all** | 180 | 4 | 35% | -0.16 | -0.20 | 33% | -0.16 | -0.20 | 25% | -0.21 | -0.25 | 0.72 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 420 | 10 | 42% | -0.04 | -0.08 | 38% | -0.02 | -0.06 | 33% | +0.01 | -0.04 | 1.01 |
+| narrow_uptrend | 58 | 0 | 43% | -0.00 | -0.04 | 45% | +0.03 | -0.01 | 29% | -0.16 | -0.20 | 0.75 |
+| **all** | 478 | 10 | 42% | -0.04 | -0.08 | 39% | -0.01 | -0.05 | 33% | -0.02 | -0.06 | 0.98 |
+
+Portfolio replay (net of costs, slots shared with its run): 1 trades, win 0%, avg -1.00R, PF 0.00, P&L $-879 on $100k, avg hold 11.0 bars.

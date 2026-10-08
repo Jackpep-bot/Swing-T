@@ -192,4 +192,29 @@ The cheaper first test is the Trend Template as a universe filter for existing s
 - Minervini, *Trade Like a Stock Market Wizard* (McGraw-Hill, 2013). Not read directly.
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+_Generated 2026-10-08 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts round-trip slippage (10 bp a side) in R of each signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 125 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 13 | 1 | 67% | +0.05 | +0.02 | 42% | -0.06 | -0.10 | 58% | +0.01 | -0.02 | 1.02 |
+| correction | 1 | 0 | 0% | -0.35 | -0.37 | 100% | +0.02 | -0.00 | 100% | +0.05 | +0.03 | inf |
+| healthy_uptrend | 36 | 1 | 49% | +0.06 | +0.02 | 63% | +0.26 | +0.22 | 60% | +0.41 | +0.38 | 2.68 |
+| high_vol_selloff | 11 | 0 | 45% | -0.23 | -0.26 | 45% | -0.05 | -0.08 | 27% | +0.06 | +0.03 | 1.12 |
+| narrow_uptrend | 5 | 0 | 20% | -0.21 | -0.23 | 40% | -0.07 | -0.09 | 20% | -0.38 | -0.40 | 0.50 |
+| **all** | 66 | 2 | 48% | -0.02 | -0.05 | 55% | +0.11 | +0.08 | 52% | +0.21 | +0.18 | 1.61 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (survivors only: ~4,300 names liquid in 2024, biased upward)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 34 | 0 | 41% | -0.36 | -0.39 | 44% | -0.31 | -0.34 | 44% | -0.34 | -0.38 | 0.51 |
+| correction | 10 | 0 | 70% | +0.15 | +0.12 | 70% | +0.04 | +0.01 | 60% | +0.06 | +0.03 | 1.15 |
+| healthy_uptrend | 182 | 0 | 45% | -0.05 | -0.08 | 47% | -0.05 | -0.08 | 50% | +0.05 | +0.02 | 1.14 |
+| high_vol_selloff | 31 | 0 | 65% | +0.05 | +0.03 | 52% | -0.02 | -0.05 | 58% | +0.09 | +0.07 | 1.27 |
+| narrow_uptrend | 36 | 0 | 39% | -0.16 | -0.18 | 44% | -0.12 | -0.15 | 42% | -0.05 | -0.07 | 0.91 |
+| **all** | 293 | 0 | 47% | -0.08 | -0.11 | 48% | -0.08 | -0.11 | 49% | -0.00 | -0.03 | 1.00 |
+
+Portfolio replay (net of costs, slots shared with its run): 5 trades, win 20%, avg +0.55R, PF 3.18, P&L $3,598 on $100k, avg hold 31.2 bars.
