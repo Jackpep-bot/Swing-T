@@ -3,9 +3,12 @@ strategies, data providers, feeds, rules and brokers can be added by dropping in
 """
 from __future__ import annotations
 
+import inspect
+import sys
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Callable, Iterable
 from datetime import date
+from functools import cache
 from typing import Any
 
 import pandas as pd
@@ -50,6 +53,27 @@ class Strategy(ABC):
 
     def required_features(self) -> list[str]:
         return []
+
+
+@cache
+def _positional_arity(func: Callable[..., Any]) -> int:
+    try:
+        params = inspect.signature(func).parameters.values()
+    except (TypeError, ValueError):
+        return 0
+    if any(p.kind is p.VAR_POSITIONAL for p in params):
+        return sys.maxsize
+    return sum(p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params)
+
+
+def exit_takes_position(hook: Callable[..., Any]) -> bool:
+    """True when a ``should_exit`` hook accepts a third positional argument, the ``models.PositionContext``.
+
+    Engines pass the context only then; a ``should_exit(row, bars_held)`` hook keeps the two-argument call.
+    The signature is inspected once per function (cached).
+    """
+    func = getattr(hook, "__func__", hook)  # bound method -> function, whose signature still lists self
+    return _positional_arity(func) - (func is not hook) >= 3
 
 
 class Broker(ABC):

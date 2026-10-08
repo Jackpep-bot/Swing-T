@@ -42,6 +42,7 @@ from ._common import (
 from .cross_section import pct_return, rolling_max, rolling_mean, rolling_min
 from .indicators import ema, rsi, sma, true_range, wilder_smooth
 from .panel import FEATURE_COLUMNS
+from .patterns import bars_since
 from .patterns2 import PATTERNS2_COLUMNS, _di, _dx, directional_movement
 
 MARKET_SYMBOL = "SPY"  # market proxy when ensure_extra gets no market frame (ops.nightly.MARKET_SYMBOL)
@@ -880,6 +881,12 @@ def _rolling_ext(ctx: _Ctx, fn: str, n: str, col: str) -> pd.Series:
     return ctx.ps(ctx.col(col), rolling_max if fn == "max" else rolling_min, int(n))
 
 
+def _bars_since_ge(ctx: _Ctx, level: str, col: str) -> pd.Series:
+    """``bars_since_ge_<level>_of_<col>``: bars since ``col`` was last >= ``level`` (0 on such a bar, NaN before the
+    first). Compared with a position's ``bars_held`` it tells whether the level was reached since entry."""
+    return ctx.ps(ctx.col(col) >= float(level), bars_since)
+
+
 def _pctile(ctx: _Ctx, n: str, col: str) -> pd.Series:
     """``pctile_<n>_of_<col>``: percentile rank (0, 1] of the bar's value within its own last ``n`` bars (inclusive)."""
     w = int(n)
@@ -1311,6 +1318,18 @@ def _wk_fresh(ctx: _Ctx) -> pd.Series:
     return ((pos >= 0) & (pos != ctx.shift(pos))).astype(float)
 
 
+def _gandalf_weak(ctx: _Ctx) -> pd.Series:
+    """``gandalf_weak``: Gandalf Project Research System losing-trade weakness sets as 0/1 (thinkorswim; [k] = k bars
+    ago, median = (H+L)/2, mid = (O+C)/2). C: ohlc4[1] < mid[1], median[2] == mid[3], mid[1] <= mid[4]; D: ohlc4[2] <
+    mid[0], median[4] < ohlc4[3], mid[1] < ohlc4[1]. NaN until four prior bars exist."""
+    sh, ohlc4 = ctx.shift, ctx.col("ohlc4")
+    med, mid = (ctx.h + ctx.l) / 2.0, (ctx.o + ctx.c) / 2.0
+    mid1, ohlc4_1 = sh(mid, 1), sh(ohlc4, 1)
+    set_c = (ohlc4_1 < mid1) & (sh(med, 2) == sh(mid, 3)) & (mid1 <= sh(mid, 4))
+    set_d = (sh(ohlc4, 2) < mid) & (sh(med, 4) < sh(ohlc4, 3)) & (mid1 < ohlc4_1)
+    return _flag(set_c | set_d, sh(ohlc4, 4).notna())
+
+
 # ----------------------------------------------------------------------------------------------- registry
 def _cal(name: str) -> Feature:
     return lambda ctx: _calendar(ctx)[name]
@@ -1361,6 +1380,7 @@ EXTRA_FEATURES: dict[str, Feature] = {
     **{k: (lambda ctx, k=k: _pf(ctx, k)) for k in PF_COLUMNS},
     **{k: (lambda ctx, k=k: _td(ctx, k)) for k in TD_COLUMNS},
     "month_end": lambda ctx: (_calendar(ctx)["tom_day"] == -1).astype(float),  # 1 on the month's last NYSE session
+    "gandalf_weak": _gandalf_weak,
 }
 
 _N = r"(\d+)"
@@ -1415,6 +1435,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(r"(\w+)_rank"), _rank, "mom_12_1_rank", 0),
     (re.compile(rf"(max|min)_{_N}_of_(\w+)"), _rolling_ext, "max_30_of_szo_14", 2),
     (re.compile(rf"pctile_{_N}_of_(\w+)"), _pctile, "pctile_126_of_bb_width_20", 1),
+    (re.compile(rf"bars_since_ge_{_N}_of_(\w+)"), _bars_since_ge, "bars_since_ge_40_of_pzo_14", 1),
     (re.compile(rf"seas_month_{_N}_{_N}"), _seas_month, "seas_month_1_1", None),
     (re.compile(rf"stress_{_N}"), _stress, "stress_20", None),
     (re.compile(rf"rsmk_{_N}_{_N}"), _rsmk, "rsmk_90_3", None),

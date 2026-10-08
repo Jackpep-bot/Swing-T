@@ -23,5 +23,6 @@ def test_accel_min_is_the_cards_ten_percent():
     assert len(cls({"accel_min": 0.05}).signals(p, last_date(p))) == 1  # the panel otherwise fires
 
 
-def test_docstring_states_drop_low_rule_exit_is_not_modelled():
-    assert "close < drop low is not modelled" in " ".join(mod.__doc__.split())
+def test_docstring_states_drop_low_rule_exit_needs_entry_features():
+    doc = " ".join(mod.__doc__.split())
+    assert "close below the entry signal's drop low" in doc and "is not modelled" not in doc

@@ -2,7 +2,8 @@
 
 For each strategy and 8 as-of sessions spread over the last 400 (plus one pre-holiday session): `signals()` does
 not raise, every signal has sane long geometry, signals are point-in-time (the panel truncated at `as_of` gives
-the same signals), and the `should_exit` / `trail_stop` hooks survive a panel row. Strategies needing optional
+the same signals), and the `should_exit` / `trail_stop` hooks survive a panel row (and, when `should_exit` takes it, a
+PositionContext built from the day's signal). Strategies needing optional
 data columns (sue, insider, revenue surprise, ...) see a panel without them and may return [], but must not raise.
 """
 from __future__ import annotations
@@ -16,7 +17,8 @@ import pandas as pd
 import pytest
 
 from swing_engine.core import registry
-from swing_engine.core.models import EntryType, Side, Signal
+from swing_engine.core.interfaces import exit_takes_position
+from swing_engine.core.models import EntryType, PositionContext, Side, Signal
 from swing_engine.data.calendar import trading_days
 from swing_engine.features.extra import ensure_extra, required_extras
 from swing_engine.features.panel import build_panel
@@ -101,13 +103,21 @@ def _check_signal(s: Signal, name: str, as_of: date, present: set[str]) -> None:
     assert s.symbol in present, f"{where}: symbol has no bar on as_of"
 
 
-def _check_hooks(strat: PanelStrategy, rows: pd.DataFrame, name: str) -> None:
+def _check_hooks(strat: PanelStrategy, rows: pd.DataFrame, name: str, sigs: dict[str, Signal]) -> None:
     overrides_trail = not getattr(type(strat).trail_stop, "default_hook", False)
+    with_position = exit_takes_position(strat.should_exit)
     bars_held = rows.groupby("symbol").cumcount() + 1
     for held, (_, row) in zip(bars_held, rows.iterrows(), strict=True):
+        sig = sigs.get(row["symbol"])
+        ctx = PositionContext(
+            entry_price=sig.entry if sig else float(row["open"]), stop=sig.stop if sig else None, bars_held=int(held),
+            best_price=float(row["high"]), entry_features=sig.features if sig else {}, as_of=sig.as_of if sig else None,
+        )
         # live (position_manager) passes the panel row; run_backtest passes it indexed by (ts, symbol)
         for r in (row, row.drop(["ts", "symbol"]).rename((row["ts"], row["symbol"]))):
             bool(strat.should_exit(r, held))
+            if with_position:
+                bool(strat.should_exit(r, held, ctx))
             if overrides_trail:
                 level = strat.trail_stop(r)
                 assert level is None or (_finite(level) and float(level) > 0), (
@@ -132,4 +142,4 @@ def test_strategy_contract(name: str) -> None:
         )
         held = {s.symbol for s in sigs} or set(sorted(present)[:3])
         after = panel.loc[panel["symbol"].isin(held) & (day > cutoff)]
-        _check_hooks(strat, after.groupby("symbol").head(HOOK_BARS), name)
+        _check_hooks(strat, after.groupby("symbol").head(HOOK_BARS), name, {s.symbol: s for s in sigs})

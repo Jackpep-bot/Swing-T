@@ -38,5 +38,6 @@ def test_zero_volume_listing_does_not_abort_the_scan():
     assert [s.symbol for s in sigs] == ["GOOD"]
 
 
-def test_unmodelled_failed_breakout_exit_is_declared():
-    assert "failed-breakout exit" in mod.__doc__
+def test_failed_breakout_exit_is_declared_as_built():
+    doc = " ".join(mod.__doc__.split())
+    assert "failed-breakout exit, a close back below the entry signal's pivot" in doc

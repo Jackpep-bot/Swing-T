@@ -33,7 +33,8 @@ import structlog
 from pydantic import BaseModel, Field
 
 from swing_engine.core.config import RiskConfig
-from swing_engine.core.models import EntryType, OrderIntent, Position, Side, Signal
+from swing_engine.core.interfaces import exit_takes_position
+from swing_engine.core.models import EntryType, OrderIntent, Position, PositionContext, Side, Signal
 
 log = structlog.get_logger(__name__)
 
@@ -274,6 +275,8 @@ class OpenPosition:
     slippage_cost: float = 0.0
     fees: float = 0.0
     profitable_closes: int = 0  # closes beyond the entry fill since entry (extra_exit_rules)
+    entry_features: dict[str, float] = field(default_factory=dict)  # the entry Signal.features
+    signal_as_of: date | None = None  # the entry Signal.as_of
 
     @property
     def direction(self) -> int:
@@ -293,6 +296,18 @@ class OpenPosition:
             target=self.target,
             strategy=self.strategy,
             opened_at=self.entry_ts.to_pydatetime(),
+        )
+
+    def context(self, row: Any = None) -> PositionContext:
+        """The ``should_exit(row, bars_held, position)`` context; ``row`` (today's bar, checked before
+        ``_mark_position``) folds today's extreme into ``best_price``."""
+        best = self.best_price
+        extreme = row.get("high" if self.is_long else "low") if row is not None else None
+        if extreme is not None and math.isfinite(float(extreme)):
+            best = max(best, float(extreme)) if self.is_long else min(best, float(extreme))
+        return PositionContext(
+            entry_price=self.entry_price, stop=self.stop, initial_stop=self.initial_stop, bars_held=self.bars_held,
+            best_price=best, entry_features=self.entry_features, as_of=self.signal_as_of,
         )
 
 
@@ -567,6 +582,8 @@ def _fill_entry(
         worst_price=fill,
         slippage_cost=abs(fill - raw) * qty,
         fees=fees,
+        entry_features=dict(signal.features),
+        signal_as_of=signal.as_of,
     )
     return pos, cash, None
 
@@ -812,16 +829,19 @@ def _strategy_exit_rule(strategy: Any) -> Callable[[Any, Any], bool] | None:
     """The strategy's rule exit, if it has one.
 
     Two duck-typed hooks are honoured: ``exit_rule(row, position)`` (the backtester's own shape) and
-    ``should_exit(row, bars_held)``, the hook every ``strategies.PanelStrategy`` implements. Without this
+    ``should_exit(row, bars_held)``, the hook every ``strategies.PanelStrategy`` implements, called as
+    ``should_exit(row, bars_held, OpenPosition.context(row))`` when it accepts the third argument. Without this
     adapter a strategy's documented rule exits (``close > sma_10``, ``rsi_2 > 70`` ...) never fire in research.
     """
     exit_rule = getattr(strategy, "exit_rule", None)
     if callable(exit_rule):
         return exit_rule
     should_exit = getattr(strategy, "should_exit", None)
-    if callable(should_exit):
-        return lambda row, pos: bool(should_exit(row, pos.bars_held))
-    return None
+    if not callable(should_exit):
+        return None
+    if exit_takes_position(should_exit):
+        return lambda row, pos: bool(should_exit(row, pos.bars_held, pos.context(row)))
+    return lambda row, pos: bool(should_exit(row, pos.bars_held))
 
 
 # ----------------------------------------------------------------------------------------------- runner

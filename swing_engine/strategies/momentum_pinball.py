@@ -4,8 +4,8 @@ Signal: LBR/RSI = RSI(3) of the 1-day change (`lbr_rsi_3`, features.extra) close
 daily range (atr_pct_14 >= 2%, card). DAILY APPROXIMATION (labelled `approx_daily`, card): the method's buy stop over
 the next day's FIRST-HOUR high, with the stop at the first-hour low, needs 60-minute bars the store does not hold; here
 the buy stop sits at the signal-day high (EntryType.STOP, next session only) and the stop at its low. This changes the
-method. Exit: never a second night (`max_hold_days` 2); the "exit at the close if losing" rule needs the entry price
-that `should_exit` does not get, so only the time exit applies.
+method. Exit: at the close if losing (close below the entry fill, `exit_if_losing`, card), else never a second
+night (`max_hold_days` 2).
 """
 from __future__ import annotations
 
@@ -14,11 +14,11 @@ from typing import Any
 
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 
 from . import _catalog1 as c1
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, TREND_DOWN, PanelStrategy
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, TREND_DOWN, PanelStrategy, entry_price
 
 NAME = "momentum_pinball"
 LBR = "lbr_rsi_3"
@@ -32,12 +32,17 @@ class MomentumPinball(PanelStrategy):
         "lbr_max": 30.0,  # card: LBR/RSI closes below 30
         "min_atr_pct": 0.02,  # card: "good average daily range" -> atr_pct_14 >= 0.02
         "max_hold_days": 2,  # card: exit next day, never hold a second night
+        "exit_if_losing": True,  # card: "if losing at the close, exit"
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target
     }
     features_required = ["atr_pct_14"]
     extra_features = [LBR]
     engine_trail = False  # two-session trade
+
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        fill = entry_price(position)
+        return bool(self.params["exit_if_losing"]) and fill is not None and float(row["close"]) < fill
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if panel.empty or not self.market_ok(regime):

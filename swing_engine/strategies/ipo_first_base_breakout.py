@@ -2,9 +2,10 @@
 
 Approximation: there is no IPO-date source, so a symbol counts as newly listed when its first bar in the panel comes
 after the panel's first session (both known at as_of); a ticker change, spin-off or data gap looks the same. Not
-modelled: the lockup-expiry exit, and the card's failed-breakout exit (a close back below the pivot within 3 bars),
-because `should_exit(row, bars_held)` does not see the entry signal's pivot; the stop max(base low, close x 0.92)
-and the 40-day time exit are the only exits. Rules (card, unverified IBD numbers): within `max_days_since_ipo`
+modelled: the lockup-expiry exit. Exits: the stop max(base low, close x 0.92), the 40-day time exit and the card's
+failed-breakout exit, a close back below the entry signal's pivot within `fail_exit_bars` = 3 bars (`should_exit`
+reads the pivot from the position's entry features; live, where the ledger keeps no features, it cannot fire).
+Rules (card, unverified IBD numbers): within `max_days_since_ipo`
 sessions of the first bar, a base starting at its left-side high (the pivot) 0-25 sessions after listing, 7-40 bars
 long, at most 25% deep (high to low) and ending the bar before today; buy the close above the base high (pivot), no
 more than 5% above it, on volume >= 1.5x the mean volume since listing excluding day 1 (50-day averages do not exist
@@ -19,11 +20,11 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view, local_day
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, TS, PanelStrategy
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, TS, PanelStrategy, entry_feature
 
 NAME = "ipo_first_base_breakout"
 
@@ -43,13 +44,17 @@ class IPOFirstBaseBreakout(PanelStrategy):
         "stop_pct": 0.08,  # card: stop = max(base low, entry x 0.92)
         "target_pct": 0.20,  # card: target entry x 1.20
         "max_hold_days": 40,  # card
+        "fail_exit_bars": 3,  # card: exit on a close back below the pivot within 3 bars (0 = off)
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 2.0,  # card
     }
     features_required: list[str] = []
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
-        return bars_held >= int(self.params["max_hold_days"])
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        pivot = entry_feature(position, "pivot")
+        return bars_held <= int(self.params["fail_exit_bars"]) and pivot is not None and float(row["close"]) < pivot
 
     def _base(self, h: np.ndarray, lo: np.ndarray, t: int) -> tuple[float, float] | None:
         """(pivot, base low) of the longest qualifying base [s, t-1], or None."""

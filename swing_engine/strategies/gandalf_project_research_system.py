@@ -4,8 +4,9 @@ D'Errico & Trombetta S&C 2017). A GA-mined candle ordering; zero evidence, shado
 Buy at the close of bar t (index [k] = k bars ago; ohlc4 = (O+H+L+C)/4, median = (H+L)/2, mid-body = (O+C)/2) when
 set A: ohlc4[1] < median[1], median[2] <= ohlc4[1], median[2] <= ohlc4[3]; or set B: ohlc4[1] < median[3],
 midbody[0] < median[2], midbody[1] < midbody[2]. Filter trend_state >= 0 and an engine stop of 1.5 x atr_14 (card).
-Exit after `exit_length` = 5 bars (card v1, arbitrary and logged as such). Not modelled: the `exit gain length` exit
-and the losing-trade weakness sets C/D, which need the entry price that `should_exit(row, bars_held)` does not get.
+Exits (card): after `exit_length` = `max_hold_days` = 5 bars; after `exit_gain_bars` = 2 bars (exit gain length, card v1)
+with the close above the entry fill; and while losing (close below the entry fill) on weakness set C or D
+(features.extra `gandalf_weak`, exact equality in C as the card). Both lengths are arbitrary and logged as such.
 """
 from __future__ import annotations
 
@@ -15,7 +16,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 
 from . import _catalog1 as c1
@@ -27,12 +28,14 @@ from ._base import (
     TREND_DOWN,
     TREND_FLAT,
     PanelStrategy,
+    entry_price,
     finite,
 )
 
 NAME = "gandalf_project_research_system"
 ARRAYS = ("open", "high", "low", "close")
 LAGS = 4
+WEAK = "gandalf_weak"
 
 
 def gandalf_buy(w: dict[str, np.ndarray]) -> bool:
@@ -52,11 +55,23 @@ class GandalfProjectResearchSystem(PanelStrategy):
     default_params: dict[str, Any] = {
         "stop_atr_mult": 1.5,  # card: engine stop entry - 1.5 x atr_14
         "max_hold_days": 5,  # card: exit_length 5 (engine v1, arbitrary, not tuned)
+        "exit_gain_bars": 2,  # card: exit_gain_length 2 (engine v1): exit once held >= 2 bars and close > entry
+        "exit_on_weakness": True,  # card: exit a losing trade on weakness set C or D
         P_MIN_TREND: TREND_FLAT,  # card: filter trend_state >= 0
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target
     }
     features_required = ["atr_14", "trend_state"]
+    extra_features = [WEAK]
+
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        fill = entry_price(position)
+        if fill is None:
+            return False
+        close = float(row["close"])
+        if bars_held >= int(self.params["exit_gain_bars"]) and close > fill:
+            return True
+        return bool(self.params["exit_on_weakness"]) and close < fill and row.get(WEAK) == 1.0
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if panel.empty or not self.market_ok(regime):

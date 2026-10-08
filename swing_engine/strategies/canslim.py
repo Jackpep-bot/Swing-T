@@ -9,7 +9,8 @@ Approximation of C: the engine has no quarterly EPS growth, 3-year EPS CAGR, ROE
 point-in-time input is the OPTIONAL panel column `sue` (data/fundamentals.py edgar_panel_features: standardized
 quarterly EPS surprise vs the same quarter a year earlier); signals require sue >= `min_sue`. Without the column the
 strategy returns no signals (`require_fundamentals`; False degrades it to base_breakout with these params).
-No engine panel builder joins edgar_panel_features yet, so replay, nightly and the CLI produce no canslim signals.
+Replay, nightly and the CLI join these columns from the store (data.fundamentals.join_edgar) after
+`swing ingest-edgar`.
 """
 from __future__ import annotations
 

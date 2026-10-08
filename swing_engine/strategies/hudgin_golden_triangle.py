@@ -5,10 +5,11 @@ a rising 50 SMA (close / sma_50 - 1 >= `accel_min` and sma_50 above its value `s
 at least one close below the 50 SMA, no deeper than `max_drop_below` under it. Trigger on bar t: close above the
 confirmation SMA (sma_10) and volume both the highest of the last `vol_bars` bars and above avg_vol_50d, the first
 such bar after the drop low (the price- and volume-confirmation days are folded into one bar). Entry next open; stop
-= drop low - 0.25 x atr_14; target = the pivot high (card). Exit after `max_hold_days` = 20 sessions (card). The card's
-rule exit on close < drop low is not modelled because `should_exit` does not see the entry's drop low; the stop, 0.25 x
-atr_14 below that low, bounds the gap. The undefined "acceleration" and "max drop" knobs take the card's values
-(`accel_min` = 0.10 from its mechanical rule).
+= drop low - 0.25 x atr_14; target = the pivot high (card). Exits: after `max_hold_days` = 20 sessions, and the card's
+rule exit on a close below the entry signal's drop low (`exit_below_drop_low`; `should_exit` reads `drop_low` from the
+position's entry features, so it cannot fire live, where the ledger keeps no features: there the stop, 0.25 x atr_14
+below that low, bounds the gap). The undefined "acceleration" and "max drop" knobs take the card's values (`accel_min`
+= 0.10 from its mechanical rule).
 """
 from __future__ import annotations
 
@@ -18,11 +19,20 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, SYMBOL, TREND_DOWN, PanelStrategy, finite
+from ._base import (
+    P_MIN_MARKET_TREND,
+    P_MIN_RR,
+    P_MIN_TREND,
+    SYMBOL,
+    TREND_DOWN,
+    PanelStrategy,
+    entry_feature,
+    finite,
+)
 
 NAME = "hudgin_golden_triangle"
 ARRAYS = ("high", "low", "close", "volume", "sma_50", "avg_vol_50d")
@@ -41,6 +51,7 @@ class GoldenTriangle(PanelStrategy):
         "vol_bars": 5,  # card: volume the highest of the last 5 bars
         "stop_atr_buffer": 0.25,  # card: stop = drop low - 0.25 x atr_14
         "max_hold_days": 20,  # card
+        "exit_below_drop_low": True,  # card: rule exit on a close below the entry's drop low
         P_MIN_TREND: TREND_DOWN,  # the setup is the trend test (trend_state is often 0 during the drop)
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 1.5,  # card
@@ -50,8 +61,11 @@ class GoldenTriangle(PanelStrategy):
     def required_features(self) -> list[str]:
         return [*self.features_required, str(self.params["conf_ma"])]
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
-        return bars_held >= int(self.params["max_hold_days"])
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        drop_low = entry_feature(position, "drop_low")
+        return bool(self.params["exit_below_drop_low"]) and drop_low is not None and float(row["close"]) < drop_low
 
     def _trigger(self, w: dict[str, np.ndarray], j: int, conf: str) -> bool:
         vb = int(self.params["vol_bars"])

@@ -10,9 +10,10 @@ contractions (high-to-next-low depths), the first <= 35% deep, each <= 0.75 x th
 the most recent swing high; the last contraction low is not undercut and no close has crossed the pivot since it.
 Trigger: close above the pivot, no more than 5% above, on volume >= 1.4 x the prior 50-day average. Optional volume
 dry-up (`vol_dryup_max`, no book number) is off. Entry next open (no buy stop at the pivot: the close must confirm).
-Stop = max(last contraction low x 0.995, entry x 0.90). No target; exits: close below sma_50 on >= 1.5x volume, or
-60 sessions. Partial sales, the climax sale, breakeven at 2-3R and the failed-breakout exit (back under the pivot
-within 2 bars) need hooks `should_exit` lacks (entry price, pivot); the engine overlay's breakeven stays on.
+Stop = max(last contraction low x 0.995, entry x 0.90). No target; exits: close below sma_50 on >= 1.5x volume, 60
+sessions, or the failed-breakout exit, a close back under the entry signal's pivot within `fail_exit_bars` = 2 bars
+(read from the position's entry features; live, where the ledger keeps no features, it cannot fire). Partial sales,
+the climax sale and breakeven at 2-3R are not built; the engine overlay's breakeven stays on.
 """
 from __future__ import annotations
 
@@ -22,11 +23,11 @@ from typing import Any, NamedTuple
 import numpy as np
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_FLAT, PanelStrategy, finite
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_FLAT, PanelStrategy, entry_feature, finite
 from ._swing import alternate, swing_pivots
 
 NAME = "vcp_sepa_breakout"
@@ -64,6 +65,7 @@ class VcpSepaBreakout(PanelStrategy):
         "exit_ma": "sma_50",  # card: exit on a heavy-volume close below the 50-day
         "exit_volume_mult": 1.5,  # card: "on volume >= 1.5x"
         "max_hold_days": 60,  # card
+        "fail_exit_bars": 2,  # card: exit on a close < the pivot within 2 bars (0 = off)
         P_MIN_MARKET_TREND: TREND_FLAT,
         P_MIN_RR: 0.0,  # card: rule exit
     }
@@ -74,8 +76,11 @@ class VcpSepaBreakout(PanelStrategy):
         return list(dict.fromkeys([*super().required_features(), "sma_50", "sma_200", "dist_52w_high",
                                    str(self.params["exit_ma"])]))
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
         if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        pivot = entry_feature(position, "pivot")
+        if bars_held <= int(self.params["fail_exit_bars"]) and pivot is not None and float(row["close"]) < pivot:
             return True
         ma, avg = row.get(str(self.params["exit_ma"])), row.get("avg_vol_50d")
         if not (finite(ma) and finite(avg)) or float(row["close"]) >= float(ma):

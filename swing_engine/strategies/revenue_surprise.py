@@ -8,8 +8,8 @@ Data: the OPTIONAL panel columns `rev_surprise` and `sue` (data/fundamentals.py 
 random-walk surprise over the prior 8 quarters, visible the session after the 10-Q/10-K filing). Without
 `rev_surprise` the strategy returns no signals; `min_sue` is skipped when `sue` is absent or the param is None.
 Approximation: edgar_panel_features scales total revenue, not revenue per share (the paper's Rs).
-No engine panel builder joins edgar_panel_features yet, so replay, nightly and the CLI produce no revenue_surprise
-signals.
+Replay, nightly and the CLI join these columns from the store (data.fundamentals.join_edgar) after
+`swing ingest-edgar`.
 """
 from __future__ import annotations
 

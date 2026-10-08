@@ -2,10 +2,10 @@
 
 Setup at the close of bar t: `pattern` (nr7 default; nr4 or id_nr4) from features.extra, trend_state >= 1,
 avg_vol_20d >= 100k, close >= $5. Entry: buy stop high_t + tick for the next session (`EntryType.STOP`; untriggered
-orders expire). Stop: low_t - tick. Variant A (Crabel, default): no target, 3-bar time exit; the "first profitable
-close" exit is not modelled because `should_exit` does not see the entry price. Variant B (Bulkowski): set
-`target_pct: 0.07`, `stop_pct: 0.07`, `max_hold_days: 40`. The sell-stop short half of the OCO bracket is not
-modelled (long-only).
+orders expire). Stop: low_t - tick. Variant A (Crabel, default): no target, exit at the first close above the entry
+fill (`exit_first_profitable_close`, card: "first profitable close") or after 3 bars. Variant B (Bulkowski): set
+`target_pct: 0.07`, `stop_pct: 0.07`, `max_hold_days: 40`, `exit_first_profitable_close: false`. The sell-stop short
+half of the OCO bracket is not modelled (long-only).
 """
 from __future__ import annotations
 
@@ -14,10 +14,19 @@ from typing import Any
 
 import pandas as pd
 
-from swing_engine.core.models import EntryType, Signal
+from swing_engine.core.models import EntryType, PositionContext, Signal
 from swing_engine.core.registry import register
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, TREND_DOWN, TREND_UP, PanelStrategy, finite
+from ._base import (
+    P_MIN_MARKET_TREND,
+    P_MIN_RR,
+    P_MIN_TREND,
+    TREND_DOWN,
+    TREND_UP,
+    PanelStrategy,
+    entry_price,
+    finite,
+)
 
 NAME = "nr7_nr4_range_contraction"
 PATTERNS = ("nr7", "nr4", "id_nr4")
@@ -35,6 +44,7 @@ class NR7RangeContraction(PanelStrategy):
         "target_pct": None,  # card variant B (Bulkowski): 0.07
         "stop_pct": None,  # card variant B (Bulkowski): 0.07 -> stop entry x 0.93
         "max_hold_days": 3,  # card variant A (Crabel); variant B uses 40
+        "exit_first_profitable_close": True,  # card variant A: exit at the first close above the entry fill
         P_MIN_TREND: TREND_UP,  # card: trend_state >= 1
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: variant A needs min_reward_risk 0
@@ -45,8 +55,11 @@ class NR7RangeContraction(PanelStrategy):
     def required_features(self) -> list[str]:
         return [*self.features_required, str(self.params["pattern"])]
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
-        return bars_held >= int(self.params["max_hold_days"])
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        fill = entry_price(position)
+        return bool(self.params["exit_first_profitable_close"]) and fill is not None and float(row["close"]) > fill
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if not self.market_ok(regime):

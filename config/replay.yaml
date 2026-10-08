@@ -1,0 +1,6 @@
+# Research replays on a copy of the live store (data/live/replay.duckdb), so long replays can run while an
+# ingest writes the live store. Same runs/ folder as live (it sits next to the store). Refresh the copy with
+#   cp data/live/market.duckdb data/live/replay.duckdb   (while nothing is writing the live store)
+extends: live.yaml
+data:
+  store_path: data/live/replay.duckdb

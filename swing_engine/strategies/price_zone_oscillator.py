@@ -3,11 +3,13 @@
 PZO(14) = 100 x EMA(signed close) / EMA(close) (features.extra `pzo_14`); ADX(14) > 18 = trending, direction from
 EMA(60). Long entries: uptrend (ADX > 18, close > EMA60): PZO crosses above -40, or crosses above +15 for the first
 time since it was last below 0 ("after crossing zero upward"); non-trend (ADX <= 18): PZO crosses above -40 or +15.
-ADX > 18 with close < EMA60 is a downtrend: no long. Exit (`should_exit`, row-based): PZO was above +60 and turns
-down (both modes); trend (ADX > 18): close < EMA60 with PZO < 0; non-trend (ADX <= 18 or NaN): PZO crosses down
-through 0 with close < EMA60, or crosses down through -5. The card's non-trend path conditions ("after dropping
-through +40", "fails to reach +40") need the path since entry; the row-based crosses approximate them so a -40
-recovery that is still negative cannot exit on its first held close. Stop 2 x atr_14 (card).
+ADX > 18 with close < EMA60 is a downtrend: no long. Exit (`should_exit`): PZO was above +60 and turns down (both
+modes); trend (ADX > 18): close < EMA60 with PZO < 0; non-trend (ADX <= 18 or NaN), the card's path rules from the
+position's `bars_held` and the `bars_since_ge_<level>_of_pzo_14` columns: after reaching +40 since entry (so it has
+dropped through +40), PZO < 0 with close < EMA60; or, after crossing +15 (on the signal bar or since), never reaching
++40 and falling below -5. Without a position context (a caller with no position facts) the non-trend rule falls back
+to row-based crosses: PZO down through 0 with close < EMA60, or down through -5. The path levels are the card's +15 /
++40 (module constants). Stop 2 x atr_14 (card).
 """
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from swing_engine.core.models import Signal
+from swing_engine.core.models import PositionContext, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view
 
@@ -25,6 +27,9 @@ from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, PanelStrate
 
 NAME = "price_zone_oscillator"
 PZO, PREV_PZO, EMA, ADX = "pzo_14", "prev_pzo_14", "ema_60", "adx_14"
+#: card non-trend LX path levels: "after crossing +15 upward" / "after dropping through +40", "fails to reach +40"
+PATH_CROSS, PATH_REACH = 15, 40
+SINCE_CROSS, SINCE_REACH = f"bars_since_ge_{PATH_CROSS}_of_{PZO}", f"bars_since_ge_{PATH_REACH}_of_{PZO}"
 
 
 @register("strategy", NAME)
@@ -44,9 +49,9 @@ class PriceZoneOscillator(PanelStrategy):
         P_MIN_RR: 0.0,  # card: no target
     }
     features_required = ["atr_14"]
-    extra_features = [PZO, PREV_PZO, EMA, ADX]
+    extra_features = [PZO, PREV_PZO, EMA, ADX, SINCE_CROSS, SINCE_REACH]
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
         if bars_held >= int(self.params["max_hold_days"]):
             return True
         pzo, prev, ema = row.get(PZO), row.get(PREV_PZO), row.get(EMA)
@@ -59,9 +64,13 @@ class PriceZoneOscillator(PanelStrategy):
         adx = row.get(ADX)
         if finite(adx) and float(adx) > float(self.params["adx_trend"]):
             return bool(close_below and pzo < 0)  # trend LX
-        # non-trend LX, row-based: PZO crosses down through 0 (close < EMA60) or through -5
         fail = float(self.params["fail_level"])
-        return bool((prev >= 0 > pzo and close_below) or prev >= fail > pzo)
+        if position is None:  # non-trend LX, row-based: PZO crosses down through 0 (close < EMA60) or through -5
+            return bool((prev >= 0 > pzo and close_below) or prev >= fail > pzo)
+        reach, cross = row.get(SINCE_REACH), row.get(SINCE_CROSS)
+        reached = finite(reach) and float(reach) < bars_held  # PZO >= +40 on a held bar
+        crossed = finite(cross) and float(cross) <= bars_held  # PZO >= +15 on the signal bar or a held bar
+        return bool((reached and pzo < 0 and close_below) or (crossed and not reached and pzo < fail))
 
     def _entry(self, pzo: np.ndarray, trending: bool) -> str | None:
         now, prev = pzo[-1], pzo[-2]

@@ -14,7 +14,7 @@ import pandas as pd
 import structlog
 
 from swing_engine.core.interfaces import Strategy
-from swing_engine.core.models import Side, Signal
+from swing_engine.core.models import PositionContext, Side, Signal
 
 log = structlog.get_logger(__name__)
 
@@ -212,11 +212,14 @@ class PanelStrategy(Strategy):
             return math.nan
         return float(row["volume"]) / float(avg)
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
         """Rule-based exit hook for strategies whose exit is not a fixed stop/target (default: never).
 
         `row` is the panel row of the held symbol on the evaluation day; `bars_held` counts sessions since
-        entry. Backtest/execution may call this in addition to stop/target handling.
+        entry. Backtest/execution may call this in addition to stop/target handling. `position` (entry fill,
+        stops, best price since entry, the entry signal's features and date) is passed by the engines when an
+        override declares the third parameter; it is None from a caller without position facts, and a field
+        the engine cannot recover is None (live: no entry features), so a rule that needs one must not fire.
         """
         return False
 
@@ -238,3 +241,15 @@ class PanelStrategy(Strategy):
 def finite(x: Any) -> bool:
     """Public alias used by strategy modules."""
     return _finite(x)
+
+
+def entry_feature(position: PositionContext | None, key: str) -> float | None:
+    """The entry signal's ``features[key]`` as a float, or None (no position context, or the feature is unknown)."""
+    value = None if position is None else position.entry_features.get(key)
+    return float(value) if _finite(value) else None
+
+
+def entry_price(position: PositionContext | None) -> float | None:
+    """The position's entry fill, or None when the caller passed no context."""
+    value = None if position is None else position.entry_price
+    return float(value) if _finite(value) else None

@@ -11,7 +11,10 @@ open orders and returns :class:`ExitAction` items that ``execution.autopilot`` e
   :func:`entry_cancels_on_kill` lists every unfilled entry regardless of age for the kill-switch path.
 * ``close``  earnings within ``earnings_exit_days`` sessions, the strategy's time stop (``max_hold_days`` or
   ``time_stop_days`` param), or the strategy's rule exit (``exit_rule(row, position)`` or
-  ``should_exit(row, bars_held)``) evaluated on the ``as_of`` panel row.
+  ``should_exit(row, bars_held)``) evaluated on the ``as_of`` panel row. A ``should_exit`` that takes a third argument
+  gets a ``core.models.PositionContext``: the broker's avg_entry, the ledger's intent stop, the current stop and the
+  highest high since entry; the entry signal's features and date are not in the ledger, so live they are empty / None
+  (``research.replay`` passes them from its own book).
 * ``place_stop``  a strategy-owned position with no open stop order (a leg that expired at Alpaca's 90-day GTC
   limit, a failed close that had already cancelled the legs, legs dropped after a partial fill) gets a fresh
   protective stop at the ledger's intent stop (or the R-ladder stop when tighter). When that stop is already
@@ -47,8 +50,8 @@ from pydantic import BaseModel
 
 from swing_engine.core import registry
 from swing_engine.core.config import Settings
-from swing_engine.core.interfaces import Strategy
-from swing_engine.core.models import Position, Side
+from swing_engine.core.interfaces import Strategy, exit_takes_position
+from swing_engine.core.models import Position, PositionContext, Side
 from swing_engine.execution.ledger import OrderLedger, OrderStatus
 from swing_engine.risk.killswitch import resolve_state_path
 
@@ -124,6 +127,8 @@ class _Held:
     initial_stop: float | None = None
     current_stop: float | None = None
     stop_order_id: str | None = None
+    entry_features: Mapping[str, float] | None = None  # entry Signal.features: replay, or the ledger intent live
+    signal_as_of: date | None = None  # entry Signal.as_of: replay, or the ledger intent live
 
 
 # ----------------------------------------------------------------------------------------------------------
@@ -373,7 +378,13 @@ def _held_facts(
     if row is not None:
         held.strategy = held.strategy or row["strategy"]
         held.client_order_id = held.client_order_id or row["client_order_id"]
-        held.initial_stop = _float((row.get("intent") or {}).get("stop"))
+        intent = row.get("intent") or {}
+        held.initial_stop = _float(intent.get("stop"))
+        feats = intent.get("features")
+        if held.entry_features is None and isinstance(feats, Mapping):
+            held.entry_features = {str(k): float(v) for k, v in feats.items() if _float(v) is not None}
+        if held.signal_as_of is None and intent.get("signal_as_of"):
+            held.signal_as_of = date.fromisoformat(str(intent["signal_as_of"])[:10])
         if held.entry_day is None:
             broker_json = row.get("broker") or {}
             raw = broker_json.get("raw", broker_json) if isinstance(broker_json, Mapping) else {}
@@ -445,7 +456,19 @@ def _hold_limit(strategy: Strategy | None) -> int | None:
     return None
 
 
-def _rule_exit(strategy: Strategy | None, row: pd.Series, held: _Held, bars_held: int) -> bool:
+def _position_context(held: _Held, frame: pd.DataFrame, bars_held: int) -> PositionContext:
+    """``should_exit``'s third argument; ``best_price`` is the extreme of the frame's rows since the entry day."""
+    long = held.position.side == Side.LONG
+    since = frame.loc[frame["_day"] >= pd.Timestamp(held.entry_day)] if held.entry_day is not None else frame.iloc[0:0]
+    extreme = since["high"].max() if long else since["low"].min()
+    return PositionContext(
+        entry_price=held.position.avg_entry, stop=held.current_stop, initial_stop=held.initial_stop,
+        bars_held=bars_held, best_price=float(extreme) if np.isfinite(extreme) else None,
+        entry_features=held.entry_features or {}, as_of=held.signal_as_of,
+    )
+
+
+def _rule_exit(strategy: Strategy | None, row: pd.Series, held: _Held, bars_held: int, frame: pd.DataFrame) -> bool:
     if strategy is None:
         return False
     exit_rule = getattr(strategy, "exit_rule", None)
@@ -456,7 +479,11 @@ def _rule_exit(strategy: Strategy | None, row: pd.Series, held: _Held, bars_held
         )
         return bool(exit_rule(row, pos))
     should_exit = getattr(strategy, "should_exit", None)
-    return bool(should_exit(row, bars_held)) if callable(should_exit) else False
+    if not callable(should_exit):
+        return False
+    if exit_takes_position(should_exit):
+        return bool(should_exit(row, bars_held, _position_context(held, frame, bars_held)))
+    return bool(should_exit(row, bars_held))
 
 
 def engine_trail_enabled(strategy: Any) -> bool:
@@ -589,7 +616,7 @@ def _review_one(
     if limit is not None and bars_held is not None and bars_held >= limit:
         return [ExitAction(kind=ExitKind.CLOSE, reason=ExitReason.TIME_STOP, ref_price=ref, **base,
                            detail=f"held {bars_held} sessions >= {limit}")]
-    if _rule_exit(strategy, row.drop(labels="_day"), held, bars_held or 0):
+    if _rule_exit(strategy, row.drop(labels="_day"), held, bars_held or 0, frame):
         return [ExitAction(kind=ExitKind.CLOSE, reason=ExitReason.STRATEGY_EXIT, ref_price=ref, **base,
                            detail=f"{held.strategy} exit rule fired (held {bars_held} sessions)")]
     unprotected = _missing_stop(held, frame, settings, ref, base, strategy)

@@ -6,9 +6,9 @@ APPROXIMATION: the engine's stop entries are fixed at signal time and the next o
 stands in for the next open: buy stop = close + k x range, protective stop = close - k x range (a stop 2 x the
 offset below the trigger). Gaps shift the real levels; this is the daily-bar proxy until a "stop off the open" entry
 type exists. The GSV and Crabel stretch offsets are not built (Williams' range only).
-Williams' bailout (exit at the first profitable open) needs the entry price, which `should_exit` does not see, so
-only the 5-session time exit applies. Filters: trend_state up (engine choice, card reuses trend_state); optional
-NR7 / ID-NR4 pre-filter on the signal bar (card variant, off). Long only.
+Williams' bailout (exit at the first profitable open) is not built: rule exits are decided at a close, so an exit
+at the open cannot be expressed; only the 5-session time exit applies. Filters: trend_state up (engine choice, card
+reuses trend_state); optional NR7 / ID-NR4 pre-filter on the signal bar (card variant, off). Long only.
 """
 from __future__ import annotations
 

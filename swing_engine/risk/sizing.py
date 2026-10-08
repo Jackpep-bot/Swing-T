@@ -231,6 +231,8 @@ def size_signal_detail(
         risk_dollars=round(qty * rps_worst, PRICE_DECIMALS),
         entry_type=signal.entry_type,
         notes=notes,
+        features=dict(signal.features or {}),
+        signal_as_of=signal.as_of,
     )
     return intent, "ok"
 

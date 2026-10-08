@@ -8,7 +8,8 @@ and both days_since_earnings (8-K clock) and days_since_filing (10-Q/10-K clock)
 filed yet is not traded on the previous quarter's SUE. The size split the card asks for is logged per signal
 (`dollar_vol_20d`). No stop in the source; engine stop entry - 3 x atr_14 (card); exit at `max_hold_days` 60
 (Bernard-Thomas drift window); no target.
-No engine panel builder joins edgar_panel_features yet, so replay, nightly and the CLI produce no pead_sue signals.
+Replay, nightly and the CLI join these columns from the store (data.fundamentals.join_edgar) after
+`swing ingest-edgar`.
 """
 from __future__ import annotations
 

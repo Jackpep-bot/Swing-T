@@ -477,7 +477,8 @@ def _manage(
     frame = rows.frame(pos.symbol, min(pos.entry_idx, i - lookback + 1), i)
     held = _Held(
         position=pos.to_position(), strategy=pos.strategy, entry_day=pos.entry_ts.date(),
-        initial_stop=pos.initial_stop, current_stop=pos.stop,
+        initial_stop=pos.initial_stop, current_stop=pos.stop, entry_features=pos.entry_features,
+        signal_as_of=pos.signal_as_of,
     )
     actions = _review_one(held, frame, strategies.get(pos.strategy), settings, day, None)
     for action in actions:
