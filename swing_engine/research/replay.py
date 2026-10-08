@@ -202,6 +202,14 @@ def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
     return build_panel(bars, market if not market.empty else None)
 
 
+def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:
+    """Attach the strategies' ``extra_features`` (``features.extra``) once for the whole replay; the panel's SPY
+    rows serve as the market proxy."""
+    from swing_engine.features.extra import ensure_extra, required_extras
+
+    return ensure_extra(panel, required_extras(strategies))
+
+
 def _sessions_only(panel: pd.DataFrame, first: date, last: date) -> pd.DataFrame:
     """Drop rows dated on non-NYSE sessions (synthetic or bad vendor rows) so the walk is session by session."""
     trading_days = _session_days()
@@ -513,6 +521,7 @@ def run_replay(
         panel = build_replay_panel(store, start_d, end_d)
     panel = _sessions_only(panel, start_d - timedelta(days=WARMUP_CALENDAR_DAYS), end_d)
     panel = _with_patterns2(panel)
+    panel = _with_extras(panel, strat_map.values())
     view = _PanelView(panel)
     i0, i1 = view.index_range(start_d, end_d)
     rows = _SymbolRows(view)

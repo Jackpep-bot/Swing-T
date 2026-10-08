@@ -569,6 +569,12 @@ def _read_bars(
     return bars
 
 
+def _with_extras(panel: pd.DataFrame, market: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Attach every registered strategy's `extra_features` the panel lacks (cached panels carry none)."""
+    ensure_extra, required_extras = _load("features.extra.ensure_extra"), _load("features.extra.required_extras")
+    return ensure_extra(panel, required_extras(), market)
+
+
 def _read_panel(store: Any, settings: Settings, start: date | None, end: date | None) -> pd.DataFrame:
     """Cached `panel` table when present, else build it from bars on the fly."""
     panel: pd.DataFrame | None = None
@@ -583,6 +589,7 @@ def _read_panel(store: Any, settings: Settings, start: date | None, end: date | 
         bars = _read_bars(store, settings, None, start_d, end_d)
         build_panel = _load("features.panel.build_panel")
         panel = build_panel(bars, _market_slice(bars))
+    panel = _with_extras(panel)
     panel = _slice_dates(panel, start, end)
     if panel.empty:
         _fail(f"panel has no rows for {start}..{end}", EXIT_NO_DATA)
@@ -1016,7 +1023,7 @@ def _panel_from_provider(
             log.info("market_bars_unavailable", provider=name, error=str(e))
             market = None
     build_panel = _load("features.panel.build_panel")
-    return build_panel(bars, market), market
+    return _with_extras(build_panel(bars, market), market), market
 
 
 def _returns_moments(result: Any, metrics: dict[str, Any]) -> tuple[int, float, float]:

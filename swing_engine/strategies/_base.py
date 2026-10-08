@@ -78,6 +78,9 @@ class PanelStrategy(Strategy):
     description = ""
     #: panel columns the strategy reads beyond the bar columns; validated before scanning
     features_required: list[str] = []
+    #: on-demand columns from `features.extra` (e.g. "ema_8", "psar", "tom_day"); the panel builders attach them
+    #: via `ensure_extra(panel, required_extras(...))` before scanning
+    extra_features: list[str] = []
     #: bar columns copied from the previous bar as `prior_<col>`
     prior_columns: list[str] = ["open", "high", "low", "close", "volume"]
     #: False opts out of the engine-wide breakeven-at-+1R / N-day-low trail overlay (settings.execution) in
@@ -87,7 +90,7 @@ class PanelStrategy(Strategy):
     engine_trail: bool = True
 
     def required_features(self) -> list[str]:
-        return list(self.features_required)
+        return list(dict.fromkeys([*self.features_required, *self.extra_features]))
 
     # ----------------------------------------------------------------------------- regime gate
     def market_ok(self, regime: dict[str, Any] | None) -> bool:

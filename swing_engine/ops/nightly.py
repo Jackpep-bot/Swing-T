@@ -629,7 +629,9 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
     if bars is None or len(bars) == 0:
         raise RuntimeError(f"no bars in the store for {start}..{ctx.as_of}; ingest first")
     build_panel = _load("features.panel.build_panel")
-    panel = build_panel(bars, _market_slice(bars))
+    ensure_extra, required_extras = _load("features.extra.ensure_extra"), _load("features.extra.required_extras")
+    market = _market_slice(bars)
+    panel = ensure_extra(build_panel(bars, market), required_extras(), market)  # every registered strategy's extras
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
     try:
