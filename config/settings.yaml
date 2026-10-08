@@ -26,6 +26,14 @@ risk:
   min_reward_risk: 2.0
   vol_target_annual_pct: null
   kill_switch_file: state/KILL
+  # optional risk tools, all off (null) by default; see swing_engine/core/config.py RiskConfig
+  turtle_unit_risk_pct: null     # Turtle 1.0: unit = 1% equity / N (signal.features["turtle_n"])
+  max_units_per_symbol: null     # Turtle 4
+  max_units_per_sector: null     # Turtle 6 (closely correlated)
+  max_units_per_direction: null  # Turtle 12
+  max_monthly_loss_pct: null     # Elder 6.0
+  drawdown_size_mult: null       # Turtle 2.0 (10% drawdown -> size on 20% less equity)
+  book_vol_target_annual_pct: null  # e.g. 12.0 (Barroso-Santa-Clara); lookback 126d, max scale 1.0
 
 strategies:                    # name -> {enabled, params}; names come from swing_engine/strategies/*.py
   sr_bounce:        {enabled: true}
@@ -142,3 +150,23 @@ playbook:                      # strategies.playbook market-regime router; see d
     correction: {}             # SPY below its 200-day or in a downtrend: no new longs
     high_vol_selloff:          # high SPY vol and SPY below its 50-day: small RSI-2 only
       rsi2_meanrev: 0.25
+  overlays:                    # risk-reducing only: when one fires, `strategies` ([] = all) x `multiplier` (0 blocks)
+    market_school_pressure:    # features/market_school.py under_pressure (5+ live DDs); docs/methods/07 "M"
+      enabled: false
+      multiplier: 0.5
+      params: {}               # market_school kwargs: dd_min_loss 0.002, dd_window 25, dd_expiry_rally 0.06,
+    market_school_correction:  # ftd_min_day 4, ftd_min_gain 0.0125, dd_pressure 5, dd_correction 7
+      enabled: false
+      multiplier: 0.0          # IBD: no new buys in a correction
+    hill_bearish:              # 2 of 3: ad_pct_ema10 < -30, % above 200-day line off, hl_pct < -10 (doc 06 C)
+      enabled: false
+      multiplier: 0.5
+      params: {ad_pct_below: -30.0, hl_pct_below: -10.0, min_votes: 2}
+    mcclellan_negative:        # mcclellan_osc < 0 (Keller healthy bull needs MCO > 0)
+      enabled: false
+      multiplier: 0.75
+      params: {osc_below: 0.0}
+    q25_bearish:               # Stockbee primary: q25_ratio < 1 (more stocks down 25% in a quarter than up)
+      enabled: false
+      multiplier: 0.5
+      params: {ratio_below: 1.0}

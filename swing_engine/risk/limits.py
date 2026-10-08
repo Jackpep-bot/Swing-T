@@ -10,8 +10,9 @@
     buying_power  float, optional  hard notional cap for the order
     prices        dict[str,float]  reference prices for notional checks when the intent has no entry_limit
     as_of         date, optional   day for the daily-loss baseline (defaults to today)
+    units         dict[str,float]  optional Turtle units held per symbol (default: 1 per position / pending order)
 
-State that must persist across calls (day-start equity, peak equity) lives on the instance and, when a
+State that must persist across calls (day-start equity, peak equity, month-start equity and the monthly-stop latch) lives on the instance and, when a
 ``state_path`` is given, in a small JSON file under ``state/`` so a fresh process (``swing paper`` runs once a
 day) starts from the historical peak instead of re-seeding it with today's equity. Everything else is re-read
 from ``account`` every time so the check never trusts stale positions.
@@ -37,6 +38,7 @@ PCT = 100.0
 OK = "ok"
 DEFAULT_LIMITS_STATE_FILE: str = RiskConfig.model_fields["limits_state_file"].default
 STATE_VERSION = 1
+ORDER_SIDE_DIRECTION = {"buy": "long", "sell": "short", "long": "long", "short": "short"}
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -62,7 +64,7 @@ def intent_notional(intent: OrderIntent, reference_price: float | None = None) -
 
 
 class LimitState:
-    """Max open positions, daily loss, drawdown and sector caps from ``RiskConfig``."""
+    """Max open positions, daily / monthly loss, drawdown, sector and Turtle unit caps from ``RiskConfig``."""
 
     def __init__(
         self,
@@ -79,6 +81,9 @@ class LimitState:
         self.peak_equity = peak_equity
         self.day = as_of
         self.last_equity: float | None = None
+        self.month: str | None = None  # "YYYY-MM" of month_start_equity
+        self.month_start_equity: float | None = None
+        self.month_stopped = False  # latched once the monthly loss stop fires; clears on a new month
         self.checks = 0
         self.blocks = 0
         self.state_path: Path | None = resolve_state_path(state_path) if state_path else None
@@ -113,6 +118,9 @@ class LimitState:
                 self.day = None
             if self.day is not None and self.day_start_equity is None:
                 self.day_start_equity = _float_or_none(data.get("day_start_equity"))
+        self.month = data.get("month")
+        self.month_start_equity = _float_or_none(data.get("month_start_equity"))
+        self.month_stopped = bool(data.get("month_stopped", False))
         log.info("limits_state_loaded", path=str(self.state_path), peak_equity=self.peak_equity, day=str(self.day))
 
     def _save_state(self) -> None:
@@ -124,6 +132,9 @@ class LimitState:
             "day_start_equity": self.day_start_equity,
             "peak_equity": self.peak_equity,
             "last_equity": self.last_equity,
+            "month": self.month,
+            "month_start_equity": self.month_start_equity,
+            "month_stopped": self.month_stopped,
             "updated_at": datetime.now(UTC).isoformat(timespec="seconds"),
         }
         try:
@@ -141,6 +152,10 @@ class LimitState:
         if self.day != today or self.day_start_equity is None:
             self.day = today
             self.day_start_equity = last_equity if last_equity is not None else equity
+        month = f"{today:%Y-%m}"
+        if self.month != month or self.month_start_equity is None:
+            self.month, self.month_stopped = month, False
+            self.month_start_equity = last_equity if last_equity is not None else equity
         self.peak_equity = equity if self.peak_equity is None else max(self.peak_equity, equity)
         self.last_equity = equity
         self._save_state()
@@ -149,6 +164,11 @@ class LimitState:
         if self.last_equity is None or not self.day_start_equity:
             return None
         return (self.last_equity - self.day_start_equity) / self.day_start_equity * PCT
+
+    def monthly_pnl_pct(self) -> float | None:
+        if self.last_equity is None or not self.month_start_equity:
+            return None
+        return (self.last_equity - self.month_start_equity) / self.month_start_equity * PCT
 
     def drawdown_pct(self) -> float | None:
         if self.last_equity is None or not self.peak_equity:
@@ -163,6 +183,9 @@ class LimitState:
             "last_equity": self.last_equity,
             "daily_pnl_pct": self.daily_pnl_pct(),
             "drawdown_pct": self.drawdown_pct(),
+            "month": self.month,
+            "monthly_pnl_pct": self.monthly_pnl_pct(),
+            "month_stopped": self.month_stopped,
             "checks": self.checks,
             "blocks": self.blocks,
             "state_path": str(self.state_path) if self.state_path else None,
@@ -180,6 +203,40 @@ class LimitState:
         log.warning("limit_check_blocked", symbol=intent.symbol, client_order_id=intent.client_order_id, reason=reason)
         return False, reason
 
+    def _unit_violation(
+        self, intent: OrderIntent, positions: list[Position], account: Mapping[str, Any]
+    ) -> str | None:
+        """Turtle unit limits per symbol / sector / direction; the new intent counts as one unit.
+
+        Held units: ``account["units"][symbol]`` when given, else 1 per open position and per pending entry order
+        (a pending order's broker side buy/sell maps to long/short).
+        """
+        cfg = self.cfg
+        if cfg.max_units_per_symbol is None and cfg.max_units_per_sector is None and cfg.max_units_per_direction is None:
+            return None
+        units: Mapping[str, float] = account.get("units") or {}
+        held: list[tuple[str, str | None, float]] = [
+            (p.symbol, str(p.side), float(units.get(p.symbol, 1.0))) for p in positions
+        ]
+        held_symbols = {p.symbol for p in positions}
+        for o in account.get("open_orders") or []:
+            sym = str(o.get("symbol"))
+            if sym not in held_symbols:
+                held.append((sym, ORDER_SIDE_DIRECTION.get(str(o.get("side")).lower()), float(units.get(sym, 1.0))))
+        side = str(intent.side)
+        sector = self.sector_map.get(intent.symbol)
+        by_symbol = sum(u for s, _, u in held if s == intent.symbol) + 1
+        by_sector = sum(u for s, _, u in held if sector is not None and self.sector_map.get(s) == sector) + 1
+        by_direction = sum(u for _, d, u in held if d == side) + 1
+        for label, count, cap in (
+            (f"symbol {intent.symbol}", by_symbol, cfg.max_units_per_symbol),
+            (f"sector {sector}", by_sector, cfg.max_units_per_sector),
+            (f"direction {side}", by_direction, cfg.max_units_per_direction),
+        ):
+            if cap is not None and count > cap:
+                return f"{label} would hold {count:g} units, max {cap}"
+        return None
+
     def _first_violation(self, intent: OrderIntent, account: Mapping[str, Any]) -> str | None:
         cfg = self.cfg
         if intent.qty <= 0:
@@ -196,6 +253,13 @@ class LimitState:
         daily = self.daily_pnl_pct()
         if daily is not None and daily <= -cfg.max_daily_loss_pct:
             return f"daily loss {daily:.2f}% breaches -{cfg.max_daily_loss_pct}%"
+        monthly = self.monthly_pnl_pct()
+        if cfg.max_monthly_loss_pct is not None and monthly is not None and monthly <= -cfg.max_monthly_loss_pct:
+            if not self.month_stopped:
+                self.month_stopped = True
+                self._save_state()
+        if cfg.max_monthly_loss_pct is not None and self.month_stopped:
+            return f"monthly loss stop hit in {self.month} (-{cfg.max_monthly_loss_pct}%): no new entries this month"
         dd = self.drawdown_pct()
         if dd is not None and dd <= -cfg.max_drawdown_pct:
             return f"drawdown {dd:.2f}% breaches -{cfg.max_drawdown_pct}%"
@@ -210,6 +274,9 @@ class LimitState:
         slots_used = len(open_symbols) + len(pending_symbols)
         if slots_used >= cfg.max_open_positions:
             return f"max open positions reached ({slots_used}/{cfg.max_open_positions})"
+        unit_reason = self._unit_violation(intent, positions, account)
+        if unit_reason is not None:
+            return unit_reason
 
         prices: Mapping[str, float] = account.get("prices") or {}
         notional = intent_notional(intent, prices.get(intent.symbol))

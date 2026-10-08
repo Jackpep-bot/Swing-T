@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-live",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "swing", "--settings", "config/live.yaml", "dashboard", "--port", "8765"],
+      "port": 8765
+    }
+  ]
+}

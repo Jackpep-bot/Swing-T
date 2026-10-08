@@ -66,7 +66,7 @@ from swing_engine.research.backtest import (
 from swing_engine.research.metrics import profit_factor, summarize
 from swing_engine.research.shadow import REPLAY_SHADOW_TABLE, grade_signals, record_signals, signal_key
 from swing_engine.research.trials import DEFAULT_TRIALS_PATH, log_trial
-from swing_engine.risk.sizing import size_signal_detail, strategy_min_reward_risk
+from swing_engine.risk.sizing import size_signal_detail, sizing_equity, strategy_min_reward_risk
 
 log = structlog.get_logger(__name__)
 
@@ -365,7 +365,8 @@ def _regime_label(state: Any) -> str | None:
     regime = getattr(state, "regime", None)
     if regime is None:
         return None
-    return str(getattr(regime, "value", regime))
+    overlays = getattr(state, "overlays", None) or []  # fired playbook overlays split reports: "choppy+q25_bearish"
+    return "+".join([str(getattr(regime, "value", regime)), *overlays])
 
 
 # ----------------------------------------------------------------------------------------------- per-symbol frames
@@ -653,6 +654,10 @@ def run_replay(
             cands.sort(key=lambda s: (-s.score, s.strategy, s.symbol))
             open_list = [p.to_position() for p in positions.values()]
             busy = set(positions)
+            size_eq = eq
+            if risk_cfg.drawdown_size_mult or risk_cfg.book_vol_target_annual_pct is not None:
+                hist = np.array([row["equity"] for row in curve], dtype=float)
+                size_eq = sizing_equity(eq, risk_cfg, float(hist.max()), hist[1:] / hist[:-1] - 1.0)
             for sig in cands:
                 if len(pending_entries) >= max_new:
                     skipped["daily_order_cap"] += 1
@@ -663,7 +668,7 @@ def run_replay(
                 mult = min(max(allowed[sig.strategy], 0.0), FULL_RISK)
                 scaled = risk_cfg.model_copy(update={"risk_per_trade_pct": risk_cfg.risk_per_trade_pct * mult})
                 rr_floor = strategy_min_reward_risk(settings.strategies, sig.strategy)
-                intent, why = size_signal_detail(sig, eq, scaled, open_list, None, rr_floor)
+                intent, why = size_signal_detail(sig, size_eq, scaled, open_list, None, rr_floor)
                 if intent is None:
                     skipped[_skip_bucket(why)] += 1
                     continue

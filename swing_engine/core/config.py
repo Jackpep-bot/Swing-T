@@ -43,6 +43,16 @@ class RiskConfig(BaseModel):
     vol_target_annual_pct: float | None = None  # if set, size = min(fixed-fractional, vol-targeted)
     kill_switch_file: str = "state/KILL"
     limits_state_file: str = "state/limits.json"  # persisted peak / day-start equity for the drawdown gate
+    # Optional risk tools (docs/strategies/turtle_breakout_systems.md, catalog sizing cards); None = off.
+    turtle_unit_risk_pct: float | None = None  # Turtle unit = equity x pct / (N x point value); extra size cap
+    max_units_per_symbol: int | None = None  # Turtle: 4 per market (1 position = 1 unit unless account["units"])
+    max_units_per_sector: int | None = None  # Turtle: 6 closely correlated (sector stands in for correlation)
+    max_units_per_direction: int | None = None  # Turtle: 12 long or 12 short
+    max_monthly_loss_pct: float | None = None  # Elder 6%: no new entries for the rest of the calendar month
+    drawdown_size_mult: float | None = None  # Turtle 2.0: a 10% drawdown sizes on 20% less equity
+    book_vol_target_annual_pct: float | None = None  # scale gross exposure to this trailing realized book vol
+    book_vol_lookback_days: int = 126  # Barroso-Santa-Clara 6-month window
+    book_vol_max_scale: float = 1.0  # 1.0 = only ever de-risk, never lever up
 
 
 class UniverseConfig(BaseModel):
@@ -155,6 +165,31 @@ def default_playbook_table() -> dict[str, dict[str, float]]:
     }
 
 
+class PlaybookOverlay(BaseModel):
+    """One risk-reducing regime overlay (strategies.playbook OVERLAYS): when it fires, the listed strategies'
+    multipliers are scaled by ``multiplier`` (0 blocks). It can never add risk. ``params`` override the
+    overlay's named threshold constants in strategies.playbook."""
+
+    enabled: bool = False
+    multiplier: float = Field(default=0.5, ge=0.0, le=1.0)
+    strategies: list[str] = Field(default_factory=list)  # empty = every strategy
+    params: dict[str, float] = Field(default_factory=dict)
+
+
+def default_playbook_overlays() -> dict[str, PlaybookOverlay]:
+    """The settings.yaml ``playbook.overlays`` block: every catalog overlay listed, none enabled. Thresholds are the
+    strategies.playbook OVERLAYS constants (doc 06 C / D, docs/methods/07 M rule)."""
+    return {
+        "market_school_pressure": PlaybookOverlay(multiplier=0.5),
+        "market_school_correction": PlaybookOverlay(multiplier=0.0),
+        "hill_bearish": PlaybookOverlay(
+            multiplier=0.5, params={"ad_pct_below": -30.0, "hl_pct_below": -10.0, "min_votes": 2}
+        ),
+        "mcclellan_negative": PlaybookOverlay(multiplier=0.75, params={"osc_below": 0.0}),
+        "q25_bearish": PlaybookOverlay(multiplier=0.5, params={"ratio_below": 1.0}),
+    }
+
+
 class PlaybookConfig(BaseModel):
     """Market-regime router (strategies.playbook): breadth / trend / volatility thresholds and the table.
 
@@ -185,6 +220,7 @@ class PlaybookConfig(BaseModel):
     vol_lookback: int = Field(default=252, ge=2)
     near_high_pct: float = Field(default=5.0, ge=0.0)  # SPY within this % of its 52w high: bifurcation note
     regimes: dict[str, dict[str, float]] = Field(default_factory=default_playbook_table)
+    overlays: dict[str, PlaybookOverlay] = Field(default_factory=default_playbook_overlays)  # all off by default
 
     @field_validator("regimes")
     @classmethod

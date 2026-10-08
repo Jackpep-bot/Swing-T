@@ -823,6 +823,10 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
     size_detail = _try_load("risk.sizing.size_signal_detail")
     size_signal = None if size_detail is not None else _load("risk.sizing.size_signal")
     floor_for = _try_load("risk.sizing.strategy_min_reward_risk")
+    size_eq = equity
+    if ctx.settings.risk.drawdown_size_mult:  # Turtle drawdown rule: size on equity shrunk vs the persisted peak
+        peak = _load("risk.limits.LimitState")(ctx.settings.risk, state_path=ctx.settings.risk.limits_state_file)
+        size_eq = _load("risk.sizing.drawdown_scaled_equity")(equity, peak.peak_equity, ctx.settings.risk.drawdown_size_mult)
     intents: list[OrderIntent] = []
     skipped: dict[str, str] = {}
     multipliers = ctx.risk_multipliers  # None = unrouted: every strategy at full risk_per_trade_pct
@@ -834,16 +838,16 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
         if size_detail is not None:
             floor = floor_for(ctx.settings.strategies, s.strategy) if floor_for is not None else None
             extra = {"min_reward_risk": floor} if floor is not None else {}
-            intent, reason = size_detail(s, equity, risk_cfg, positions, **extra)
+            intent, reason = size_detail(s, size_eq, risk_cfg, positions, **extra)
         else:
-            intent, reason = size_signal(s, equity, risk_cfg, positions), "rejected by risk.sizing"
+            intent, reason = size_signal(s, size_eq, risk_cfg, positions), "rejected by risk.sizing"
         if intent is not None:
             intents.append(intent)
         else:
             skipped[f"{s.strategy}:{s.symbol}"] = str(reason)
     ctx.intents = intents
     ctx.save(INTENTS_KIND, intents)
-    data = {"equity": float(equity), "intents": len(intents), "skipped": skipped, "open_positions": len(positions),
+    data = {"equity": float(equity), "sizing_equity": float(size_eq), "intents": len(intents), "skipped": skipped, "open_positions": len(positions),
             "risk_multipliers": multipliers}
     scaled = {n: m for n, m in (multipliers or {}).items() if m < MULTIPLIER_MAX}
     note = f"; risk scaled {scaled}" if scaled else ""
@@ -920,6 +924,8 @@ def _step_shadow(ctx: _Context) -> tuple[str, dict[str, Any]]:
         raise Skip(why or why_grade)
     taken = {f"{i.strategy}{TAKEN_KEY_SEP}{i.symbol}" for i in ctx.intents}
     regime = regime_name(ctx.market_state) if ctx.market_state is not None else None
+    if regime is not None:  # fired playbook overlays split the shadow ledger like replay's labels
+        regime = "+".join([regime, *(getattr(ctx.market_state, "overlays", None) or [])])
     day = ctx.signal_day or _latest_session(ctx.panel, ctx.as_of) or ctx.as_of
     signals = [s if s.as_of == day else s.model_copy(update={"as_of": day}) for s in [*ctx.signals, *ctx.shadow_signals]]
     recorded = int(record_signals(ctx.store, signals, taken, day, regime) or 0) if signals else 0

@@ -581,7 +581,7 @@ def test_backtest_logs_trial_and_prints_deflated_sharpe(store_file: Path, monkey
     assert seen["params"] == {"lookback": 7}
     assert seen["costs"] == 20
     assert seen["logged"] == ("fake_strat", {"lookback": 7}, 1.2)
-    assert seen["dsr_args"][:2] == (1.2, 7) and seen["dsr_args"][2] > 0
+    assert seen["dsr_args"][:2] == (1.2, 9) and seen["dsr_args"][2] > 0  # deflated by all trials
     assert "deflated sharpe" in result.output and "0.4321" in result.output
     assert "trials logged for this strategy" in result.output and "7" in result.output
     assert "9" in result.output  # total trials
