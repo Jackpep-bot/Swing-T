@@ -41,6 +41,10 @@ class ConnorsPctB(PanelStrategy):
     features_required = ["atr_14"]
     extra_features = ["bb_pctb_20"]
 
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.extra_features = [str(self.params["pctb_col"])]  # the band trial's column reaches the exit panel
+
     def required_features(self) -> list[str]:
         return [*self.features_required, str(self.params["pctb_col"]), str(self.params["trend_ma"])]
 

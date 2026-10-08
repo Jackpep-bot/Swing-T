@@ -60,6 +60,8 @@ class RichSimpleTrendChannel(PanelStrategy):
             return []
         p = self.params
         rows = c1.rows(self, panel, as_of)
+        if rows.empty:  # as_of before the first bar: rows_as_of returns the slice without prior_* columns
+            return []
         keep = ((rows["close"] > rows[TOP]) & (rows["prior_close"] <= rows[f"prev_{TOP}"])
                 & (rows["close"] > rows[str(p["trend_ma"])]))
         if REGIME_MARKET_TREND in rows.columns:

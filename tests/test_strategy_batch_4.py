@@ -350,8 +350,8 @@ def test_intermarket_divergence_katsanos():
     silent(s, p, day(p), "SPY")
     p2 = panel_for(s, *_pair(lag=False))
     silent(s, p2, day(p2))
-    row = pd.Series({"close": 10.0, "min_15_of_close": 10.0})
-    assert s.should_exit(row, 1)
+    row = pd.Series({"close": 10.0, "min_15_of_close": 10.0, "corr_market_20": -0.5})  # 15-day low, pair decoupled
+    assert s.should_exit(row, 1) and not s.should_exit(with_(row, corr_market_20=0.5), 1)
     cross = pd.Series({"close": 10.0, "macd": 0.1, "macd_signal": 0.2, "prev_macd": 0.3, "prev_macd_signal": 0.2,
                        "stoch_k_14": 90.0})
     assert s.should_exit(cross, 1) and not s.should_exit(with_(cross, stoch_k_14=50.0), 1)
@@ -579,7 +579,7 @@ def test_pe_valuation_reversion():
     c = [100.0] * 30 + [92.0, 85.0]
     p = panel_for(s, closes("AAA", c))
     sig = fire(s, p, day(p))
-    assert sig.target == pytest.approx(p["sma_12"].iloc[-1])
+    assert sig.target is None
     p2 = panel_for(s, closes("AAA", [100.0] * 30 + [97.0, 95.0]))
     silent(s, p2, day(p2))
     assert s.should_exit(pd.Series({"close": 100.0, "sma_12": 99.0}), 1)

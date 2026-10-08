@@ -78,7 +78,8 @@ Pair choice -> fixed sector ETF map; require 120-day correlation of daily return
 - Buy at as-of t: `max(bb_div[t-2..t]) > 20` and `bb_div[t] < bb_div[t-1]`; `close_p[t] > close_p[t-2]` and
   `sma(close_s,3)[t] > sma(close_s,3)[t-2]` (2-day up approximation); `corr_20[t] > -0.4`.
 - Entry next open. Stop `entry - 2*atr_14` (engine choice; original has no price stop). Target: none;
-  `min_reward_risk` 0. Rule exits via `should_exit`: `min(bb_div[t-2..t]) < -20`; close = 15-day low; or
+  `min_reward_risk` 0. Rule exits via `should_exit`: `min(bb_div[t-2..t]) < -20`; close = 15-day low while
+  `corr_20 < -0.4` (thinkorswim's clause; engine column `corr_market_20`); or
   MACD crosses below signal while stochastic > 85 (needs stochastic). `max_hold_days` 15.
 - Reuses `bb_upper_20`, `bb_lower_20`, `macd`, `macd_signal`, `atr_14`. Missing: symbol -> sector ETF map, ETF bars
   in the panel per row, rolling cross-symbol correlation, stochastic, earnings-date blackout.

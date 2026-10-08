@@ -106,7 +106,8 @@ class WyckoffSpringAccumulation(PanelStrategy):
         p, lo, cl, vol, avg = self.params, w["low"], w["close"], w["volume"], w["avg_vol_20d"]
         for o in range(t - 1, max(t - 1 - int(p["event_window"]), 0), -1):
             b = self.box(w, o)
-            if b is None or not (cl[o] > b.high and avg[o] > 0 and vol[o] / avg[o] >= float(p["sos_rvol_min"])):
+            # rvol_day: volume over the prior bar's 20-day average (box() is None unless o >= tr_bars + decline_bars, so o >= 1)
+            if b is None or not (cl[o] > b.high and avg[o - 1] > 0 and vol[o] / avg[o - 1] >= float(p["sos_rvol_min"])):
                 continue
             ok = [k for k in range(o + 1, t + 1)
                   if b.high * float(p["lps_min_frac"]) <= lo[k] <= b.high * float(p["lps_max_frac"])

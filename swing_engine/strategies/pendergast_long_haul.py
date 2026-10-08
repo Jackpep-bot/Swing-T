@@ -18,7 +18,16 @@ from swing_engine.core.models import Signal
 from swing_engine.core.registry import register
 
 from . import _catalog1 as c1
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, SYMBOL, TREND_DOWN, PanelStrategy, finite
+from ._base import (
+    P_MIN_MARKET_TREND,
+    P_MIN_RR,
+    P_MIN_TREND,
+    SYMBOL,
+    TREND_DOWN,
+    TREND_UP,
+    PanelStrategy,
+    finite,
+)
 
 NAME = "pendergast_long_haul"
 LOW3 = "low_3"  # features.extra: lowest low of the last 3 bars including this one
@@ -37,13 +46,17 @@ class PendergastLongHaul(PanelStrategy):
         "slow_ma": "sma_50",  # card: close > sma_50
         "fallback_stop_atr": 1.5,  # card: else entry - 1.5 x atr_14
         "max_hold_days": 40,  # card: max_hold_days 40
-        P_MIN_TREND: TREND_DOWN,
+        P_MIN_TREND: TREND_UP,  # card: stock selection -> trend_state = 1
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target
     }
     features_required = ["atr_14", "rsi_14", "trend_state"]
     extra_features = [LOW3]
     engine_trail = False  # the 3-bar-low trail is the strategy's own (card)
+
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.extra_features = [LOW3, str(self.params["fast_ma"]), str(self.params["slow_ma"])]  # panel builders read the instance's MAs
 
     def required_features(self) -> list[str]:
         return [*self.features_required, str(self.params["fast_ma"]), str(self.params["slow_ma"]), LOW3]

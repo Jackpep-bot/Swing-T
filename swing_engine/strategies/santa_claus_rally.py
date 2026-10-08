@@ -36,6 +36,7 @@ class SantaClausRally(PanelStrategy):
         P_MIN_RR: 0.0,  # time exit, no target
     }
     features_required = ["atr_14"]
+    engine_trail = False  # calendar hold; the card exits by time plus a catastrophic stop
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if not self.market_ok(regime):

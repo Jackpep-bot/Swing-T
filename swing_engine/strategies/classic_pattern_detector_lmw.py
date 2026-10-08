@@ -2,7 +2,8 @@
 docs/strategies/classic_pattern_detector_lmw.md.
 
 Detector (LMW 2000): the `window` closes before today are smoothed with a Nadaraya-Watson Gaussian kernel whose
-bandwidth is `bandwidth_mult` x the leave-one-out cross-validated optimum over `bandwidth_grid`; local extrema are
+bandwidth is `bandwidth_mult` x the leave-one-out cross-validated optimum over `bandwidth_grid`, floored at
+`min_bandwidth` (on noisy closes CV picks 1 bar, and 0.3 bars just echoes every close reversal); local extrema are
 sign changes of the smoothed slope (the last `lag` bars cannot hold one), each mapped to the actual extreme close
 within one bar. On the last five alternating extrema E1..E5 (E1 a minimum) the bullish patterns are: inverse head and
 shoulders (E3 below E1 and E5, E1/E5 and E2/E4 within 1.5% of their means), rectangle bottom (tops within 0.75%,
@@ -35,8 +36,8 @@ class Pattern(NamedTuple):
     swing_low: float
 
 
-def kernel_smooth(x: np.ndarray, grid: tuple[float, ...], mult: float) -> np.ndarray:
-    """Gaussian Nadaraya-Watson fit of ``x`` on its bar index, bandwidth = mult x the LOO-CV best of ``grid``."""
+def kernel_smooth(x: np.ndarray, grid: tuple[float, ...], mult: float, floor: float = 0.0) -> np.ndarray:
+    """Gaussian Nadaraya-Watson fit of ``x`` on its bar index, bandwidth = max(mult x the LOO-CV best of ``grid``, floor)."""
     idx = np.arange(len(x), dtype=float)
     dist = (idx[:, None] - idx[None, :]) ** 2
 
@@ -48,7 +49,7 @@ def kernel_smooth(x: np.ndarray, grid: tuple[float, ...], mult: float) -> np.nda
         k = weights(h)
         np.fill_diagonal(k, 0.0)
         errs.append(np.mean((x - k @ x / k.sum(axis=1)) ** 2))
-    k = weights(mult * grid[int(np.argmin(errs))])
+    k = weights(max(mult * grid[int(np.argmin(errs))], floor))
     return k @ x / k.sum(axis=1)
 
 
@@ -80,6 +81,7 @@ class ClassicPatternLMW(PanelStrategy):
         "lag": 3,  # card: the last extremum must be confirmed
         "bandwidth_mult": 0.3,  # card: 0.3 x the cross-validated optimum (LMW)
         "bandwidth_grid": (1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0, 12.0),  # engine choice: CV search grid (bars)
+        "min_bandwidth": 1.5,  # engine choice: floor on the final kernel bandwidth (bars); 0.3 x CV on noisy closes collapses to 0.3 bars
         "tol_hs": 0.015,  # card: within 1.5% (H&S shoulders / troughs, double bottom)
         "tol_rect": 0.0075,  # card: rectangle tops / bottoms within 0.75%
         "dbot_min_gap": 22,  # card: double bottom extrema at least 22 bars apart
@@ -97,7 +99,8 @@ class ClassicPatternLMW(PanelStrategy):
 
     def detect(self, x: np.ndarray) -> Pattern | None:
         p = self.params
-        ext = extrema(x, kernel_smooth(x, tuple(p["bandwidth_grid"]), float(p["bandwidth_mult"])), int(p["lag"]))
+        smooth = kernel_smooth(x, tuple(p["bandwidth_grid"]), float(p["bandwidth_mult"]), float(p["min_bandwidth"]))
+        ext = extrema(x, smooth, int(p["lag"]))
         if len(ext) < 5 or ext[-5][2]:
             return None
         (i1, e1, _), (_, e2, _), (i3, e3, _), (_, e4, _), (i5, e5, _) = ext[-5:]

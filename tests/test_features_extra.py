@@ -122,6 +122,16 @@ def test_mansfield_rs_from_market_frame_and_panel_spy():
     assert no_market["mansfield_rs"].isna().all()
 
 
+def test_corr_market_matches_corrcoef_of_closes():
+    rng = np.random.default_rng(3)
+    c, m = 50 + rng.normal(0, 1, 30).cumsum(), 400 + rng.normal(0, 3, 30).cumsum()
+    stock = _bars(c, c, c)
+    spy = stock.assign(symbol="SPY", open=m, high=m, low=m, close=m)
+    out = ex.ensure_extra(stock, ["corr_market_20"], market=spy)["corr_market_20"]
+    assert out.iloc[:19].isna().all()
+    assert out.iloc[-1] == pytest.approx(np.corrcoef(c[-20:], m[-20:])[0, 1])
+
+
 def test_calendar_flags_from_nyse_calendar():
     days = pd.bdate_range("2024-01-02", "2025-01-10", tz=NY)
     bars = _bars([1.0] * len(days), [1.0] * len(days), [1.0] * len(days))
@@ -140,6 +150,16 @@ def test_calendar_flags_from_nyse_calendar():
     assert get("santa_window", "2024-12-24") == 1 and get("santa_window", "2024-12-23") == 0
     assert get("santa_window", "2025-01-03") == 1 and get("santa_window", "2025-01-06") == 0
     assert get("day_of_week", "2024-07-05") == 4
+
+
+def test_pre_holiday_ignores_adhoc_closures():
+    # Hurricane Sandy (closed 2012-10-29/30, announced 10-28) was not known on 10-26; July 4 is a scheduled holiday
+    days = pd.DatetimeIndex([*pd.bdate_range("2012-10-22", "2012-11-02", tz=NY),
+                             *pd.bdate_range("2024-07-01", "2024-07-10", tz=NY)])
+    bars = _bars([1.0] * len(days), [1.0] * len(days), [1.0] * len(days)).assign(ts=days)
+    out = ex.ensure_extra(bars, ["pre_holiday_1"]).set_index(days.date)["pre_holiday_1"]
+    assert out[pd.Timestamp("2012-10-26").date()] == 0
+    assert out[pd.Timestamp("2024-07-03").date()] == 1
 
 
 def test_gap_momentum_hand_checked():

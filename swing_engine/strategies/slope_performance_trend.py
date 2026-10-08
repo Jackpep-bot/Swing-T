@@ -3,9 +3,10 @@
 State machine on two regression slopes over `lookback` sessions (12 months = 252 by default; the card's swing variants
 are 63 and 20): the slope of price (`linreg_slope_252`) and the slope of the price relative to SPY
 (`linreg_slope_252_of_rs_line`). Buy on the first session both are positive when the last unmixed state before it was
-both negative; mixed readings keep the prior state (no signal, no exit). Exit when both turn negative. Daily
-evaluation of the card's completed-monthly-bar rule (approximation; the slopes are point-in-time). No stop published:
-engine catastrophic stop 2.5 x atr_14 (card). Needs the market proxy (SPY rows or a market frame) for `rs_line`.
+both negative, or when there is none (flat start); mixed readings keep the prior state (no signal, no exit). Exit when
+both turn negative. Daily evaluation of the card's completed-monthly-bar rule (approximation; the slopes are
+point-in-time). No stop published: engine catastrophic stop 2.5 x atr_14 (card). Needs the market proxy (SPY rows or a
+market frame) for `rs_line`.
 """
 from __future__ import annotations
 
@@ -43,8 +44,9 @@ class SlopePerformanceTrend(PanelStrategy):
         n = int(self.params["lookback"])
         return f"linreg_slope_{n}", f"linreg_slope_{n}_of_rs_line"
 
-    def required_features(self) -> list[str]:
-        return [*self.features_required, *self._cols()]
+    def __init__(self, params: dict[str, Any] | None = None) -> None:
+        super().__init__(params)
+        self.extra_features = list(self._cols())  # param-dependent: replay/CLI/nightly attach these via required_extras
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
         a, b = (row.get(c) for c in self._cols())
@@ -64,8 +66,8 @@ class SlopePerformanceTrend(PanelStrategy):
             w = view.window(str(row[SYMBOL]), [pc, rc])
             ps, rs = w[pc][:-1], w[rc][:-1]
             unmixed = np.flatnonzero(((ps > 0) & (rs > 0)) | ((ps < 0) & (rs < 0)))
-            if not len(unmixed) or ps[unmixed[-1]] > 0:
-                continue  # already long (or no prior both-negative state)
+            if len(unmixed) and ps[unmixed[-1]] > 0:
+                continue  # already long (last unmixed state both-positive); no prior unmixed state = flat start, buy
             close = float(row["close"])
             sig = self.build_signal(row, as_of, entry=close, stop=close - mult * float(atr), target=None, score=0.0,
                                     features={pc: a, rc: b, "max_hold_days": self.params["max_hold_days"]},

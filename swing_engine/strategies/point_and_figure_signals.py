@@ -51,6 +51,8 @@ class PointAndFigure(PanelStrategy):
         if not self.market_ok(regime):
             return []
         rows = self.rows_as_of(panel, as_of, required=self.required_features())
+        if rows.empty:  # rows_as_of returns the bare empty frame, without the prior_* columns
+            return []
         buy = (rows[DIR] == X_COL) & (rows[TOP] > rows[PX1])
         already = (rows[f"prior_{DIR}"] == X_COL) & (rows[f"prior_{TOP}"] > rows[f"prior_{PX1}"])
         if self.params["triple"]:

@@ -47,6 +47,8 @@ class ConnorsTPS(PanelStrategy):
             return []
         spec = RollingSpec("rsi_2", "max", int(self.params["rsi_days"]))
         rows = self.rows_as_of(panel, as_of, rolling=[spec])
+        if rows.empty:  # rows_as_of's early returns omit the rolling column
+            return []
         keep = (rows["close"] > rows["sma_200"]) & (rows[spec.out] < float(self.params["rsi_entry"]))
         out: list[Signal] = []
         for _, row in rows.loc[keep.fillna(False)].iterrows():

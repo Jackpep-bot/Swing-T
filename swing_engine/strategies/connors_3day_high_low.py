@@ -17,6 +17,7 @@ import pandas as pd
 
 from swing_engine.core.models import Signal
 from swing_engine.core.registry import register
+from swing_engine.features.extra import is_extra
 from swing_engine.features.patterns2 import as_of_view
 
 from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, PanelStrategy, finite
@@ -31,7 +32,7 @@ class Connors3DayHighLow(PanelStrategy):
     default_params: dict[str, Any] = {
         "down_days": 3,  # card: three consecutive lower highs and lower lows (keep 3, do not sweep)
         "trend_ma": "sma_200",  # card: close above the 200-day SMA
-        "exit_ma": "sma_5",  # card: exit on the first close above the 5-day SMA (also the reference target)
+        "exit_ma": "sma_5",  # card: exit on the first close above the 5-day SMA
         "stop_atr_mult": 2.0,  # card: catastrophic stop (not in the source)
         "max_hold_days": 6,  # card implementation spec
         "symbols": None,  # card: index / sector ETFs only (config list); None = all
@@ -40,6 +41,11 @@ class Connors3DayHighLow(PanelStrategy):
     }
     features_required = ["atr_14", "sma_200"]
     extra_features = ["sma_5"]
+
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        cols = (str(self.params["trend_ma"]), str(self.params["exit_ma"]))
+        self.extra_features = [c for c in dict.fromkeys(cols) if is_extra(c)]
 
     def required_features(self) -> list[str]:
         cols = [*super().required_features(), str(self.params["trend_ma"]), str(self.params["exit_ma"])]
@@ -80,7 +86,7 @@ class Connors3DayHighLow(PanelStrategy):
                 as_of,
                 entry=close,
                 stop=close - float(p["stop_atr_mult"]) * float(atr),
-                target=float(exit_ma),
+                target=None,
                 score=(float(exit_ma) - close) / float(atr) if float(atr) > 0 else 0.0,
                 features={trend_col: trend_ma, exit_col: exit_ma, "atr_14": atr, "max_hold_days": p["max_hold_days"]},
                 notes=f"{n} lower highs and lows above {trend_col}, below {exit_col}; exit close > {exit_col}",

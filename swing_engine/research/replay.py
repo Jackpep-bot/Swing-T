@@ -20,8 +20,8 @@ their risk, and the position manager's exit semantics. Timeline for each NYSE se
    ``max_open_positions`` and ``execution.max_new_orders_per_day``.
 
 The feature panel is built once from store bars (features are causal, ``docs/feature-contract.md``) and each day
-sees only ``panel[ts <= D]``. Like the nightly, strategies, ``rs_63d_rank`` and breadth see only the point-in-time
-universe: the nightly's screen (``data.universe.build_universe`` on the store's ``symbols`` table, else
+sees only ``panel[ts <= D]``. Like the nightly, strategies, ``rs_63d_rank``, the strategies' ``<col>_rank`` extras
+and breadth see only the point-in-time universe: the nightly's screen (``data.universe.build_universe`` on the store's ``symbols`` table, else
 ``data.universe.liquidity_screen``; as-traded through the ``splits`` table) on bars dated on or before the session,
 refreshed every ``UNIVERSE_REFRESH_SESSIONS`` sessions, with the index ETFs kept out of the breadth population. Costs come from ``research.backtest.CostModel``; each run is logged as a trial
 (``research.trials``, feeds the deflated Sharpe of ``docs/gates.md``). Deterministic: same store, same settings,
@@ -204,10 +204,13 @@ def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
 
 def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:
     """Attach the strategies' ``extra_features`` (``features.extra``) once for the whole replay; the panel's SPY
-    rows serve as the market proxy."""
-    from swing_engine.features.extra import ensure_extra, required_extras
+    rows serve as the market proxy. The base column of each ``<col>_rank`` extra is attached too, so
+    ``_rerank_extras`` can re-rank it among the screened universe."""
+    from swing_engine.features.extra import ensure_extra, rank_base, required_extras
 
-    return ensure_extra(panel, required_extras(strategies))
+    names = required_extras(strategies)
+    bases = [b for b in map(rank_base, names) if b is not None]
+    return ensure_extra(panel, [*bases, *names])
 
 
 def _sessions_only(panel: pd.DataFrame, first: date, last: date) -> pd.DataFrame:
@@ -354,9 +357,28 @@ class _UniverseSchedule:
         return float(np.mean([len(s) for s in self.sets])) if self.sets else 0.0
 
 
+def _universe_rank(values: pd.Series, ts: pd.Series, member: pd.Series) -> pd.Series:
+    """Same-session percentile (``rank(pct=True)``) of ``values`` among the universe's rows. A row outside the
+    universe (never scanned, but a held name that left the screen still needs its exit rank) is placed among that
+    session's members as if it were added, like the nightly ranks held names with its screened panel."""
+    v = values.astype(float)
+    inside = v.where(member)
+    ranked = inside.groupby(ts, sort=False).rank(pct=True)
+    outside = ~member & v.notna()
+    if outside.any():
+        has = inside.notna()
+        pool = {k: np.sort(g.to_numpy()) for k, g in inside[has].groupby(ts[has], sort=False)}
+        empty = np.array([], dtype=float)
+        for k, idx in v[outside].groupby(ts[outside], sort=False).groups.items():
+            m, x = pool.get(k, empty), v[idx].to_numpy()
+            lo, hi = np.searchsorted(m, x, "left"), np.searchsorted(m, x, "right")
+            ranked.loc[idx] = (lo + (hi - lo + 2) / 2) / (len(m) + 1)  # average rank among ties, itself included
+    return ranked
+
+
 def _rerank_rs(frame: pd.DataFrame, member: pd.Series) -> None:
     """``rs_63d_rank`` among the universe's rows of each session (in place), as the nightly ranks its screened
-    panel; rows outside the universe get NaN (never scanned as the current row)."""
+    panel (``_universe_rank``)."""
     if RS_RANK_COLUMN not in frame.columns:
         return
     ret_col = f"ret_{RS_RETURN_BARS}d"
@@ -365,8 +387,18 @@ def _rerank_rs(frame: pd.DataFrame, member: pd.Series) -> None:
     else:
         close = frame["close"].astype(float)
         ret = close / close.groupby(frame["symbol"], sort=False).shift(RS_RETURN_BARS) - 1.0
-    ranked = ret.where(member).groupby(frame["ts"], sort=False).rank(pct=True)
-    frame[RS_RANK_COLUMN] = ranked.where(member)
+    frame[RS_RANK_COLUMN] = _universe_rank(ret, frame["ts"], member)
+
+
+def _rerank_extras(frame: pd.DataFrame, member: pd.Series, strategies: Any) -> None:
+    """The strategies' ``<col>_rank`` extras re-ranked among the universe's rows (in place); ``ensure_extra``
+    ranked them over every symbol in the store."""
+    from swing_engine.features.extra import rank_base, required_extras
+
+    for name in required_extras(strategies):
+        base = rank_base(name)
+        if base is not None and name in frame.columns and base in frame.columns:
+            frame[name] = _universe_rank(frame[base], frame["ts"], member)
 
 
 def _regime_label(state: Any) -> str | None:
@@ -531,6 +563,7 @@ def run_replay(
     if screen_universe:
         universe = _UniverseSchedule(settings, store, view, list(range(i0, i1 + 1, UNIVERSE_REFRESH_SESSIONS)))
         _rerank_rs(view.frame, universe.row_member)
+        _rerank_extras(view.frame, universe.row_member, strat_map.values())
         breadth_input = view.frame.loc[universe.row_member]
     router = _load_router()
     breadth_fn = _load_breadth() if router is not None else None

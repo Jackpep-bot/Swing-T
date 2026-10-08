@@ -6,7 +6,8 @@ positive when the stock lags). Buy when the 3-day max divergence > 20 but the di
 and the secondary's 3-day average are both up over 2 days, and the 20-day price correlation > -0.4; the card's
 engine addition requires a 120-day correlation of daily returns >= 0.5 for the pair to be eligible. Entry next open,
 stop 2 x atr_14 (engine choice; none in the original). Exits: MACD crosses below its signal while stochastic(14) >
-85, a 15-day closing low, or 15 sessions.
+85, a 15-day closing low while the 20-day price correlation (`corr_market_20`) < -0.4 (thinkorswim's rule), or 15
+sessions.
 
 Approximation: the engine has no symbol -> sector ETF map, so the secondary is the market proxy (`market_close`,
 SPY). The divergence exit (3-day min < -20 with ROC < -3) needs the secondary's %b in the held row and is not
@@ -63,14 +64,20 @@ class IntermarketDivergenceKatsanos(PanelStrategy):
         P_MIN_RR: 0.0,  # card: no target
     }
     features_required = ["atr_14", "macd", "macd_signal"]
-    extra_features = [MKT, STOCH, LOW_15, "prev_macd", "prev_macd_signal"]
+    extra_features = [MKT, STOCH, LOW_15, "prev_macd", "prev_macd_signal", "corr_market_20"]
+
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.corr_col = f"corr_market_{int(self.params['corr_len'])}"
+        self.extra_features = [MKT, STOCH, LOW_15, "prev_macd", "prev_macd_signal", self.corr_col]
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
         if bars_held >= int(self.params["max_hold_days"]):
             return True
-        low = row.get(LOW_15)
-        if finite(low) and float(row["close"]) <= float(low):
-            return True
+        low, corr = row.get(LOW_15), row.get(self.corr_col)
+        if (finite(low) and finite(corr) and float(row["close"]) <= float(low)
+                and float(corr) < float(self.params["corr_min"])):
+            return True  # thinkorswim: 15-day closing low while the pair has decoupled
         vals = [row.get(c) for c in ("macd", "macd_signal", "prev_macd", "prev_macd_signal", STOCH)]
         if not all(finite(v) for v in vals):
             return False

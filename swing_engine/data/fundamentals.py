@@ -136,7 +136,7 @@ EARNINGS_WINDOW_SESSIONS = 2  # announcement session and the next one
 
 FEATURE_COLUMNS: list[str] = [
     "sue", "rev_surprise", "gross_prof", "shares_outstanding", "turnover", "days_since_earnings",
-    "is_earnings_window",
+    "is_earnings_window", "days_since_filing",
 ]
 
 
@@ -358,6 +358,22 @@ def _session_ordinals(start: date, end: date) -> np.ndarray:
     return np.array(trading_days(start, end), dtype="datetime64[D]")
 
 
+def _sessions_since(ts: pd.Series, event_ts: pd.Series) -> pd.Series:
+    """NYSE sessions from each row's `event_ts` session to its `ts` (0 on the event session); NaN without one."""
+    out = pd.Series(np.nan, index=ts.index, dtype="float64")
+    has = event_ts.notna()
+    if has.any():
+        def days(s: pd.Series) -> np.ndarray:
+            return s.dt.tz_convert(TZ).dt.tz_localize(None).values.astype("datetime64[D]")
+
+        ts_days, ev_days = days(ts[has]), days(event_ts[has])
+        sessions = _session_ordinals(min(ev_days.min(), ts_days.min()).astype(date),
+                                     max(ts_days.max(), ev_days.max()).astype(date))
+        ts_ord = np.searchsorted(sessions, ts_days, side="right") - 1
+        out[has] = (ts_ord - np.searchsorted(sessions, ev_days, side="left")).astype("float64")
+    return out
+
+
 def earnings_calendar_features(earnings: pd.DataFrame, index: pd.DataFrame) -> pd.DataFrame:
     """Per (symbol, ts) of `index`: `days_since_earnings` (sessions since the latest announcement session on or
     before ts; 0 on it) and `is_earnings_window` (announcement session or the next one). NaN/False before the
@@ -373,19 +389,9 @@ def earnings_calendar_features(earnings: pd.DataFrame, index: pd.DataFrame) -> p
     left = out.reset_index(drop=True).reset_index(names="_row").sort_values("ts")
     merged = pd.merge_asof(left, ev[["symbol", "ann_ts"]], left_on="ts", right_on="ann_ts", by="symbol")
     merged = merged.sort_values("_row").reset_index(drop=True)
-    has = merged["ann_ts"].notna()
-    if has.any():
-        ts_days = merged["ts"].dt.tz_convert(TZ).dt.tz_localize(None).values.astype("datetime64[D]")
-        ann_days = merged.loc[has, "ann_ts"].dt.tz_convert(TZ).dt.tz_localize(None).values.astype("datetime64[D]")
-        lo = min(ann_days.min(), ts_days.min()).astype(date)
-        hi = max(ts_days.max(), ann_days.max()).astype(date)
-        sessions = _session_ordinals(lo, hi)
-        ts_ord = np.searchsorted(sessions, ts_days[has.values], side="right") - 1
-        ann_ord = np.searchsorted(sessions, ann_days, side="left")
-        days = (ts_ord - ann_ord).astype("float64")
-        merged.loc[has, "days_since_earnings"] = days
-        merged.loc[has, "is_earnings_window"] = (days >= 0) & (days < EARNINGS_WINDOW_SESSIONS)
-    merged["is_earnings_window"] = merged["is_earnings_window"].astype(bool)
+    days = _sessions_since(merged["ts"], merged["ann_ts"])
+    merged["days_since_earnings"] = days
+    merged["is_earnings_window"] = ((days >= 0) & (days < EARNINGS_WINDOW_SESSIONS)).astype(bool)
     return merged[["symbol", "ts", "days_since_earnings", "is_earnings_window"]]
 
 
@@ -416,8 +422,10 @@ def fundamental_events(fund: pd.DataFrame, symbols: Iterable[str] | None = None)
 
 def fundamental_features(fund: pd.DataFrame, earnings: pd.DataFrame, index: pd.DataFrame) -> pd.DataFrame:
     """Panel-ready frame keyed (symbol, ts) like `index` (which needs symbol, ts and, for turnover, volume):
-    FEATURE_COLUMNS. Fundamentals become visible the session after their filed date; earnings-calendar columns
-    follow `earnings_calendar_features`."""
+    FEATURE_COLUMNS. Fundamentals become visible the session after their filed date; `days_since_filing` counts
+    sessions from that first usable session (0 on it), so a gate on it keeps a stale quarter's `sue` out while
+    `days_since_earnings` (8-K clock) already shows the new release; earnings-calendar columns follow
+    `earnings_calendar_features`."""
     base = index[["symbol", "ts"]].reset_index(drop=True).copy()
     if base.empty:
         return base.assign(**{c: pd.Series(dtype="float64") for c in FEATURE_COLUMNS})
@@ -427,7 +435,7 @@ def fundamental_features(fund: pd.DataFrame, earnings: pd.DataFrame, index: pd.D
     value_cols = ["sue", "rev_surprise", "gross_prof", "shares_outstanding"]
     left = base.reset_index(names="_row").sort_values("ts")
     if ev.empty:
-        merged = left.assign(**{c: np.nan for c in value_cols})
+        merged = left.assign(avail_ts=pd.NaT, **{c: np.nan for c in value_cols})
     else:
         right = ev.assign(avail_ts=pd.to_datetime(ev["avail_ts"]).dt.as_unit("us")).sort_values("avail_ts")
         merged = pd.merge_asof(left, right[["symbol", "avail_ts", *value_cols]], left_on="ts", right_on="avail_ts", by="symbol")
@@ -437,6 +445,7 @@ def fundamental_features(fund: pd.DataFrame, earnings: pd.DataFrame, index: pd.D
     cal = earnings_calendar_features(earnings, base)
     merged["days_since_earnings"] = cal["days_since_earnings"].values
     merged["is_earnings_window"] = cal["is_earnings_window"].values
+    merged["days_since_filing"] = _sessions_since(merged["ts"], merged["avail_ts"]).values
     return merged[["symbol", "ts", *FEATURE_COLUMNS]]
 
 

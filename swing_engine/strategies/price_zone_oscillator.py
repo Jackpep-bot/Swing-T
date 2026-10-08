@@ -4,8 +4,10 @@ PZO(14) = 100 x EMA(signed close) / EMA(close) (features.extra `pzo_14`); ADX(14
 EMA(60). Long entries: uptrend (ADX > 18, close > EMA60): PZO crosses above -40, or crosses above +15 for the first
 time since it was last below 0 ("after crossing zero upward"); non-trend (ADX <= 18): PZO crosses above -40 or +15.
 ADX > 18 with close < EMA60 is a downtrend: no long. Exit (`should_exit`, row-based): PZO was above +60 and turns
-down, or close < EMA60 with PZO < 0. The non-trend LX path rules ("after dropping through +40 ...", "fails to reach
-+40 and falls below -5") need the path since entry and are folded into those two tests. Stop 2 x atr_14 (card).
+down (both modes); trend (ADX > 18): close < EMA60 with PZO < 0; non-trend (ADX <= 18 or NaN): PZO crosses down
+through 0 with close < EMA60, or crosses down through -5. The card's non-trend path conditions ("after dropping
+through +40", "fails to reach +40") need the path since entry; the row-based crosses approximate them so a -40
+recovery that is still negative cannot exit on its first held close. Stop 2 x atr_14 (card).
 """
 from __future__ import annotations
 
@@ -34,6 +36,7 @@ class PriceZoneOscillator(PanelStrategy):
         "oversold": -40.0,  # card: long when PZO crosses -40 upward
         "buy_level": 15.0,  # card: ... or crosses +15 upward (after crossing zero, in an uptrend)
         "overbought": 60.0,  # card: exit when PZO is above +60 then turns down
+        "fail_level": -5.0,  # card: non-trend exit when PZO fails and falls below -5
         "zero_lookback": 60,  # bars searched back for the last PZO < 0 (engine choice)
         "stop_atr_mult": 2.0,  # card
         "max_hold_days": 30,  # card
@@ -49,8 +52,16 @@ class PriceZoneOscillator(PanelStrategy):
         pzo, prev, ema = row.get(PZO), row.get(PREV_PZO), row.get(EMA)
         if not (finite(pzo) and finite(prev) and finite(ema)):
             return False
-        turn_down = prev > float(self.params["overbought"]) and pzo < prev
-        return bool(turn_down or (float(row["close"]) < ema and pzo < 0))
+        pzo, prev = float(pzo), float(prev)
+        if prev > float(self.params["overbought"]) and pzo < prev:
+            return True  # +60 turn-down, both modes
+        close_below = float(row["close"]) < float(ema)
+        adx = row.get(ADX)
+        if finite(adx) and float(adx) > float(self.params["adx_trend"]):
+            return bool(close_below and pzo < 0)  # trend LX
+        # non-trend LX, row-based: PZO crosses down through 0 (close < EMA60) or through -5
+        fail = float(self.params["fail_level"])
+        return bool((prev >= 0 > pzo and close_below) or prev >= fail > pzo)
 
     def _entry(self, pzo: np.ndarray, trending: bool) -> str | None:
         now, prev = pzo[-1], pzo[-2]

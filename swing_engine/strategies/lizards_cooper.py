@@ -3,7 +3,8 @@
 Lizard bar at close t: low_t is the lowest low of the last 10 bars (including t) and both the open and the close sit
 in the top 25% of the bar's range. Entry (book): buy stop one tick above the lizard high, next session only. Stop one
 tick under the lizard low. No target; 5-session time stop (card: exit 1-5 days). The aggressive next-open entry is
-`entry_style: "open"`. Bearish mirror not used (long-only).
+`entry_style: "open"`. Bearish mirror not used (long-only). Minimum range (card, engine choice): the lizard
+range must be at least 0.75 x atr_14 of the prior bar, so tiny-range bars do not qualify.
 """
 from __future__ import annotations
 
@@ -29,6 +30,7 @@ class LizardsCooper(PanelStrategy):
     default_params: dict[str, Any] = {
         "min_open_pos": 0.75,  # card: (open - low) / range >= 0.75
         "min_close_pos": 0.75,  # card: (close - low) / range >= 0.75
+        "min_range_atr": 0.75,  # card: (high - low) >= 0.75 x atr_14_{t-1} (engine choice)
         "entry_style": "stop",  # card: buy stop above the lizard high; "open" = aggressive next-open variant
         "tick": 0.01,  # card: high_t + 0.01 / low_t - 0.01
         "max_hold_days": 5,  # card: max_hold_days 5
@@ -36,8 +38,8 @@ class LizardsCooper(PanelStrategy):
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target
     }
-    features_required = ["trend_state"]
-    extra_features = [LOW10]
+    features_required = ["trend_state", "atr_14"]
+    extra_features = [LOW10, "prev_atr_14"]
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
         return bars_held >= int(self.params["max_hold_days"])
@@ -49,8 +51,8 @@ class LizardsCooper(PanelStrategy):
         rows = c1.rows(self, panel, as_of)
         rng = rows["high"] - rows["low"]
         open_pos, close_pos = (rows["open"] - rows["low"]) / rng, (rows["close"] - rows["low"]) / rng
-        keep = ((rng > 0) & (rows["low"] <= rows[LOW10]) & (open_pos >= float(p["min_open_pos"]))
-                & (close_pos >= float(p["min_close_pos"]))).fillna(False)
+        keep = ((rng > 0) & (rng >= float(p["min_range_atr"]) * rows["prev_atr_14"]) & (rows["low"] <= rows[LOW10])
+                & (open_pos >= float(p["min_open_pos"])) & (close_pos >= float(p["min_close_pos"]))).fillna(False)
         tick, as_stop = float(p["tick"]), p["entry_style"] == "stop"
         out: list[Signal] = []
         for idx, row in rows.loc[keep].iterrows():

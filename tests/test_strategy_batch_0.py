@@ -32,7 +32,7 @@ BATCH = [
 ]
 # short windows so the generic panel (320 bars) warms up; the default is the card's 756-bar fit
 SMALL_PARAMS = {"residual_momentum": {"beta_bars": 120, "formation_bars": 60, "skip_bars": 10}}
-OPTIONAL_COLUMNS = {"days_since_earnings": 53.0, "sue": 1.0, "opp_buy_value_21d": 50_000.0}
+OPTIONAL_COLUMNS = {"days_since_earnings": 53.0, "sue": 1.0, "opp_buy_value_21d": 50_000.0, "opp_buy_flag": 1.0}
 
 
 def strat(name: str, params: dict | None = None):
@@ -122,8 +122,9 @@ def test_opportunistic_insider_purchases_threshold():
     s = strat("opportunistic_insider_purchases_cmp")
     p = uptrend()
     assert run(s, p) == []
-    sig = only(run(s, set_last(p.assign(opp_buy_value_21d=0.0), "AAA", opp_buy_value_21d=30_000)))
+    sig = only(run(s, set_last(p.assign(opp_buy_value_21d=0.0), "AAA", opp_buy_value_21d=30_000, opp_buy_flag=1)))
     assert sig.reward_risk == pytest.approx(2.0)
+    assert run(s, set_last(p.assign(opp_buy_value_21d=0.0), "AAA", opp_buy_value_21d=30_000, opp_buy_flag=0)) == []
     assert run(s, set_last(p.assign(opp_buy_value_21d=0.0), "AAA", opp_buy_value_21d=10_000)) == []
     assert s.should_exit(pd.Series(dtype=float), 21)
 
@@ -208,7 +209,7 @@ def test_katsanos_vpn_breakout_cross():
 def test_the_anti_hook():
     s = strat("the_anti")
     p = ensure_extra(uptrend(), s.extra_features)
-    p = set_tail(p, "AAA", "stoch_d_7_4_10", [50, 52, 54, 56, 58])
+    p = set_tail(p, "AAA", "stoch_d_7_4_10", [56, 58, 60, 62, 64])
     sig = only(run(s, set_tail(p, "AAA", "stoch_k_7_4", [80, 75, 70, 65, 68])))
     assert sig.entry_type == EntryType.STOP and sig.entry == pytest.approx(p["high"].iloc[-1] + 0.01)
     assert sig.stop == pytest.approx(p["low"].iloc[-1] - 0.01)
@@ -242,7 +243,7 @@ def test_bollinger_reentry_buy_stop_at_band():
     s = strat("bollinger_band_mean_reversion")
     base = [100.0, 100.5] * 130
     sig = only(run(s, add_features(bars_from_closes("AAA", [*base, 97.0, 100.0]))))
-    assert sig.entry_type == EntryType.STOP and sig.entry < 100.0 and sig.target is None
+    assert sig.entry_type == EntryType.OPEN and sig.entry == pytest.approx(100.0) and sig.target is None
     assert run(s, add_features(bars_from_closes("AAA", [*base, 97.0, 97.5]))) == []
 
 
@@ -251,7 +252,7 @@ def test_connors_3day_high_low():
     s = strat("connors_3day_high_low")
     tail = [[182.0, 182.5, 181.0, 181.2, 1e6], [181.0, 181.8, 180.0, 180.3, 1e6], [180.2, 181.0, 179.0, 179.5, 1e6]]
     sig = only(run(s, add_features(bars_from_ohlc("AAA", trend_rows(257) + tail))))
-    assert sig.target is not None and sig.reward_risk >= 0
+    assert sig.target is None
     tail[-1][1] = 181.9  # higher high on the last bar
     assert run(s, add_features(bars_from_ohlc("AAA", trend_rows(257) + tail))) == []
     assert run(strat("connors_3day_high_low", {"symbols": ["SPY"]}),
@@ -315,6 +316,7 @@ def test_pullback_ema_zone_third_test():
     sig = only(run(s, _zone_panel([40, 60, 80, 100])))
     assert sig.features["prior_tests"] == 3.0 and sig.target is None and s.engine_trail is False
     assert run(s, _zone_panel([60, 100])) == []  # only one earlier test
+    assert run(s, _zone_panel([60, 99, 100])) == []  # multi-bar dip is not a prior test
 
 
 def _vcp_closes(breakout_volume: float) -> pd.DataFrame:

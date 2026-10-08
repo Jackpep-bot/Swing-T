@@ -2,8 +2,9 @@
 BollingerBandsLE, P3/P4 TradingView, thinkorswim BollingerBandsLE, B68 Webull).
 
 Rule: BB(20, 2 SD). After a close below the lower band, the close crosses back above it (prior close <= prior lower
-band, close > lower band); a buy stop for the next session sits at the lower band value (entry_type stop). The
-built-ins have no stop, so the engine adds a catastrophic entry - 2 x atr_14; exit on a close at or above the mid
+band, close > lower band); buy at the next open (card interim). The faithful buy stop at the band sits below the
+close, so it is marketable and the engine's 1% entry limit would skip most fills. The built-ins have no stop, so
+the engine adds a catastrophic entry - 2 x atr_14; exit on a close at or above the mid
 band (sma_20, card default; `exit_col` bb_upper_20 is the Webull variant) or after 10 sessions. Optional
 `trend_ma` (e.g. sma_200, Connors) filter is off by default. Webull's engulfing / double-bottom confirmation is
 discretionary and not coded. Long only.
@@ -15,7 +16,7 @@ from typing import Any
 
 import pandas as pd
 
-from swing_engine.core.models import EntryType, Signal
+from swing_engine.core.models import Signal
 from swing_engine.core.registry import register
 
 from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, TREND_DOWN, PanelStrategy, finite
@@ -27,7 +28,10 @@ LOWER = "bb_lower_20"
 @register("strategy", NAME)
 class BollingerBandMeanReversion(PanelStrategy):
     name = NAME
-    description = "Close crosses back above bb_lower_20: buy stop at the band; exit at sma_20 or 10 days; 2 ATR stop."
+    description = (
+        "Close crosses back above bb_lower_20: buy at the next open (card interim; the faithful buy stop at the band "
+        "sits below the close); exit at sma_20 or 10 days; 2 ATR stop."
+    )
     default_params: dict[str, Any] = {
         "exit_col": "sma_20",  # card: exit at the mid band (conservative); "bb_upper_20" = Webull variant
         "trend_ma": None,  # card optional filter close > sma_200 (Connors %b); None = off
@@ -67,19 +71,21 @@ class BollingerBandMeanReversion(PanelStrategy):
                 continue
             if trend and not (finite(row[str(trend)]) and close > float(row[str(trend)])):
                 continue
-            entry = float(lower)
+            # card interim: next-open entry; a buy stop at the band (< close) is marketable and the 1% entry_limit
+            # would skip most fills
+            entry = close
             sig = self.build_signal(
                 row,
                 as_of,
                 entry=entry,
                 stop=entry - float(p["stop_atr_mult"]) * float(atr),
                 target=None,
-                score=(close - entry) / float(atr) if float(atr) > 0 else 0.0,
+                score=(close - float(lower)) / float(atr) if float(atr) > 0 else 0.0,
                 features={LOWER: lower, "sma_20": row["sma_20"], "atr_14": atr, "max_hold_days": p["max_hold_days"]},
-                notes=f"close {close:.2f} back above the lower band {entry:.2f}: buy stop at the band, exit at "
+                notes=f"close {close:.2f} back above the lower band {float(lower):.2f}: buy next open, exit at "
                 f"{p['exit_col']}",
             )
             if sig:
-                out.append(sig.model_copy(update={"entry_type": EntryType.STOP}))
+                out.append(sig)
         self.log_scan(as_of, len(rows), len(out))
         return out

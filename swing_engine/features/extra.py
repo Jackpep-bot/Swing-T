@@ -11,8 +11,10 @@ lacks (cached panels from the store carry none of them). Names resolve two ways:
   of any column).
 
 Every column uses only bars at or before its own row (per symbol), the same session's rows (ranks), the market
-proxy's bars at or before that session (relative strength, beta) or the published NYSE calendar (calendar flags), so
-appending later bars never changes an earlier value. Flags are float 0/1 and NaN while their inputs warm up.
+proxy's bars at or before that session (relative strength, beta, correlation) or the published NYSE calendar (calendar
+flags; ``pre_holiday_*`` count scheduled holidays only, never pandas_market_calendars' ad-hoc closures such as 9/11,
+Hurricane Sandy or mourning days, which were not known in advance), so appending later bars never changes an earlier
+value. Flags are float 0/1 and NaN while their inputs warm up.
 Cumulative lines (``obv``, ``ad_line``) start at the first bar in the panel; use their changes, not their level.
 """
 
@@ -635,6 +637,17 @@ def _beta(ctx: _Ctx, n: str) -> pd.Series:
     return ((mean(r * m) - mean(r) * mean(m)) / var).where(var > 0)
 
 
+def _corr_market(ctx: _Ctx, n: str) -> pd.Series:
+    """Pearson correlation of the symbol's close with the market proxy's close over the last ``n`` bars (price
+    levels, like np.corrcoef on the two closes); NaN while either window is incomplete or flat."""
+    w = int(n)
+
+    def corr(c: np.ndarray, m: np.ndarray) -> np.ndarray:
+        return pd.Series(c).rolling(w, min_periods=w).corr(pd.Series(m)).replace([np.inf, -np.inf], np.nan).to_numpy()
+
+    return ctx.series(ctx.loop(corr, ctx.c, _market_close(ctx)[0]))
+
+
 # ----------------------------------------------------------------------------------------------- recursive stops
 def _psar_np(h: np.ndarray, lo: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Wilder parabolic SAR. Row t holds the SAR for the NEXT bar, the direction after bar t and the AF in force."""
@@ -805,10 +818,13 @@ def _pivots(ctx: _Ctx) -> dict[str, pd.Series]:
 
 # ----------------------------------------------------------------------------------------------- calendar
 def _calendar(ctx: _Ctx) -> pd.DataFrame:
-    """NYSE session table (published calendar, so known in advance) mapped to each row's session."""
+    """NYSE session table (published calendar, so known in advance) mapped to each row's session; pre-holiday flags
+    ignore ad-hoc closures."""
 
     def build() -> pd.DataFrame:
-        from swing_engine.data.calendar import schedule
+        import pandas_market_calendars as pmc
+
+        from swing_engine.data.calendar import CALENDAR_NAME, schedule
 
         sess = session_key(ctx.df[TS_COL])
         days = pd.DatetimeIndex(
@@ -824,7 +840,11 @@ def _calendar(ctx: _Ctx) -> pd.DataFrame:
         cur = days.to_numpy("datetime64[D]")
         gap_weekdays = np.zeros(len(days))
         ok = ~np.isnat(nxt)
-        gap_weekdays[ok] = np.busday_count(cur[ok] + np.timedelta64(1, "D"), nxt[ok])
+        # pmc's ad-hoc closures (9/11, Hurricane Sandy, mourning days) are not scheduled holidays and some were only
+        # known after the fact, so they never count as a gap weekday
+        adhoc = pd.DatetimeIndex(pmc.get_calendar(CALENDAR_NAME).adhoc_holidays).tz_localize(None)
+        gap_weekdays[ok] = np.busday_count(cur[ok] + np.timedelta64(1, "D"), nxt[ok],
+                                           holidays=adhoc.to_numpy("datetime64[D]"))
         ph1 = (gap_weekdays > 0).astype(float)
         ph1[~ok] = np.nan
         t["tom_day"] = tom
@@ -1385,6 +1405,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"vol_max_{_N}"), _vol_max, "vol_max_252", None),
     (re.compile(rf"pctrank_ret_{_N}"), _pctrank_ret, "pctrank_ret_100", None),
     (re.compile(rf"beta_{_N}"), _beta, "beta_60", None),
+    (re.compile(rf"corr_market_{_N}"), _corr_market, "corr_market_20", None),
     (re.compile(rf"mom_{_N}_{_N}"), _mom, "mom_6_1", None),
     (re.compile(r"st_(line|dir)(?:_(\d+)_(\d+(?:\.\d+)?))?"), _supertrend, "st_dir_10_3", None),
     (re.compile(r"gapm_(ratio|signal|slope)(?:_(\d+)_(\d+))?"), _gapm, "gapm_slope_40_20", None),
@@ -1436,6 +1457,12 @@ def _known(name: str) -> bool:
 def is_extra(name: str) -> bool:
     """True when ``name`` resolves to a registered extra feature (exact or parametric)."""
     return name in EXTRA_FEATURES or _match(name) is not None
+
+
+def rank_base(name: str) -> str | None:
+    """The column a ``<col>_rank`` extra ranks (``mom_12_1_rank`` -> ``mom_12_1``), else None."""
+    hit = None if name in EXTRA_FEATURES else _match(name)
+    return hit[1][0] if hit is not None and hit[0] is _rank else None
 
 
 def resolve(name: str) -> Feature | None:

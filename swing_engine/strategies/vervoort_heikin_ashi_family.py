@@ -4,7 +4,7 @@
 * `ha_typ_cross` (SVEHaTypCross): A = EMA(hlc3, typical_length), B = EMA(Heikin-Ashi ohlc4, ha_length). Buy when A
   crosses above B on a bullish bar (close > open); exit when A crosses below B on a bearish bar.
 * `svesc` (SVESC): A = SMA(hlc3, length), B = SMA(HA ohlc4, length). Buy when A crosses above B on a bullish bar;
-  exit when close < SMA(close, exit_length) and close < open.
+  exit when A crosses below B on a bearish bar, or close < SMA(close, exit_length) and close < open.
 Not built (card: formulas unverified): HACOLT, SVEZLRBPercB, VolatilityBand. Entry next open; engine stop = lowest
 HA low of 3 bars - 0.1 x atr_14; reference target 4R; 40-session time stop.
 """
@@ -66,11 +66,12 @@ class VervoortHeikinAshi(PanelStrategy):
             return True
         c = self.cols
         close, open_ = float(row["close"]), float(row["open"])
-        if self.params["variant"] == SVESC:
-            x = row.get(c["exit"])
-            return finite(x) and close < float(x) and close < open_
         a, b, ap, bp = (row.get(c[k]) for k in ("a", "b", "a_prev", "b_prev"))
-        return all(finite(v) for v in (a, b, ap, bp)) and ap >= bp and a < b and close < open_
+        cross_down = all(finite(v) for v in (a, b, ap, bp)) and ap >= bp and a < b and close < open_
+        if self.params["variant"] == SVESC:  # Sell Auto (thinkorswim SELL_AUTO also closes a long) or Sell To Close
+            x = row.get(c["exit"])
+            return cross_down or (finite(x) and close < float(x) and close < open_)
+        return cross_down
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if not self.market_ok(regime):

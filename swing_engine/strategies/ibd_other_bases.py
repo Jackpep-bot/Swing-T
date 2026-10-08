@@ -4,11 +4,13 @@ exits unchanged (prior advance 30%+, volume >= 1.4x the prior 50-day average, <=
 stop max(base floor, entry x 0.93), +20% target, heavy-volume sma_50 exit, 40-session cap, M gate on).
 
 Double bottom: a W whose second swing low undercuts the first, at least 35 bars from the left-side high, no more
-than 33% deep (card, unverified depth); pivot = the middle peak; floor = the second low. Ascending base: three
-pullbacks of 10-20% each with higher highs and higher lows over 45-80 bars; pivot = the high before the third
-pullback; floor = the third low. Swing points come from `_swing.swing_pivots` (confirmed `swing_width` bars after
-the pivot). Both must be the first close over the pivot since the last low. Saucer and consolidation are left out
-(card: no verified numbers). The pivot is crossed at the close (no intraday stop entry), as in base_breakout.
+than 33% deep (card, unverified depth); pivot = the middle peak; floor = the second low; a confirmed handle (swing
+high <= the middle peak, swing low above the second low) moves the pivot to the handle high and the floor to the
+handle low. Ascending base: three pullbacks of 10-20% each with higher highs and higher lows over 45-80 bars; pivot
+= the high before the third pullback; floor = the third low. Swing points come from `_swing.swing_pivots` (confirmed
+`swing_width` bars after the pivot). Both must be the first close over the pivot since the last low. Saucer and
+consolidation are left out (card: no verified numbers). The pivot is crossed at the close (no intraday stop entry),
+as in base_breakout.
 """
 from __future__ import annotations
 
@@ -40,6 +42,7 @@ class IbdOtherBases(BaseBreakout):
         "db_max_bars": 325,  # same 65-week cap as base_breakout's cup
         "db_max_depth": 0.33,  # card: unverified depth limit
         "db_undercut_min": 0.0,  # card: the second low must undercut the first (even slightly)
+        "db_handle": True,  # card: a handle variant moves the pivot to the handle high
         "ab_depth_min": 0.10,  # card: each pullback 10-20%
         "ab_depth_max": 0.20,
         "ab_min_bars": 45,  # card: about 9-16 weeks
@@ -59,9 +62,12 @@ class IbdOtherBases(BaseBreakout):
     def _double_bottom(self, w: dict[str, np.ndarray], end: int) -> _Base | None:
         p = self.params
         seq = self._pivots(w, end, int(p["db_max_bars"]))
+        handle = None
+        if bool(p["db_handle"]) and len(seq) >= 5 and seq[-1][2] > seq[-3][2] and seq[-2][2] <= seq[-4][2]:
+            handle, seq = seq[-2:], seq[:-2]
         if len(seq) < 3:
             return None
-        (_, i1, l1), (_, _, mid), (_, i2, l2) = seq[-3:]
+        (_, i1, l1), (_, _, mid), (_, _, l2) = seq[-3:]
         if not l2 < l1 * (1.0 - float(p["db_undercut_min"])):
             return None
         start = max(0, end - int(p["db_max_bars"]) + 1)
@@ -73,9 +79,10 @@ class IbdOtherBases(BaseBreakout):
         length, depth = end - top_idx + 1, (top - l2) / top
         if length < int(p["db_min_bars"]) or depth > float(p["db_max_depth"]) or mid >= top:
             return None
-        if not self._fresh(w, i2, l2, mid, end):
+        (_, _, pivot), (_, low_idx, floor) = handle or (seq[-2], seq[-1])
+        if not self._fresh(w, low_idx, floor, pivot, end):
             return None
-        return _Base(VARIANT_DOUBLE, mid, l2, top_idx, top, length, depth)
+        return _Base(VARIANT_DOUBLE, pivot, floor, top_idx, top, length, depth)
 
     def _ascending(self, w: dict[str, np.ndarray], end: int) -> _Base | None:
         p = self.params

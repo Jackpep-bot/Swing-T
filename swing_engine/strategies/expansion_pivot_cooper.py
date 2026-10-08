@@ -19,7 +19,7 @@ from swing_engine.core.models import EntryType, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, SYMBOL, TREND_DOWN, PanelStrategy, finite
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, PanelStrategy, finite
 
 NAME = "expansion_pivot_cooper"
 
@@ -35,7 +35,6 @@ class ExpansionPivotCooper(PanelStrategy):
         "target_r": 2.0,  # card: reference 2R
         "max_hold_days": 7,  # card
         "trend_ma": None,  # card optional variant: close > sma_200
-        P_MIN_TREND: TREND_DOWN,
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 2.0,  # card
     }

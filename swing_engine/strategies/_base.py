@@ -118,18 +118,22 @@ class PanelStrategy(Strategy):
         as-of session (delisted, halted, missing data) are dropped rather than scanned on stale data.
         Raises KeyError when a required column is missing so a mis-built panel fails loudly.
         """
+        rolling = list(rolling)
         req = list(BAR_COLUMNS) + list(required if required is not None else self.features_required)
         missing = [c for c in req if c not in panel.columns]
         if missing:
             raise KeyError(f"{self.name}: panel is missing required columns {missing}")
+        # an empty result still carries the prior_*/rolling columns so callers can index them
+        empty_cols = list(dict.fromkeys([*panel.columns, *(f"{PRIOR_PREFIX}{c}" for c in self.prior_columns),
+                                         *(s.out for s in rolling)]))
         if panel.empty:
-            return panel.iloc[0:0]
+            return panel.iloc[0:0].reindex(columns=empty_cols)
 
         day = _local_day(panel[TS])
         cutoff = pd.Timestamp(as_of)
         sub = panel.loc[day <= cutoff]
         if sub.empty:
-            return sub
+            return sub.reindex(columns=empty_cols)
         sub = sub.sort_values([SYMBOL, TS], kind="stable")
         day = _local_day(sub[TS])
         grp = sub.groupby(SYMBOL, sort=False)

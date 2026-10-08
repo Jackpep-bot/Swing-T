@@ -2,8 +2,9 @@
 
 Setup on the signal bar t: trend_state up; ema_20 > ema_50 with both rising over 5 bars; a zone touch on one of the
 last 3 bars k (low <= ema_20 x 1.01 and low >= ema_50 x 0.99, i.e. into the zone without slicing the 50); at least 2
-earlier respected tests of the zone in the 60 bars before k, each at least 5 bars after the previous one with a new
-20-bar high in between (so the touch is the third or later). Trigger: close > the prior bar's high and > ema_20, on
+earlier respected tests of the zone in the 60 bars before the current pullback (the dip containing k, which never
+counts as its own prior test), each at least 5 bars after the previous one with a new 20-bar high in between (so
+the touch is the third or later). Trigger: close > the prior bar's high and > ema_20, on
 pullback volume (mean of bars k .. t-1) no more than the 20-day average. Entry next open; stop entry - 2 x atr_14;
 no target; exit on a close below ema_50 or after 60 sessions. "Do not rush stops to breakeven" (card), so the
 engine's breakeven / N-day-low overlay is off (`engine_trail = False`). Score = 63-day return rank (leaders first).
@@ -71,18 +72,20 @@ class PullbackEmaZone(PanelStrategy):
         return bool(w["low"][j] <= w[FAST][j] * (1.0 + tp) and w["low"][j] >= w[SLOW][j] * (1.0 - tp))
 
     def prior_tests(self, w: dict[str, np.ndarray], k: int) -> int:
-        """Separated zone tests in the ``test_lookback`` bars before ``k`` (each after a new ``new_high_bars`` high)."""
+        """Separated zone tests in the ``test_lookback`` bars before the current pullback (the test containing touch
+        ``k``), each ``test_separation`` bars after the previous one with a new ``new_high_bars`` high in between."""
         p = self.params
         sep, nh = int(p["test_separation"]), int(p["new_high_bars"])
         count, last = 0, None
-        for j in range(max(nh, k - int(p["test_lookback"])), k):
+        # scan through k (always a touch) so it opens the current dip's test or merges into it; that test is dropped
+        for j in range(max(nh, k - int(p["test_lookback"])), k + 1):
             if not self._touch(w, j):
                 continue
             if last is None or (j - last >= sep and any(
                 w["high"][i] >= w["high"][i - nh : i].max() for i in range(last + 1, j)
             )):
                 count, last = count + 1, j
-        return count
+        return max(count - 1, 0)  # drop the current pullback itself
 
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if not self.market_ok(regime):

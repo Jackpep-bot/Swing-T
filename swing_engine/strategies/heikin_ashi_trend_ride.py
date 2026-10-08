@@ -3,9 +3,9 @@
 HA bars from features/extra.py (`ha_open`, `ha_high`, `ha_low`, `ha_close`). Signal at close t: a strong up HA candle
 (ha_close > ha_open with no lower shadow: ha_open - ha_low <= `shadow_tol` x close, the card's float tolerance) after
 at least `min_down_candles` (2) down HA candles. Entry next open at real prices. Stop = lowest real low of the down
-run - 0.1 x atr_14, raised to the low of the most recent HA indecision candle (body < 30% of the HA range with both
-shadows) in the last 10 bars when that is higher and below the close. Primary exit: first down HA candle
-(`should_exit`) or 30 sessions; reference target 3R (card), min reward:risk 1.0. `trend_state` gate off by default.
+run - 0.1 x atr_14, raised to the low of the most recent HA indecision candle (body <= 30% of the HA range, both
+shadows >= 25% of the range) in the last 10 bars when that is higher and below the close. Primary exit: first down
+HA candle (`should_exit`) or 30 sessions; reference target 3R (card), min reward:risk 1.0. `trend_state` gate off by default.
 """
 from __future__ import annotations
 
@@ -32,7 +32,8 @@ class HeikinAshiTrendRide(PanelStrategy):
     default_params: dict[str, Any] = {
         "min_down_candles": 2,  # card: ha_down_run >= N (default 2)
         "shadow_tol": 0.001,  # card: "no shadow" within 0.1% of price
-        "indecision_body_max": 0.30,  # card: small body < 25-35% of the HA range
+        "indecision_body_max": 0.30,  # card: body <= 0.3 x HA range
+        "indecision_shadow_min": 0.25,  # card: both shadows >= 0.25 x HA range
         "indecision_lookback": 10,  # card: most recent indecision candle in the last 10 bars
         "stop_atr_buffer": 0.1,  # card: min(real low over the down run) - 0.1*atr_14
         "target_r": 3.0,  # card: reference target_r 3.0
@@ -53,9 +54,11 @@ class HeikinAshiTrendRide(PanelStrategy):
         p = self.params
         stop = float(np.min(w["low"][t - run : t])) - float(p["stop_atr_buffer"]) * atr
         o, h, lo, c = (w[k] for k in HA)
+        body_max, shadow_min = float(p["indecision_body_max"]), float(p["indecision_shadow_min"])
         for k in range(t - 1, max(t - 1 - int(p["indecision_lookback"]), -1), -1):
             body, rng = abs(c[k] - o[k]), h[k] - lo[k]
-            if rng > 0 and body < float(p["indecision_body_max"]) * rng and h[k] > max(o[k], c[k]) and lo[k] < min(o[k], c[k]):
+            shadow = min(h[k] - max(o[k], c[k]), min(o[k], c[k]) - lo[k])
+            if rng > 0 and body <= body_max * rng and shadow >= shadow_min * rng:
                 return max(stop, float(w["low"][k])) if w["low"][k] < close else stop
         return stop
 

@@ -52,13 +52,14 @@ class ShortTermReversal1M(PanelStrategy):
         rows = rows.dropna(subset=["rev_21d", "mom_12_1", "dollar_vol_20d"])
         screen = rows.nlargest(int(p["universe_top_n"]), "dollar_vol_20d")
         screen = screen.loc[screen["mom_12_1"].rank(pct=True) >= float(p["mom_rank_min"])]
+        screen = screen.loc[[self.trend_ok(r) for _, r in screen.iterrows()]]  # card: trend_state >= 0 is in the screen
         if len(screen) < int(p["min_cross_section"]):
             return []
         rank = screen["rev_21d"].rank(pct=True)
         out: list[Signal] = []
         for idx, row in screen.loc[rank >= float(p["rev_rank_min"])].iterrows():
             atr, gmax, gmin = row["atr_14"], row[GAP_MAX], row[GAP_MIN]
-            if not (self.trend_ok(row) and finite(atr) and finite(gmax) and finite(gmin)):
+            if not (finite(atr) and finite(gmax) and finite(gmin)):
                 continue
             if max(abs(float(gmax)), abs(float(gmin))) >= float(p["max_abs_gap"]):
                 continue

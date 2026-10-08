@@ -17,7 +17,7 @@ from swing_engine.core.models import Signal
 from swing_engine.core.registry import register
 
 from . import _catalog1 as c1
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, TREND_DOWN, PanelStrategy, finite
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, TREND_DOWN, TREND_UP, PanelStrategy, finite
 
 NAME = "volatility_expansion_close"
 ATR5 = "atr_sma_5"
@@ -31,7 +31,8 @@ class VolatilityExpansionClose(PanelStrategy):
         "entry_atr_mult": 0.75,  # card: buy stop next bar at close + 0.75 x ATR(5)
         "exit_atr_mult": 1.5,  # card: LX stop at close - 1.5 x ATR(5), recomputed each bar
         "max_hold_days": 20,  # card: max_hold_days 20
-        P_MIN_TREND: TREND_DOWN,  # card: no filters
+        # card: trend_state >= 1 is the only filter for the comparison run (raw TradeStation form: min_trend_state=-1)
+        P_MIN_TREND: TREND_UP,
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target
     }

@@ -55,7 +55,7 @@ class PEValuationReversion(PanelStrategy):
             if not finite(atr):
                 continue
             sig = self.build_signal(
-                row, as_of, entry=close, stop=close - float(p["stop_atr_mult"]) * float(atr), target=avg,
+                row, as_of, entry=close, stop=close - float(p["stop_atr_mult"]) * float(atr), target=None,
                 score=1.0 - close / avg, features={AVG: avg, "dev": close / avg - 1.0, "max_hold_days": p["max_hold_days"]},
                 notes=f"close {close:.2f} is {(1 - close / avg) * 100:.1f}% under its 12-bar SMA {avg:.2f} (P/E proxy)",
             )

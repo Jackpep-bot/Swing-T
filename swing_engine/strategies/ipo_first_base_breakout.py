@@ -1,13 +1,15 @@
 """IPO first-base breakout (long): docs/strategies/ipo_first_base_breakout.md; the IPO variant of base_breakout.
 
 Approximation: there is no IPO-date source, so a symbol counts as newly listed when its first bar in the panel comes
-after the panel's first session (both known at as_of); a ticker change, spin-off or data gap looks the same, and the
-lockup-expiry exit is not modelled. Rules (card, unverified IBD numbers): within `max_days_since_ipo` sessions of the
-first bar, a base starting 0-25 sessions after listing, 7-40 bars long, at most 25% deep (high to low) and ending the
-bar before today; buy the close above the base high (pivot), no more than 5% above it, on volume >= 1.5x the mean
-volume since listing excluding day 1 (50-day averages do not exist yet). The earliest qualifying start (longest base)
-is used. Stop = max(base low, close x 0.92); target close x 1.20; 40-day time exit. trend_state / RS are NaN for new
-issues, so there is no trend gate.
+after the panel's first session (both known at as_of); a ticker change, spin-off or data gap looks the same. Not
+modelled: the lockup-expiry exit, and the card's failed-breakout exit (a close back below the pivot within 3 bars),
+because `should_exit(row, bars_held)` does not see the entry signal's pivot; the stop max(base low, close x 0.92)
+and the 40-day time exit are the only exits. Rules (card, unverified IBD numbers): within `max_days_since_ipo`
+sessions of the first bar, a base starting at its left-side high (the pivot) 0-25 sessions after listing, 7-40 bars
+long, at most 25% deep (high to low) and ending the bar before today; buy the close above the base high (pivot), no
+more than 5% above it, on volume >= 1.5x the mean volume since listing excluding day 1 (50-day averages do not exist
+yet). The earliest qualifying start (longest base) is used. Stop = max(base low, close x 0.92); target close x 1.20;
+40-day time exit. trend_state / RS are NaN for new issues, so there is no trend gate.
 """
 from __future__ import annotations
 
@@ -59,6 +61,8 @@ class IPOFirstBaseBreakout(PanelStrategy):
             if n < int(p["base_min_bars"]):
                 return None
             top, low = float(np.max(h[s:t])), float(np.min(lo[s:t]))
+            if h[s] < top:
+                continue  # the base starts at its left-side high (the pivot): nothing inside it trades above
             if top > 0 and 1.0 - low / top <= float(p["base_max_depth"]):
                 return top, low
         return None
@@ -86,7 +90,7 @@ class IPOFirstBaseBreakout(PanelStrategy):
             pivot, base_low = base
             close, vol = float(w["close"][t]), float(w["volume"][t])
             avg_vol = float(np.nanmean(w["volume"][1:t]))
-            if not (pivot < close <= pivot * (1.0 + float(p["max_extension"]))) or not vol >= float(p["vol_mult"]) * avg_vol:
+            if not avg_vol > 0 or not (pivot < close <= pivot * (1.0 + float(p["max_extension"]))) or not vol >= float(p["vol_mult"]) * avg_vol:
                 continue
             sig = self.build_signal(
                 row, as_of, entry=close, stop=max(base_low, close * (1.0 - float(p["stop_pct"]))),

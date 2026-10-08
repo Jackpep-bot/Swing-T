@@ -4,7 +4,8 @@ Setup at the close of bar t: `pattern` (nr7 default; nr4 or id_nr4) from feature
 avg_vol_20d >= 100k, close >= $5. Entry: buy stop high_t + tick for the next session (`EntryType.STOP`; untriggered
 orders expire). Stop: low_t - tick. Variant A (Crabel, default): no target, 3-bar time exit; the "first profitable
 close" exit is not modelled because `should_exit` does not see the entry price. Variant B (Bulkowski): set
-`target_pct: 0.07`, `max_hold_days: 40`. The sell-stop short half of the OCO bracket is not modelled (long-only).
+`target_pct: 0.07`, `stop_pct: 0.07`, `max_hold_days: 40`. The sell-stop short half of the OCO bracket is not
+modelled (long-only).
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ class NR7RangeContraction(PanelStrategy):
         "min_price": 5.0,  # card: close >= 5
         "tick": 0.01,  # card: buy stop high + 0.01, stop low - 0.01
         "target_pct": None,  # card variant B (Bulkowski): 0.07
+        "stop_pct": None,  # card variant B (Bulkowski): 0.07 -> stop entry x 0.93
         "max_hold_days": 3,  # card variant A (Crabel); variant B uses 40
         P_MIN_TREND: TREND_UP,  # card: trend_state >= 1
         P_MIN_MARKET_TREND: TREND_DOWN,
@@ -61,12 +63,14 @@ class NR7RangeContraction(PanelStrategy):
                 continue
             high, low = float(row["high"]), float(row["low"])
             entry = high + tick
+            sp = p["stop_pct"]
+            stop = entry * (1.0 - float(sp)) if sp is not None and finite(sp) else low - tick
             sig = self.build_signal(
-                row, as_of, entry=entry, stop=low - tick,
+                row, as_of, entry=entry, stop=stop,
                 target=entry * (1.0 + float(tgt)) if tgt is not None and finite(tgt) else None,
                 score=-(high - low) / float(row["close"]),  # tightest range first
                 features={"range_pct": (high - low) / float(row["close"])},
-                notes=f"{flag}: buy stop {entry:.2f}, stop {low - tick:.2f}",
+                notes=f"{flag}: buy stop {entry:.2f}, stop {stop:.2f}",
             )
             if sig:
                 out.append(sig.model_copy(update={"entry_type": EntryType.STOP}))

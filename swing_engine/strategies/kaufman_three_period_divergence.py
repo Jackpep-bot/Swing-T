@@ -42,6 +42,10 @@ class KaufmanThreePeriodDivergence(PanelStrategy):
     features_required = ["atr_14", "trend_state"]
     extra_features = [f"linreg_slope_{n}{s}" for n in (5, 10, 15) for s in ("", "_of_stoch_k_14")]
 
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.extra_features = [c for pair in self._pairs() for c in pair]
+
     def _pairs(self) -> list[tuple[str, str]]:
         mom = str(self.params["momentum"])
         return [(f"linreg_slope_{int(n)}", f"linreg_slope_{int(n)}_of_{mom}") for n in self.params["periods"]]

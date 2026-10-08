@@ -69,11 +69,11 @@ class CCICorrection(PanelStrategy):
             cci, t = w[SIG_COL], len(w[SIG_COL]) - 1
             if t < n or not (cci[t - 1] <= float(p["trigger_level"]) < cci[t]):
                 continue
-            recent = cci[t - n : t + 1]
+            recent = cci[t - n + 1 : t + 1]
             dips = np.flatnonzero(recent < float(p["dip_level"]))
             if not len(dips) or not bias_up(w[BIAS_COL][np.isfinite(w[BIAS_COL])], float(p["bias_level"])):
                 continue
-            first_dip = t - n + int(dips[0])
+            first_dip = t - n + 1 + int(dips[0])
             stop = float(np.min(w["low"][first_dip : t + 1])) - float(p["stop_atr_buffer"]) * float(row["atr_14"])
             close = float(row["close"])
             sig = self.build_signal(

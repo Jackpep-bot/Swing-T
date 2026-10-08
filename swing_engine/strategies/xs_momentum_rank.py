@@ -1,10 +1,11 @@
 """Cross-sectional momentum rank (long), docs/strategies/xs_momentum_rank.md (E01 12-1 / E02 JT 6-1).
 
 Month-end replay of the card's "Use 2": on the last NYSE session of the month (`rebalance_day` -1, NYSE calendar) buy every symbol whose
-same-session percentile of `mom_12_1` (close[t-21] / close[t-252] - 1) is >= 0.90; hold 21 sessions, leaving early
-only when the rank drops below 0.70 (card hysteresis). JT variant: `rank_col: mom_7_1_rank` (close[t-21] /
-close[t-147] - 1). Ranks are over the symbols in the panel (no NYSE breakpoints or value weights: no market cap);
-price momentum on split-adjusted closes, dividends excluded (card note). The stop is an engine disaster stop.
+same-session percentile of `mom_12_1` (close[t-21] / close[t-252] - 1) is >= 0.90; held while rank >= 0.70 (rolled
+monthly: a holding still in the top decile at month end is skipped as busy, not sold and rebought), 252-session cap.
+JT variant: `rank_col: mom_7_1_rank` (close[t-21] / close[t-147] - 1). Ranks are over the screened universe (the
+nightly's panel; replay re-ranks among its point-in-time screen), with no NYSE breakpoints or value weights (no market
+cap); price momentum on split-adjusted closes, dividends excluded (card note). The stop is an engine disaster stop.
 """
 from __future__ import annotations
 
@@ -26,14 +27,16 @@ NAME = "xs_momentum_rank"
 @register("strategy", NAME)
 class XSMomentumRank(PanelStrategy):
     name = NAME
-    description = "Month end: buy the top decile of 12-1 momentum rank; exit below rank 0.70 or after 21 sessions."
+    description = ("Month end: buy the top decile of 12-1 momentum rank; held while rank >= 0.70 (rolled monthly), "
+                   "252-session cap.")
     default_params: dict[str, Any] = {
         "rank_col": "mom_12_1_rank",  # card: 12-1 signal, same-session percentile (JT 6-1: "mom_7_1_rank")
         "entry_rank_min": 0.90,  # card: entry rank >= 0.90
         "exit_rank_below": 0.70,  # card: hysteresis exit < 0.70
         "rebalance_day": -1,  # card: month-end rebalance
         "stop_atr_mult": 3.0,  # engine disaster stop (none in the factor definition)
-        "max_hold_days": 21,  # card: max_hold_days 21 per cohort
+        # card holding_period_days max; cohorts roll monthly, the exit is the rank < exit_rank_below hysteresis
+        "max_hold_days": 252,
         P_MIN_MARKET_TREND: TREND_DOWN,  # crash filter is a separate catalog item (momentum_crash_filter_dm)
         P_MIN_RR: 0.0,  # card: min reward:risk n/a
     }
@@ -41,8 +44,9 @@ class XSMomentumRank(PanelStrategy):
     extra_features = ["mom_12_1_rank"]
     engine_trail = False  # monthly hold with a rank exit
 
-    def required_features(self) -> list[str]:
-        return [*self.features_required, str(self.params["rank_col"])]
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.extra_features = [str(self.params["rank_col"])]  # replay / nightly panels carry the configured rank
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
         rank = row.get(str(self.params["rank_col"]))

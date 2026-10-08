@@ -4,9 +4,9 @@ On the last session of each month (`tom_day == -1`, features.extra calendar) ran
 are in the panel by 3-month return (`ret_63d`) and buy the top 3; invest only while the market proxy's month-end close
 is above the mean of its last 10 month-end closes (`market_symbol` rows in the panel; when absent the filter is
 skipped and only `min_market_trend_state` applies). Approximations: the engine sizes by risk, not equal weight, so
-each pick gets an ATR stop (entry - 3 x atr_14; the source has none); positions exit by the time stop (`max_hold_days`
-~ one month) and a still-top-3 sector is bought again at the next rebalance instead of being rolled. Needs the ETFs
-in the universe (`universe.include_etfs`); with a stock-only panel it emits nothing.
+each pick gets an ATR stop (entry - 3 x atr_14; the source has none); every position exits at the month-end
+rebalance close (`max_hold_days` is only a backstop) and a still-top-3 sector is bought again at the next open instead
+of being rolled. Needs the ETFs in the universe (`universe.include_etfs`); with a stock-only panel it emits nothing.
 """
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ class FaberSectorRotation(PanelStrategy):
         "market_symbol": "SPY",  # card: S&P 500 trend filter
         "filter_months": 10,  # card: 10-month SMA of month-end closes (12-month variant)
         "stop_atr_mult": 3.0,  # engine choice: the risk sizer needs a stop (the source has none)
-        "max_hold_days": 21,  # card: one rebalance period (~21 sessions)
+        "max_hold_days": 31,  # card: 31 per rebalance; backstop only, the month-end rule exit below closes first
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card
     }
@@ -43,7 +43,10 @@ class FaberSectorRotation(PanelStrategy):
     extra_features = ["tom_day"]
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
-        return bars_held >= int(self.params["max_hold_days"])
+        # exit on the rebalance close so the same session's signal can re-buy a still-top-3 sector (and nothing is
+        # re-bought when SPY is below its 10-month SMA)
+        p = self.params
+        return bars_held >= int(p["max_hold_days"]) or row.get("tom_day") == float(p["rebalance_tom_day"])
 
     def filter_on(self, panel: pd.DataFrame, as_of: date) -> bool:
         p = self.params

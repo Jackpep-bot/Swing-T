@@ -60,7 +60,8 @@ class PivotExtensionReversal(PanelStrategy):
             stop = low - float(self.params["stop_atr_buffer"]) * float(atr)
             target = close + float(self.params["target_r"]) * (close - stop)
             highs, _ = last_pivot(w["high"], left, right, highs=True)
-            if finite(highs[t]) and close < highs[t] < target:
+            rr_floor = close + float(self.params[P_MIN_RR]) * (close - stop)  # card: pivot high only if >= 1.5R
+            if finite(highs[t]) and rr_floor <= highs[t] < target:
                 target = float(highs[t])
             sig = self.build_signal(row, as_of, entry=close, stop=stop, target=target, score=0.0,
                                     features={"pivot_low": low, "max_hold_days": self.params["max_hold_days"]},

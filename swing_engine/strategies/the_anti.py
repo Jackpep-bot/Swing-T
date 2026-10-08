@@ -3,8 +3,9 @@
 Stochastic %K 7 smoothed 4 (slow K = SMA4 of fast K7) and %D = SMA10 of slow K (Street Smarts; the later manual's
 %D 12 is `d_len`). Setup: %D rising for the last 4 bars; %K falling for the 3 bars before the signal bar (pulling
 back against %D); trigger: %K hooks back up on the signal bar. Bar counts are forum restatements (card:
-approximation). Entry: buy stop a tick above the hook bar's high (entry_type stop); stop a tick under its low; no
-target; exit within 4 sessions. Long only.
+approximation); %K must be at or near %D before the hook (slowK[t-1] <= slowD[t-1] + 5); price trend gate
+trend_state == 1 (card, engine choice). Entry: buy stop a tick above the hook bar's high (entry_type stop); stop a
+tick under its low; no target; exit within 4 sessions. Long only.
 """
 from __future__ import annotations
 
@@ -18,7 +19,7 @@ from swing_engine.core.models import EntryType, Signal
 from swing_engine.core.registry import register
 from swing_engine.features.patterns2 import as_of_view
 
-from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, SYMBOL, TREND_DOWN, PanelStrategy
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, P_MIN_TREND, SYMBOL, TREND_DOWN, TREND_UP, PanelStrategy
 
 NAME = "the_anti"
 
@@ -38,12 +39,14 @@ class TheAnti(PanelStrategy):
         "d_len": 10,  # card: %D 10 (Street Smarts; 12 in the later manual)
         "d_rising_bars": 4,  # card: %D rising for roughly 4+ bars
         "k_pullback_bars": 3,  # card: %K pulls back for about 3+ bars
+        "k_near_d_max": 5.0,  # card: slowK_{t-1} <= slowD_{t-1} + 5 (pullback toward/against %D)
         "tick": 0.01,  # card: buy stop above the hook bar / stop below its low
         "max_hold_days": 4,  # card: exit within 2-4 bars
-        P_MIN_TREND: TREND_DOWN,
+        P_MIN_TREND: TREND_UP,  # card: price trend gate trend_state == 1
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # card: no target taught
     }
+    features_required = ["trend_state"]
     extra_features = list(stoch_names(default_params))
 
     def __init__(self, params: dict[str, Any] | None = None):
@@ -59,9 +62,11 @@ class TheAnti(PanelStrategy):
         p = self.params
         k_col, d_col = self.extra_features
         nd, nk, tick = int(p["d_rising_bars"]), int(p["k_pullback_bars"]), float(p["tick"])
-        view = as_of_view(panel, as_of, ["high", "low", k_col, d_col])
+        view = as_of_view(panel, as_of, ["high", "low", "trend_state", k_col, d_col])
         out: list[Signal] = []
         for _, row in view.current.iterrows():
+            if not self.trend_ok(row):
+                continue
             w = view.window(str(row[SYMBOL]), (k_col, d_col))
             kk, dd = w[k_col], w[d_col]
             if len(kk) < max(nd, nk + 1) + 1:
@@ -69,7 +74,8 @@ class TheAnti(PanelStrategy):
             d_seg, k_seg = dd[-(nd + 1) :], kk[-(nk + 2) : -1]
             if not (np.isfinite(d_seg).all() and np.isfinite(kk[-(nk + 2) :]).all()):
                 continue
-            if not ((np.diff(d_seg) > 0).all() and (np.diff(k_seg) < 0).all() and kk[-1] > kk[-2]):
+            near_d = kk[-2] <= dd[-2] + float(p["k_near_d_max"])
+            if not ((np.diff(d_seg) > 0).all() and (np.diff(k_seg) < 0).all() and kk[-1] > kk[-2] and near_d):
                 continue
             entry, stop = float(row["high"]) + tick, float(row["low"]) - tick
             sig = self.build_signal(

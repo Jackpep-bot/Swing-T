@@ -62,6 +62,9 @@ class CalhounAdxBreakout(PanelStrategy):
             hi, lo, atr = row[f"high_{n}"], row[f"low_{n}"], row["atr_14"]
             if not all(finite(x) for x in (adx, prev_adx, pdi, mdi, hi, lo, atr)):
                 continue
+            # card lists trend_state under Reuses; the default (TREND_DOWN) leaves it off so warm-up rows still fire
+            if int(p[P_MIN_TREND]) > TREND_DOWN and not self.trend_ok(row):
+                continue
             high, close = float(row["high"]), float(row["close"])
             if not (float(prev_adx) < level <= float(adx) and high >= float(hi) and float(pdi) > float(mdi)):
                 continue

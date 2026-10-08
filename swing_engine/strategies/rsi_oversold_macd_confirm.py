@@ -59,10 +59,10 @@ class RsiOversoldMacdConfirm(PanelStrategy):
         for _, row in cur.loc[xup.fillna(False)].iterrows():
             w = view.window(str(row[SYMBOL]), ("rsi_14", "low"))
             rsi, t = w["rsi_14"], len(w["rsi_14"]) - 1
-            n = max(pair, int(p["oversold_lookback"]), int(p["stop_lookback"]))
+            n = max(pair + 1, int(p["oversold_lookback"]), int(p["stop_lookback"]))
             if t < n or not finite(row["atr_14"]):
                 continue
-            recent = rsi[t - pair : t + 1]
+            recent = rsi[t - pair - 1 : t + 1]  # cross bar j in t-pair..t (bars since <= pair)
             if not ((recent[:-1] < lo_lvl) & (recent[1:] >= lo_lvl)).any():
                 continue
             if not (rsi[t - int(p["oversold_lookback"]) + 1 : t + 1] < lo_lvl).any():

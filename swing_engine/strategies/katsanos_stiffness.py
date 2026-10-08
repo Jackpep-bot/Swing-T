@@ -42,6 +42,11 @@ class KatsanosStiffness(PanelStrategy):
     extra_features = ["stiffness_60_100", "ema_100_of_market_close"]
     engine_trail = False  # multi-month trend hold with a stiffness exit
 
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        mkt = self.params.get("market_ema_col")  # engine panels attach only the instance's extra_features
+        self.extra_features = [str(self.params["stiffness_col"]), *([str(mkt)] if mkt else [])]
+
     def required_features(self) -> list[str]:
         mkt = self.params.get("market_ema_col")
         return [*self.features_required, str(self.params["stiffness_col"]), *([str(mkt)] if mkt else [])]

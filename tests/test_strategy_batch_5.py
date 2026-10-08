@@ -243,7 +243,8 @@ def test_pead_sue():
     s = _strat("pead_sue")
     syms = tuple(f"S{i:02d}" for i in range(10))
     p = make_panel(syms, n_days=260, seed=3)
-    p = p.assign(sue=p["symbol"].map({x: float(i) for i, x in enumerate(syms)}), days_since_earnings=5.0)
+    p = p.assign(sue=p["symbol"].map({x: float(i) for i, x in enumerate(syms)}), days_since_earnings=5.0,
+                 days_since_filing=3.0)
     p = p.assign(close=p["close"].clip(lower=10.0), high=p["high"].clip(lower=10.5))
     (sig,) = s.signals(p, date(2024, 10, 1))  # first session of October
     _check(sig, s)
@@ -286,12 +287,16 @@ def test_elder_ma_penetration():
 
 def _golden_rows(last_volume: float) -> list[list[float]]:
     rows = trend_rows(230, start=50.0, step=0.3)
-    top = rows[-1][3]
-    drop = [top - 6, top - 11, top - 14]
+    c = rows[-1][3]
+    for _ in range(10):  # acceleration leg: pivot > 10% above sma_50
+        rows.append([c, c + 1.2, c - 0.1, c + 1, 1e6])
+        c += 1
+    top = c
+    drop = [top - 8, top - 15, top - 22]
     rows += [[c + 1, c + 1.2, c - 0.3, c, 1e6] for c in drop]
-    base = top - 13.5
+    base = top - 21.5
     rows += [[base, base + 0.4, base - 0.4, base, 1e6] for _ in range(6)]
-    c = top - 10
+    c = top - 17
     return [*rows, [base, c + 0.2, base - 0.1, c, last_volume]]
 
 

@@ -5,8 +5,10 @@ a rising 50 SMA (close / sma_50 - 1 >= `accel_min` and sma_50 above its value `s
 at least one close below the 50 SMA, no deeper than `max_drop_below` under it. Trigger on bar t: close above the
 confirmation SMA (sma_10) and volume both the highest of the last `vol_bars` bars and above avg_vol_50d, the first
 such bar after the drop low (the price- and volume-confirmation days are folded into one bar). Entry next open; stop
-= drop low - 0.25 x atr_14; target = the pivot high (card). The undefined "acceleration" and "max drop" knobs take the
-card's suggested values.
+= drop low - 0.25 x atr_14; target = the pivot high (card). Exit after `max_hold_days` = 20 sessions (card). The card's
+rule exit on close < drop low is not modelled because `should_exit` does not see the entry's drop low; the stop, 0.25 x
+atr_14 below that low, bounds the gap. The undefined "acceleration" and "max drop" knobs take the card's values
+(`accel_min` = 0.10 from its mechanical rule).
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ class GoldenTriangle(PanelStrategy):
     default_params: dict[str, Any] = {
         "conf_ma": "sma_10",  # card: confirmation SMA, 10 default
         "max_setup_bars": 30,  # card: pivot -> drop -> reclaim within 30 bars
-        "accel_min": 0.05,  # card: close / sma_50 - 1 >= 5-15% at the pivot (low end)
+        "accel_min": 0.10,  # card: close / sma_50 - 1 >= accel_min (0.10) at the pivot
         "slope_bars": 10,  # card: sma_50 vs 10 bars earlier
         "max_drop_below": 0.15,  # card: max drop below the SMA 0-15%
         "vol_bars": 5,  # card: volume the highest of the last 5 bars

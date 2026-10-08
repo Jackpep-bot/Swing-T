@@ -36,6 +36,7 @@ class WeinsteinStage2Breakout(PanelStrategy):
         "ma_weeks": 30,  # card: 30-week SMA (definition of the method, do not tune)
         "ma_slope_weeks": 4,  # card: wk_sma_30 / wk_sma_30.shift(4) - 1 >= 0
         "vol_mult_4w": 2.0,  # card: breakout-week volume >= 2x the prior 4-week average
+        "vol_avg_weeks": 4,  # card: average of the prior 4 weeks
         "base_weeks": 12,  # card: base length unpublished, try 8-26 (12 pre-registered here)
         "base_max_depth": 0.30,  # card: unverified, try 0.25-0.35
         "rs_col": "mansfield_rs",  # card: Mansfield RS above its zero line
@@ -75,14 +76,14 @@ class WeinsteinStage2Breakout(PanelStrategy):
         if cur.empty or not is_week_end(session_day(cur)):
             return []
         cur = cur.loc[(cur[rs_col] > float(p["rs_min"])) & (cur["close"] > cur[ma_col])]
-        n_ma, n_base = int(p["ma_weeks"]), int(p["base_weeks"])
+        n_ma, n_base, n_vol = int(p["ma_weeks"]), int(p["base_weeks"]), int(p["vol_avg_weeks"])
         out: list[Signal] = []
         for _, row in cur.iterrows():
             wk = self._weekly(view, str(row[SYMBOL]))
-            if len(wk) < max(n_ma + int(p["ma_slope_weeks"]), n_base + 1):
+            if len(wk) < max(n_ma + int(p["ma_slope_weeks"]), n_base + 1, n_vol + 1):
                 continue
             sma = wk["close"].rolling(n_ma).mean()
-            vol_avg = wk["volume"].shift(1).rolling(4).mean()
+            vol_avg = wk["volume"].shift(1).rolling(n_vol).mean()
             top, low = wk["high"].shift(1).rolling(n_base).max().iloc[-1], wk["low"].shift(1).rolling(n_base).min().iloc[-1]
             close, ma_now, ma_then = wk["close"].iloc[-1], sma.iloc[-1], sma.iloc[-1 - int(p["ma_slope_weeks"])]
             ok = (close > top and (top - low) / top <= float(p["base_max_depth"]) and close > ma_now

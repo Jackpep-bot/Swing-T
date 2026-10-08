@@ -38,7 +38,7 @@ haLow = min(L, haOpen, haClose). Bullish bar = close > open (thinkorswim wording
 2. SVEHaTypCross: A = EMA(typical price hlc3, typical_length); B = EMA(haOHLC4, ha_length). Buy when A crosses above B on a
    bullish bar; sell when A crosses below B on a bearish bar. Defaults not stated on the page.
 3. SVESC: A = avg(hlc3, length); B = avg(HA ohlc4, length); X = avg(close, exit_length). Buy when A rises above B on a bullish bar;
-   long exit when close < X and close < open.
+   long exit when A crosses below B on a bearish bar, or close < X and close < open.
 4. SVEZLRBPercB: zero-lag %B of a Rainbow MA (smoothed with DEMA/TEMA) plus a stochastic; buy when both lines turn up from the
    prior bar, sell when both turn down. Exact smoothing chain unverified.
 5. VolatilityBand: middle = SMA(EMA-smoothed hlc3, average_length); band offsets from a typical-minus-low deviation measure, with

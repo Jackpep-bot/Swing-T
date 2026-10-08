@@ -81,8 +81,9 @@ class BullFlagBreakout(PanelStrategy):
             if not 0 < close - fl.pivot <= float(p["max_extension_atr"]) * atr:
                 continue
             seg = w["low"][max(0, fl.top_idx - int(p["pole_max_bars"])) : fl.top_idx]
-            if seg.size == 0 or not np.isfinite(seg).all():
-                continue
+            hi = w["high"][max(0, fl.top_idx - int(p["pole_max_bars"])) : fl.top_idx]
+            if seg.size == 0 or not (np.isfinite(seg).all() and np.isfinite(hi).all()) or hi.max() >= fl.pivot:
+                continue  # pivot must be the pole top, else the flag is longer than flag_max_bars
             pole = fl.pivot - float(seg.min())
             if pole < float(p["pole_atr_min"]) * atr:
                 continue

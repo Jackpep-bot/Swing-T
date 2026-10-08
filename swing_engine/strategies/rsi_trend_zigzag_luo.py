@@ -39,6 +39,10 @@ class RSITrendZigZag(PanelStrategy):
     features_required = ["atr_14", RSI]
     extra_features = [PREV_RSI, "zz_trend_5", "zz_high_5", "zz_low_5"]
 
+    def __init__(self, params: dict[str, Any] | None = None):
+        super().__init__(params)
+        self.extra_features = [PREV_RSI, *self._zz()]
+
     def _zz(self) -> tuple[str, str, str]:
         n = int(self.params["zz_pct"])
         return f"zz_trend_{n}", f"zz_high_{n}", f"zz_low_{n}"
