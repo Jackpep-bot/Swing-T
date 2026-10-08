@@ -30,7 +30,7 @@ quotient-transform article (Onset Trend; full citation truncated in the catalog)
 Vervoort article (Dec 2011), not Ehlers.
 
 ## Exact rules (thinkorswim descriptions)
-Core filters (from Ehlers' published code, reproduced from memory; verify against the thinkorswim study source before coding):
+Core filters (matches Ehlers' published EasyLanguage; verified 2026-10-07 against https://www.linnsoft.com/topic/super-smoother-and-roofing-filter):
 - Super smoother(x, P): a = exp(-1.414*pi/P); b = 2a*cos(1.414*pi/P); c2 = b; c3 = -a^2; c1 = 1 - c2 - c3;
   f_t = c1*(x_t + x_{t-1})/2 + c2*f_{t-1} + c3*f_{t-2}.
 - 2-pole high-pass(x, P): alpha = (cos(0.707*2pi/P) + sin(0.707*2pi/P) - 1) / cos(0.707*2pi/P);

@@ -34,22 +34,15 @@ smoothed into a signal line. Be long while the signal line rises and exit when i
 - **Gap:** `gap_t = open_t - close_{t-1}`.
 - **Sums over `length` days:** `up = sum(max(gap, 0))`, `dn = sum(max(-gap, 0))`.
 - **Ratio:** `ratio = up / dn`.
-- **Gap Momentum and signal line:** the sources disagree on how the ratio becomes the momentum series.
-  - thinkorswim study page: Gap Momentum *is* the ratio. The signal line is a moving average of the ratio over
-    `signal length`.
-  - TradingView port and the S&C description: the series is built "the same way as OBV", that is,
-    cumulatively. The signal line is an SMA of it.
+- **Gap Momentum and signal line (verified 2026-10-07):** the published Traders' Tips code
+  (https://financial-hacker.com/the-gap-momentum-system/) is non-cumulative: Gap Momentum = 100 * UpGaps / DnGaps over
+  `length` (1 when DnGaps = 0), and the signal line is an SMA of it over `signal_length`. The "built like OBV,
+  cumulatively" wording in summaries does not match the code.
 - **Entry:** buy-to-open when signal_t > signal_{t-1}.
 - **Exit:** sell-to-close when signal_t < signal_{t-1}. Long-only in the thinkorswim strategy.
 - **thinkorswim inputs:** `length`, `signal length`, and `full range` (whether initialisation starts at the first
-  bar of the lookup period). Defaults were not shown on the pages fetched.
+  bar of the lookup period). Published defaults 40 / 20.
 - **Not specified:** stops, targets and sizing.
-
-**Unresolved formula problem.** If the positive ratio itself were summed cumulatively, the series would rise every
-day and the system could never exit. Kaufman's actual accumulation must therefore differ: for example accumulating
-signed gaps OBV-style before taking the ratio, or treating the ratio as non-cumulative as thinkorswim says. The
-article code was not readable this run (traders.com returned 403). **Verify against the S&C code before
-implementing.** Until then, implement the thinkorswim (non-cumulative ratio) reading and label it.
 
 ## Why it should work
 In US equities, most of the long-run return accrues overnight. Overnight and intraday returns behave differently,
@@ -67,8 +60,8 @@ intraday liquidity providers who fade opens.
 ## Parameters and sensitivity
 | Parameter | Value |
 |---|---|
-| `length` | 20-60 (default unknown) |
-| `signal_length` | 10-30 (default unknown) |
+| `length` | 40 (published default; test 20-60) |
+| `signal_length` | 20 (published default; test 10-30) |
 | `dn_zero_policy` | NaN, or cap the ratio at `ratio_cap` = 10 |
 | `min_hold_days` | 0 |
 
@@ -82,7 +75,7 @@ The slope rule is very sensitive to `signal_length`. Pick one grid in advance an
 ## Common mistakes
 - Using adjusted opens across splits and dividends, which produces fake gaps. Compute gaps on split-adjusted prices
   with dividends handled consistently.
-- Dividing by `dn = 0` in strong trends.
+- Dividing by `dn = 0` in strong trends (the published code returns 1).
 - Treating the cumulative and ratio versions as interchangeable.
 
 ## Discretionary parts and how to make them mechanical

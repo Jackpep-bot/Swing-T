@@ -58,7 +58,7 @@ Trap: optimising N and the hold jointly; the cost assumption decides the sign.
   failed to move 5% 46% of the time (down-breakouts 47%). A 7% target / 7% stop test entering at the open after the
   breakout won 57% in bull-market up-breakouts, average about +$79 per trade (~+0.8% on $10,000) after $10
   commissions, average hold 31 calendar days, avg win $705 vs avg loss $743.
-- Oxford Capital Strategies: 42 US futures, 1980 to Jan 2016 (page dates; catalog says 1980-2011), NR_Length 1-20,
+- Oxford Capital Strategies: 42 US futures, 1980 to Jan 2016 (all three Oxford NR7 pages), NR_Length 1-20,
   hold 1-40 days, ORB-stretch entries: pre-cost results better for NR > 5 and longer holds; "not currently tradeable"
   after costs without more rules.
 - No independent test of the ID/NR4 rule set located.

@@ -76,7 +76,7 @@ Overfitting traps: tuning the role/size filters and the hold length on the same 
   **82 bp/month value-weighted** (9.8%/yr, t=2.15) and **180 bp/month equal-weighted** (21.6%/yr, t=6.07)
   five-factor alpha. Routine long-short: -20 bp VW and 43 bp EW (t=1.73). In pooled regressions, opportunistic buys
   add 90 bp (t=4.64) in the following month versus all insider trades; routine buys add 14 bp (t=0.81).
-- **Correction to the catalog:** `docs/catalog/catalog.json` and `docs/methods/14` describe 82 bp/month as the return of
+- **Corrected 2026-10-07:** `docs/catalog/catalog.json` and `docs/methods/14` used to describe 82 bp/month as the return of
   "opportunistic buys". In the paper it is the **long-short** (buys minus sells) value-weighted alpha. A long-only
   opportunistic-buy portfolio's alpha is not quoted here; the 90 bp regression coefficient is the closest long-side
   number.

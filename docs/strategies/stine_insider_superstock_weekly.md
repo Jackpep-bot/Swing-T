@@ -108,7 +108,7 @@ Choosing "the MA the stock respects" after the fact is curve fitting. TradingSke
 - There is no independent backtest. One out-of-sample anecdote: AOI (2018) passed most technical checks, had no
   insider buying, and later went through Chapter 11.
 - The components have support:
-  - Opportunistic insider trades earn 82 bp/month (Cohen, Malloy & Pomorski 2012).
+  - Opportunistic insider long-short (buys minus sells) earns 82 bp/month VW alpha; opportunistic buys add about 90 bp/month over all insider trades (Cohen, Malloy & Pomorski 2012).
   - Insider purchase informativeness is concentrated in small firms (Lakonishok & Lee 2001).
   - MA timing works best in high-volatility deciles (Han, Yang & Zhou 2013).
 - Lottery-like low-priced stocks underperform on average (Bali, Cakici & Whitelaw 2011; cited from memory).

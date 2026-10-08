@@ -25,8 +25,9 @@ so this is a ranking feature plus a same-day alert, not a multi-week drift trade
 
 ## Origin and lineage
 - Academic: Lakonishok & Lee (RFS 2001): insider purchases, not sales, are informative, mainly in smaller firms.
-  Cohen, Malloy & Pomorski (JF 2012): "opportunistic" (non-routine) insider trades earn 82 bp/month value-weighted
-  (180 bp equal-weighted per the repo sweep); routine trades earn about zero.
+  Cohen, Malloy & Pomorski (JF 2012): a long-short portfolio of "opportunistic" (non-routine) insider buys minus
+  opportunistic sells earns 82 bp/month value-weighted five-factor alpha (t=2.15; 180 bp equal-weighted, t=6.07);
+  opportunistic buys add about 90 bp/month over all insider trades (t=4.64); routine trades earn about zero.
 - Disclosure: Form 4 due within 2 business days of the trade since Sarbanes-Oxley (Aug 2002).
 - Practitioner use: Stine's *Insider Buy Superstocks* (2013) treats multiple C-level/director open-market buys as a
   bonus signal (see docs/methods/14); cluster screeners (openinsider-style) are common.
@@ -73,7 +74,7 @@ As specified in the repo (no single originator rule book exists):
 Traps: weighting schemes (title, dollar size, 52w distance) fitted to a few hundred events.
 
 ## Evidence
-- Cohen, Malloy & Pomorski (JF 2012, 1986-2007): opportunistic trades 82 bp/month VW abnormal; routine ~0.
+- Cohen, Malloy & Pomorski (JF 2012, 1986-2007): opportunistic long-short 82 bp/month VW alpha (t=2.15), buys +90 bp/month vs all insider trades (t=4.64); routine ~0.
 - Lakonishok & Lee (RFS 2001, 1975-1995): predictability driven by purchases in smaller firms.
 - Zhao (arXiv 2602.06198; v1 5 Feb 2026, v2 24 Sep 2026): 13,534 purchases, 1,192 microcaps ($30M-$500M), 2018-2024;
   day-1 AR 0.86%-4.13% by 52-week-high distance quintile; volatility explains much of the gradient (differential

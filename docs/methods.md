@@ -296,8 +296,8 @@ what exists or is needed in swing-engine.
   Kell's own losers cluster 3-4%+ above the MAs.
 - [ ] **Intraday ORH** (1/5/60-minute opening-range high) for EPs, flags and gap-day entries; the engine's daily
   backtester fills at the next open, so daily versions are the delayed/day-2 trade.
-- [ ] **Close-based** for RSI-2 (MOC or a limit below the signal close); Raschke's 80-20 bar (open in the bottom 20%,
-  close in the top 80%) implies next-morning follow-through
+- [ ] **Close-based** for RSI-2 (MOC or a limit below the signal close); Raschke's 80-20 buy bar (open in the top 20% of
+  the range, close in the bottom 20%) sets up a next-morning trade below the low that reverses back above it
   (https://www.antoinebuteau.com/lessons-from-linda-bradford-raschke/).
 - [ ] **Parabolic shorts** (not in this long-only engine): day 3-4, ORL break or first red 5-minute candle, failed
   VWAP reclaim.
@@ -715,7 +715,7 @@ mapping. Full rules, chart signatures, teachers, pitfalls and all sources are in
 - **Rules**: weekly volume up 500-5,000%, about 45-degree angle; sell 7-10 weeks after a thrust, about 9 months into
   the advance, on parabolic/largest-range weeks, offerings, or a weekly close below the magic line.
 - **Evidence (D)**: $45,721 to $6,845,342 (Sep 2003-Jan 2006), documented but not CPA-attested, no results after 2006;
-  components (opportunistic insider buys 82 bp/month; MA timing in volatile stocks; PEAD) supported; low-priced lottery
+  components (opportunistic insider long-short 82 bp/month VW alpha, buys +90 bp/month vs all insider trades; MA timing in volatile stocks; PEAD) supported; low-priced lottery
   stocks underperform on average.
 - **2026 fit**: small-cap value rotation in mid-2026 fits the PE screen, but Russell 2000 EPS estimates were cut 9% YTD
   and the sub-$15 low-float pool is full of diluters.

@@ -53,7 +53,7 @@ Reddit variant: IBS < 0.3 plus a close more than 2.5 average ranges below the 10
 - Pagonidis 2013 (ETF inception to 12 May 2013): significant next-day reversal in most equity index ETFs. A simple strategy
   reportedly earned more than 30% a year average alpha **before costs** (via the search summary; the original paper was not read).
 - Pandey & Joshi 2023 (16 country ETFs incl. IVV, EWJ, FXI, EWZ; Jan 2009 - Dec 2019): min/max IBS basket Sharpe 2.9-3.9.
-  Single-ETF threshold rules gave Sharpe 0.2-2.2 at 1-day holds. With open-to-open fills it was about zero. Short borrow above about 0.15%/yr eroded the long/short
+  Single-ETF threshold rules gave Sharpe 0.2-2.2 at 1-day holds. With open-to-open fills it was about zero. Short borrow above about 0.15%/day (~56%/yr; base case 0.01%/day) eroded the long/short
   version.
 - No cost- and data-snooping-adjusted evidence was verified. QS SPY statistics are paywalled.
 
