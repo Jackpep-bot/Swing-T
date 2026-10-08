@@ -598,6 +598,7 @@ def _read_panel(
         build_panel = _load("features.panel.build_panel")
         panel = build_panel(bars, _market_slice(bars))
     panel = _with_extras(panel, settings, strategies)
+    panel = _load("data.fundamentals.join_edgar")(store, panel)
     panel = _slice_dates(panel, start, end)
     if panel.empty:
         _fail(f"panel has no rows for {start}..{end}", EXIT_NO_DATA)

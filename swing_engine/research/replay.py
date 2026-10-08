@@ -202,6 +202,15 @@ def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
     return build_panel(bars, market if not market.empty else None)
 
 
+def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
+    """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``) when the store has them."""
+    if store is None:
+        return panel
+    from swing_engine.data.fundamentals import join_edgar
+
+    return join_edgar(store, panel)
+
+
 def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:
     """Attach the strategies' ``extra_features`` (``features.extra``) once for the whole replay; the panel's SPY
     rows serve as the market proxy. The base column of each ``<col>_rank`` extra is attached too, so
@@ -553,6 +562,7 @@ def run_replay(
         panel = build_replay_panel(store, start_d, end_d)
     panel = _sessions_only(panel, start_d - timedelta(days=WARMUP_CALENDAR_DAYS), end_d)
     panel = _with_patterns2(panel)
+    panel = _with_edgar(store, panel)
     panel = _with_extras(panel, strat_map.values())
     view = _PanelView(panel)
     i0, i1 = view.index_range(start_d, end_d)

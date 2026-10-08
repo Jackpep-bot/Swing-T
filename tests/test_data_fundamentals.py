@@ -212,3 +212,22 @@ def test_run_edgar_ingest_maps_ciks_and_is_resumable() -> None:
 
     again = F.run_edgar_ingest(store, edgar, ["ACME", "BRK.B"], today=date(2026, 3, 3))
     assert again["skipped_fresh"] == 1 and edgar.calls.count(CIK) == 1  # the failed CIK is retried
+
+
+def test_ingest_caches_events_and_join_edgar_matches_direct_features() -> None:
+    store = ingested()
+    assert store.has_table(F.EVENTS_TABLE) and store.count(F.EVENTS_TABLE) > 0
+    idx = panel_index(date(2025, 1, 2), date(2026, 3, 2)).assign(volume=1_000_000.0, close=10.0)
+    joined = F.join_edgar(store, idx)
+    direct = F.edgar_panel_features(store, idx)
+    for col in F.FEATURE_COLUMNS:
+        pd.testing.assert_series_equal(
+            joined[col].reset_index(drop=True).astype("float64"), direct[col].reset_index(drop=True).astype("float64"),
+            check_names=False,
+        )
+    assert list(joined.index) == list(idx.index) and "close" in joined.columns
+
+
+def test_join_edgar_is_a_no_op_without_edgar_tables() -> None:
+    idx = panel_index(date(2026, 2, 23), date(2026, 2, 24))
+    assert F.join_edgar(Store(), idx) is idx

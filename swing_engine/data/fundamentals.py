@@ -69,6 +69,9 @@ FUNDAMENTALS_SCHEMA: dict[str, str] = {
     "accession": "VARCHAR",
 }
 META_TABLE = "edgar_ingest_meta"
+#: `fundamental_events` cached per (symbol, filed): rebuilt after each ingest so panel joins are a merge_asof.
+EVENTS_TABLE = "fundamental_events"
+EVENTS_KEYS: list[str] = ["symbol", "filed"]
 META_KEYS: list[str] = ["cik"]
 META_SCHEMA: dict[str, str] = {
     "cik": "VARCHAR",
@@ -420,18 +423,20 @@ def fundamental_events(fund: pd.DataFrame, symbols: Iterable[str] | None = None)
     return pd.DataFrame(rows, columns=cols)
 
 
-def fundamental_features(fund: pd.DataFrame, earnings: pd.DataFrame, index: pd.DataFrame) -> pd.DataFrame:
+def fundamental_features(
+    fund: pd.DataFrame, earnings: pd.DataFrame, index: pd.DataFrame, events: pd.DataFrame | None = None
+) -> pd.DataFrame:
     """Panel-ready frame keyed (symbol, ts) like `index` (which needs symbol, ts and, for turnover, volume):
     FEATURE_COLUMNS. Fundamentals become visible the session after their filed date; `days_since_filing` counts
     sessions from that first usable session (0 on it), so a gate on it keeps a stale quarter's `sue` out while
     `days_since_earnings` (8-K clock) already shows the new release; earnings-calendar columns follow
-    `earnings_calendar_features`."""
+    `earnings_calendar_features`. ``events`` (a cached `fundamental_events` frame) skips recomputing them."""
     base = index[["symbol", "ts"]].reset_index(drop=True).copy()
     if base.empty:
         return base.assign(**{c: pd.Series(dtype="float64") for c in FEATURE_COLUMNS})
     base["ts"] = _norm_ts(base["ts"])
     volume = index["volume"].reset_index(drop=True) if "volume" in index.columns else pd.Series(np.nan, index=base.index)
-    ev = fundamental_events(fund, base["symbol"].unique())
+    ev = fundamental_events(fund, base["symbol"].unique()) if events is None else events
     value_cols = ["sue", "rev_surprise", "gross_prof", "shares_outstanding"]
     left = base.reset_index(names="_row").sort_values("ts")
     if ev.empty:
@@ -453,6 +458,38 @@ def edgar_panel_features(store: Store, index: pd.DataFrame) -> pd.DataFrame:
     """`fundamental_features` reading the `fundamentals` / `earnings_dates` tables for the symbols in `index`."""
     syms = sorted(set(index["symbol"])) if len(index) else []
     return fundamental_features(read_fundamentals(store, syms), read_earnings(store, syms), index)
+
+
+def build_fundamental_events(store: Store) -> int:
+    """Recompute `fundamental_events` for every symbol in `fundamentals` and replace `EVENTS_TABLE`; rows written."""
+    fund = read_fundamentals(store)
+    events = fundamental_events(fund)
+    if events.empty:
+        return 0
+    events = events.assign(avail_ts=pd.to_datetime(events["avail_ts"]))
+    store.delete(EVENTS_TABLE, "TRUE")  # full rebuild: drop events of restated or removed filings
+    return store.write_table(EVENTS_TABLE, events, EVENTS_KEYS)
+
+
+def join_edgar(store: Store, panel: pd.DataFrame) -> pd.DataFrame:
+    """``panel`` plus FEATURE_COLUMNS from the store's EDGAR tables (point-in-time: fundamentals from the session
+    after their filed date, earnings from their reaction session). Unchanged when the store has no EDGAR data or
+    the panel already carries the columns; uses the cached `fundamental_events` table when present."""
+    if panel is None or panel.empty or all(c in panel.columns for c in FEATURE_COLUMNS):
+        return panel
+    has = getattr(store, "has_table", None)
+    if not callable(has) or not (has(EARNINGS_TABLE) or has(FUNDAMENTALS_TABLE)):
+        return panel
+    syms = sorted(set(panel["symbol"].astype(str)))
+    events = None
+    if has(EVENTS_TABLE):
+        events = store.read_table(EVENTS_TABLE)
+        events = events.loc[events["symbol"].isin(syms)] if not events.empty else events
+    fund = read_fundamentals(store, syms) if events is None else None
+    feats = fundamental_features(fund, read_earnings(store, syms), panel, events=events)
+    missing = [c for c in FEATURE_COLUMNS if c not in panel.columns]
+    log.info("edgar_join", symbols=len(syms), columns=missing, cached_events=events is not None)
+    return panel.assign(**{c: feats[c].to_numpy() for c in missing})
 
 
 # ================================================================================================= ingest
@@ -540,6 +577,8 @@ def run_edgar_ingest(
         "no_cik": len(no_cik),
         **totals,
     }
+    if totals["fundamentals_rows"]:
+        result["events_rows"] = build_fundamental_events(store)
     log.info("edgar_ingest_done", **result)
     return {**result, "errors": errors, "no_cik_symbols": no_cik}
 
@@ -549,5 +588,6 @@ __all__ = [
     "read_fundamentals", "earnings_dates_asof", "quarterly_values", "seasonal_surprise", "sue_asof",
     "revenue_surprise_asof", "gross_profitability_asof", "shares_outstanding_asof", "turnover_asof",
     "earnings_calendar_features", "fundamental_events", "fundamental_features", "edgar_panel_features",
+    "EVENTS_TABLE", "build_fundamental_events", "join_edgar",
     "run_edgar_ingest",
 ]

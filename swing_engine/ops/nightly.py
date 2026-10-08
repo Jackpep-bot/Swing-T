@@ -635,6 +635,7 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
               for n in sorted({*_enabled_strategies(ctx.settings), *_shadow_only_strategies(ctx.settings)})
               if n in registry.names("strategy")]
     panel = ensure_extra(build_panel(bars, market), required_extras(active), market)  # enabled + shadow-only extras
+    panel = _load("data.fundamentals.join_edgar")(ctx.store, panel)
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
     try:
