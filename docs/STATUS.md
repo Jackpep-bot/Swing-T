@@ -58,25 +58,15 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-08 18:30 ET
-State: first paper nightly ran 2026-10-08 (5 Alpaca paper orders). launchd agents installed with
---settings config/live.yaml (Full Disk Access granted to /bin/bash; monitor running; nightly 06:30 ET weekdays).
-agent.llm_enabled is false in config/live.yaml (no paid Claude calls). Standing brief = project memory "standing-brief".
+## Resume here (in order) - updated 2026-10-08 20:00 ET
+Results: both replays done (stores data/live/replay{,_b,_c,_e}.duckdb). docs/leaderboard.md: NO survivors after costs +
+Harvey-Liu haircut over 750 trials. All 125 cards have Empirical sections. config/live.yaml now trades nothing on
+paper (all strategies shadow-only); 5 paper orders from 2026-10-08 are managed until they exit. launchd nightly
+(06:30 ET weekdays) and monitor run with config/live.yaml; agent.llm_enabled false.
 
-Replay stores (copies of data/live/market.duckdb; table shadow_signals_replay; JSON in data/live/runs/replay/):
-- data/live/replay.duckdb: 2024-10-07..2026-10-05, 118 non-EDGAR strategies (tags nr1..nr8), done.
-- data/live/replay_b.duckdb: 2017-01-01..2024-10-04 chunks nr1-nr4 done, nr8 running (lane_d, log data/logs/replay/long_nr8b.log).
-- data/live/replay_c.duckdb: 2017-24 chunks nr5-nr6 done, nr7 running (log data/logs/replay/long_nr7.log).
-- data/live/replay_e.duckdb: 9 EDGAR/insider strategies, both windows, tag edgar, done.
-Lane scripts in the session scratchpad; if lost, rerun a missing chunk from scripts/run_research_replays.sh lines.
-
-1. When nr7 and nr8 are saved: cards + leaderboard over all four stores:
-   uv run python -m swing_engine.research.cards --settings config/replay.yaml --store data/live/replay_b.duckdb
-     --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb
-   uv run python -m swing_engine.research.leaderboard (same --store args; writes docs/leaderboard.md)
-   Commit cards + docs/leaderboard.md; post a five-line survivors summary (say plainly if none).
-2. Walk-forward only survivors; enable only survivors on paper at small risk via the router; everything else
-   enabled: false + shadow_only so the shadow ledger keeps grading. If none survive, no strategy trades on paper.
-3. Then Jack's queued prompt (project memory "queued-skills-data-prompt"): skills rewrite, ranked free-data
-   proposal (proposal only until he approves), docs/methods.md.
-4. Weekly report runs from the nightly on the week's last session (swing weekly-report).
+1. Jack's queued prompt (memory "queued-skills-data-prompt"), in order: skills rewrite (commit), ranked free-data
+   proposal (proposal ONLY until he approves), docs/methods.md summary.
+2. Weekly report from the nightly on the week's last session; watch the shadow ledger and the dashboard Drift tab.
+3. Re-run cards/leaderboard after any new data or strategy change:
+   uv run python -m swing_engine.research.leaderboard --settings config/replay.yaml --store data/live/replay_b.duckdb
+     --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb   (cards: same args)
