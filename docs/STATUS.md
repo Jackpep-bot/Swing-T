@@ -58,16 +58,25 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order)
-1. Research replays (scripts/run_research_replays.sh, logs in data/logs/replay/): 118 non-EDGAR strategies in 8
-   chunks, --no-router, 2024-10-07..2026-10-05 then 2017-01-01..2024-10-04, on data/live/replay.duckdb.
-2. EDGAR ingest into data/live/market.duckdb (log data/logs/ingest-edgar-2026-10-08.log); when done, copy its EDGAR
-   tables to replay.duckdb and replay the 9 EDGAR/insider strategies (earnings_announcement_premium,
-   earnings_announcement_return_abr, revenue_surprise, canslim, pead_sue, fundamental_setup_technical_trigger,
-   insider_cluster, opportunistic_insider_purchases_cmp, high_turnover_short_term_momentum).
-3. `uv run python -m swing_engine.research.cards --settings config/replay.yaml` writes every card's Empirical
-   section; then a cross-strategy summary.
-4. First paper nightly (`uv run swing --settings config/live.yaml nightly`, broker alpaca, execute from settings),
-   then `scripts/install-launchd.sh --settings config/live.yaml`.
-5. Known gaps: live position manager has no per-position path history beyond the ledger intent; overlays and
-   most catalog strategies are research-only until docs/gates.md is met.
+## Resume here (in order) - updated 2026-10-08 18:30 ET
+State: first paper nightly ran 2026-10-08 (5 Alpaca paper orders). launchd agents installed with
+--settings config/live.yaml (Full Disk Access granted to /bin/bash; monitor running; nightly 06:30 ET weekdays).
+agent.llm_enabled is false in config/live.yaml (no paid Claude calls). Standing brief = project memory "standing-brief".
+
+Replay stores (copies of data/live/market.duckdb; table shadow_signals_replay; JSON in data/live/runs/replay/):
+- data/live/replay.duckdb: 2024-10-07..2026-10-05, 118 non-EDGAR strategies (tags nr1..nr8), done.
+- data/live/replay_b.duckdb: 2017-01-01..2024-10-04 chunks nr1-nr4 done, nr8 running (lane_d, log data/logs/replay/long_nr8b.log).
+- data/live/replay_c.duckdb: 2017-24 chunks nr5-nr6 done, nr7 running (log data/logs/replay/long_nr7.log).
+- data/live/replay_e.duckdb: 9 EDGAR/insider strategies, both windows, tag edgar, done.
+Lane scripts in the session scratchpad; if lost, rerun a missing chunk from scripts/run_research_replays.sh lines.
+
+1. When nr7 and nr8 are saved: cards + leaderboard over all four stores:
+   uv run python -m swing_engine.research.cards --settings config/replay.yaml --store data/live/replay_b.duckdb
+     --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb
+   uv run python -m swing_engine.research.leaderboard (same --store args; writes docs/leaderboard.md)
+   Commit cards + docs/leaderboard.md; post a five-line survivors summary (say plainly if none).
+2. Walk-forward only survivors; enable only survivors on paper at small risk via the router; everything else
+   enabled: false + shadow_only so the shadow ledger keeps grading. If none survive, no strategy trades on paper.
+3. Then Jack's queued prompt (project memory "queued-skills-data-prompt"): skills rewrite, ranked free-data
+   proposal (proposal only until he approves), docs/methods.md.
+4. Weekly report runs from the nightly on the week's last session (swing weekly-report).
