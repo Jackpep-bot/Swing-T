@@ -631,7 +631,9 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
     build_panel = _load("features.panel.build_panel")
     ensure_extra, required_extras = _load("features.extra.ensure_extra"), _load("features.extra.required_extras")
     market = _market_slice(bars)
-    panel = ensure_extra(build_panel(bars, market), required_extras(), market)  # every registered strategy's extras
+    active = [registry.get("strategy", n) for n in {*_enabled_strategies(ctx.settings), *_shadow_only_strategies(ctx.settings)}
+              if n in registry.names("strategy")]
+    panel = ensure_extra(build_panel(bars, market), required_extras(active), market)  # enabled + shadow-only extras
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
     try:
