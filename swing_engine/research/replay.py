@@ -89,6 +89,12 @@ ALLOWED_SEP = ";"
 UNIVERSE_REFRESH_SESSIONS = 5
 #: Kept out of the breadth population (ops.nightly.INDEX_SYMBOLS; the playbook's market_symbol is added).
 INDEX_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM")
+#: Kept in the replay panel even when no universe screen admits them: the market proxy, index ETFs and the SPDR
+#: sector ETFs that market-relative and sector-rotation strategies read (faber_sector_rotation,
+#: industry_momentum_overlay).
+ALWAYS_KEEP: tuple[str, ...] = (
+    *INDEX_SYMBOLS, "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY",
+)
 SYMBOLS_TABLE = "symbols"  # data.universe.SYMBOLS_TABLE
 SPLITS_TABLE = "splits"  # data.universe.SPLITS_TABLE
 RS_RANK_COLUMN = "rs_63d_rank"  # features.patterns2: same-session percentile of the 63-bar return
@@ -200,6 +206,25 @@ def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
         raise ValueError(f"no bars in the store between {start - timedelta(days=WARMUP_CALENDAR_DAYS)} and {end}")
     market = bars.loc[bars["symbol"] == MARKET_SYMBOL]
     return build_panel(bars, market if not market.empty else None)
+
+
+def _screened_symbols_only(
+    panel: pd.DataFrame, settings: Settings, store: Any, start: date, end: date
+) -> pd.DataFrame:
+    """Drop symbols that no universe screen in ``start..end`` admits (plus ALWAYS_KEEP), before the per-symbol
+    feature work. They are never scanned, held or counted in breadth, so results are unchanged; the full store
+    (~16,000 symbols, most of them illiquid) otherwise dominates replay memory and time."""
+    view = _PanelView(panel[[c for c in ("symbol", "ts", "open", "high", "low", "close", "volume") if c in panel]])
+    i0, i1 = view.index_range(start, end)
+    schedule = _UniverseSchedule(settings, store, view, list(range(i0, i1 + 1, UNIVERSE_REFRESH_SESSIONS)))
+    screened = set().union(*schedule.sets)
+    if not screened:  # nothing passes (hand-built test panels): keep everything, as before
+        return panel
+    keep = screened | set(ALWAYS_KEEP)
+    out = panel.loc[panel["symbol"].astype(str).isin(keep)]
+    log.info("replay.screened_symbols", kept=len(keep & set(panel["symbol"].astype(str))),
+             of=int(panel["symbol"].nunique()))
+    return out
 
 
 def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
@@ -562,6 +587,8 @@ def run_replay(
     if panel is None:
         panel = build_replay_panel(store, start_d, end_d)
     panel = _sessions_only(panel, start_d - timedelta(days=WARMUP_CALENDAR_DAYS), end_d)
+    if screen_universe:
+        panel = _screened_symbols_only(panel, settings, store, start_d, end_d)
     panel = _with_patterns2(panel)
     panel = _with_edgar(store, panel)
     panel = _with_extras(panel, strat_map.values())

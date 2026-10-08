@@ -418,3 +418,45 @@ def test_replay_scans_and_measures_breadth_on_the_point_in_time_universe(monkeyp
     run_replay(Settings(), _universe_store(), "2024-03-01", "2024-04-30", strategies=[unscreened], trials_path=None,
                record_shadow=False, screen_universe=False)
     assert "THIN" in unscreened.seen
+
+
+def test_screened_symbol_prefilter_leaves_results_unchanged(monkeypatch):
+    syms = ["SPY", *SampleProvider().stocks[:15]]
+    bars = SampleProvider().daily_bars(syms, date(2023, 9, 1), date(2025, 4, 30))
+    junk = []
+    for k in range(6):  # sub-$5, thinly traded names the universe screen never admits
+        j = bars.loc[bars["symbol"] == syms[1 + k]].copy()
+        j["symbol"] = f"JUNK{k}"
+        for c in ("open", "high", "low", "close"):
+            j[c] = j[c] / 40.0
+        j["volume"] = 1_000.0
+        junk.append(j)
+    settings = Settings(
+        risk=RiskConfig(max_open_positions=6),
+        strategies={"rsi2_meanrev": {"enabled": True, "min_reward_risk": 0.0}, "sr_bounce": {"enabled": True},
+                    "pullback_trend": {"enabled": True}},
+    )
+
+    def go() -> Any:
+        store = Store()
+        store.write_bars(pd.concat([bars, *junk], ignore_index=True))
+        res = run_replay(settings, store, "2024-09-03", "2025-04-15", use_router=False, trials_path=None)
+        shadow = store.read_table(REPLAY_SHADOW_TABLE).sort_values(["strategy", "symbol", "as_of"])
+        return res, shadow.drop(columns=["recorded_at"], errors="ignore").reset_index(drop=True)
+
+    kept: list[int] = []
+    real = replay_mod._screened_symbols_only
+
+    def spy(panel, *a, **k):
+        out = real(panel, *a, **k)
+        kept.append(out["symbol"].nunique())
+        return out
+
+    monkeypatch.setattr(replay_mod, "_screened_symbols_only", spy)
+    fast, fast_shadow = go()
+    monkeypatch.setattr(replay_mod, "_screened_symbols_only", lambda panel, *a, **k: panel)
+    full, full_shadow = go()
+    assert kept and kept[0] < len(syms) + 6  # the junk names were dropped
+    assert fast.summary["n_signals"] == full.summary["n_signals"] > 0
+    pd.testing.assert_frame_equal(pd.DataFrame(fast.trades), pd.DataFrame(full.trades))
+    pd.testing.assert_frame_equal(fast_shadow, full_shadow)
