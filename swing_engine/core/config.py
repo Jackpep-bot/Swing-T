@@ -91,6 +91,9 @@ class AgentConfig(BaseModel):
     review_model: str = "claude-sonnet-5-5"
     lab_model: str = "claude-opus-5-5"
     max_candidates_per_day: int = 20
+    #: False keeps the automatic pipeline off the paid Anthropic API: the nightly skips the review step and writes
+    #: table-only journals, and the monitor alerts without the Haiku classifier. Explicit `swing review` still runs.
+    llm_enabled: bool = True
 
 
 class ExecutionConfig(BaseModel):

@@ -283,3 +283,16 @@ def test_failed_positions_step_holds_new_entries(settings: Settings, tmp_path: P
     execute = report.step("execute")
     assert execute.data["entries_held_positions_failed"] >= 1 and "positions step failed" in execute.detail
     assert execute.data["submitted"] == 0 and broker.open_orders() == []
+
+
+def test_llm_disabled_skips_review_and_journal_prose(settings: Settings, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom(*_: Any, **__: Any) -> Any:
+        raise AssertionError("no Claude client may be built when agent.llm_enabled is false")
+
+    monkeypatch.setattr("swing_engine.agent.client.get_async_client", boom)
+    monkeypatch.setattr("swing_engine.agent.client.get_client", boom)
+    off = settings.model_copy(update={"agent": settings.agent.model_copy(update={"llm_enabled": False})})
+    report = run_nightly(off, Secrets(_env_file=None, anthropic_api_key="sk-ant-test"), AS_OF, "sample", 50_000.0,
+                         False, journal_root=tmp_path)
+    assert status(report, "review") == "skip" and "llm_enabled" in report.step("review").detail
+    assert status(report, "journal") == "ok"

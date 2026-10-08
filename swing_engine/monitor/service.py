@@ -770,7 +770,7 @@ def build_pipeline(
     mon = settings.monitor
     rules: list[Rule] = [*build_rules(), OpsRule()]
     classifier = None
-    if not dry_run and secrets.anthropic_api_key:
+    if not dry_run and secrets.anthropic_api_key and settings.agent.llm_enabled:
         classifier = HaikuClassifier(model=mon.classify_model, api_key=secrets.anthropic_api_key)
     policy = AlertPolicy(cooldown_min=mon.per_ticker_cooldown_min, hourly_cap=mon.hourly_alert_cap,
                          quiet_hours_et=tuple(mon.quiet_hours_et))

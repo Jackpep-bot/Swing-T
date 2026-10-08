@@ -1690,7 +1690,7 @@ def journal(
     fills = _load_json(_run_file(settings, "fills", as_of_d), [])
     write_entry = _load("agent.journal.write_entry")
     secrets = load_secrets()
-    narrative = bool(secrets.anthropic_api_key)  # tables only when no key; prose needs the API
+    narrative = bool(secrets.anthropic_api_key) and settings.agent.llm_enabled  # prose needs the API
     client = _anthropic_client(secrets, async_client=False) if narrative else None
     out = _call_supported(
         write_entry, as_of_d, signals, reviews, intents, fills, settings=settings, narrative=narrative, client=client

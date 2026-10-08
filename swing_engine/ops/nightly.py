@@ -886,6 +886,8 @@ def _step_review(ctx: _Context) -> tuple[str, dict[str, Any]]:
 def _review_body(ctx: _Context) -> tuple[str, dict[str, Any]]:
     if ctx.dry_run:
         raise Skip("dry run: no Claude calls")
+    if not ctx.settings.agent.llm_enabled:
+        raise Skip("agent.llm_enabled is false: no Claude calls")
     if not ctx.secrets.anthropic_api_key:
         raise Skip("ANTHROPIC_API_KEY not set")
     if not ctx.signals:
@@ -1058,7 +1060,7 @@ def _step_execute(ctx: _Context) -> tuple[str, dict[str, Any]]:
 def _step_journal(ctx: _Context) -> tuple[str, dict[str, Any]]:
     write_entry = _load("agent.journal.write_entry")
     fills = _load_json(ctx.file(FILLS_KIND), [])
-    narrative = bool(ctx.secrets.anthropic_api_key) and not ctx.dry_run
+    narrative = bool(ctx.secrets.anthropic_api_key) and not ctx.dry_run and ctx.settings.agent.llm_enabled
     client = ctx.journal_client
     if client is None and narrative:  # same .env-key reason as the review step
         client = _load("agent.client.get_client")(ctx.secrets)
