@@ -1,7 +1,13 @@
-# Real-data settings: everything from settings.yaml, with the real-market store and event log.
+# Real-data settings: everything from settings.yaml, with the real-market store, its own runs/ (next to the store),
+# its own order ledger and limits state. Sample artifacts from before 2026-10-08 are in data/sample_archive/ and
+# state/sample_archive/. The kill switch (state/KILL) and data/journal are shared.
 # Use with: uv run swing --settings config/live.yaml <command>
 extends: settings.yaml
 data:
   bar_provider: massive
-  store_path: data/market.duckdb
-  event_log_path: data/market_events.sqlite
+  store_path: data/live/market.duckdb
+  event_log_path: data/live/market_events.sqlite
+risk:
+  limits_state_file: state/live/limits.json
+execution:
+  ledger_file: state/live/orders.sqlite
