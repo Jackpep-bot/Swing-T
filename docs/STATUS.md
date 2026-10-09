@@ -58,19 +58,12 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-09 ~01:00 ET
-Approved data built and ingested into data/live/market.duckdb (now the REPAIRED store; the pre-repair copy is
-data/live/market_prerepair.duckdb): insider_trades (SEC Form 4 2006-2026, 4.28M rows), vix (1990-), ff_factors
-(Ken French), listings + ~2,800 delisted 2017-24 names under TICKER~YYYYMMDD keys, repairs table (undo with
-`swing --settings config/live.yaml repair-store --undo 20261009T004831079105Z`).
-Paper trading is off (no leaderboard survivors); nightly scans 21 shadow-only strategies; launchd 06:30 ET weekdays.
+## Resume here (in order) - updated 2026-10-09 14:30 ET
+v2 results (repaired store with ~2,800 delisted names, insider/VIX/French data, per-stock spread costs):
+docs/leaderboard.md over 794 trials - NO survivors; 128 cards updated. Stores: data/live/replay_r2.duckdb (2024-26 +
+2017-24 chunks 7-8), data/live/replay_r1.duckdb (2017-24 chunks 1-6). Paper trading off; the launchd nightly ran on
+its own 2026-10-09 (21 shadow strategies, weekly report data/journal/weekly-2026-W41.md).
 
-1. v2 replays running (nohup): scripts/lane_r1.sh (2017-24, store data/live/replay_r1.duckdb) and scripts/lane_r2.sh
-   (2024-26, data/live/replay_r2.duckdb), 8 chunks each, tags v2c1..v2c8, logs data/logs/replay/lane_r{1,2}.log.
-   If a chunk is missing, rerun its line from the lane script.
-2. When both are DONE: cards + leaderboard from the v2 stores only:
-   uv run python -m swing_engine.research.leaderboard --settings config/replay_r2.yaml --store data/live/replay_r1.duckdb
-   uv run python -m swing_engine.research.cards --settings config/replay_r2.yaml --store data/live/replay_r1.duckdb
-   Commit; report survivors in five lines. Sensitivity: delisting loss -1.0 (data.delist_return_performance).
-3. Remaining from the queued prompt: done (skills, proposal, methods). Next ideas in docs/methods.md
-   "Order of work" (bootstrap reality check / SPA, PBO wiring, cross-trial Sharpe variance).
+Next (needs Jack's direction): the data and strategy catalog are exhausted without a survivor. Options in
+docs/methods.md "Order of work": combine weak signals (ranker / signal combination) instead of single strategies,
+bootstrap reality check / SPA across the 794 trials, longer shadow-ledger evidence before any paper trading.
