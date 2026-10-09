@@ -228,6 +228,13 @@ def _screened_symbols_only(
     return out
 
 
+def _delisting_returns(store: Any, settings: Settings) -> dict[str, float]:
+    """``data.delisted.delisting_returns``: exit multipliers for held entity keys that delisted for performance."""
+    from swing_engine.data.delisted import delisting_returns
+
+    return delisting_returns(store, settings)
+
+
 def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
     """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``) and the VIX / French factor columns
     (``data.market_series.join_market_series``) when the store has them."""
@@ -596,6 +603,7 @@ def run_replay(
     panel = _with_edgar(store, panel)
     panel = _with_extras(panel, strat_map.values())
     view = _PanelView(panel)
+    view.delist_mult = _delisting_returns(store, settings)
     i0, i1 = view.index_range(start_d, end_d)
     rows = _SymbolRows(view)
     regime_at = _RegimeLookup(None, view.frame)
@@ -657,7 +665,7 @@ def run_replay(
             if math.isnan(raw):
                 if i > view.last_bar_idx[j]:
                     last = int(view.last_bar_idx[j])
-                    close(sym, ExitReason.DELISTED, positions[sym].last_close, view.dates[last])
+                    close(sym, ExitReason.DELISTED, view.delisted_exit(sym, positions[sym].last_close), view.dates[last])
                 continue  # data gap: the market order waits for the next bar
             close(sym, pending_exits[sym], raw, ts)
         n_filled = n_skip = 0
@@ -793,7 +801,7 @@ def run_replay(
 
     shadow_graded = 0
     if shadow_on:
-        shadow_graded = grade_signals(store, end_d, table=shadow_table)
+        shadow_graded = grade_signals(store, end_d, table=shadow_table, delist_returns=view.delist_mult)
 
     bt = BacktestResult(
         strategy=TRIAL_NAME, start=view.dates[i0].date(), end=view.dates[i1].date(), initial_equity=float(equity),

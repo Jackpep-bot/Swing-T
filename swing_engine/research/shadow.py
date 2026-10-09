@@ -34,7 +34,7 @@ outcome columns mirror the longest horizon. Nothing here reads a model or an LLM
 from __future__ import annotations
 
 import math
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -237,10 +237,12 @@ def grade_one(
     delisted: bool = False,
     entry_type: EntryType | str = EntryType.OPEN,
     entry_level: float | None = None,
+    delist_mult: float = 1.0,
 ) -> Grade:
     """Grade one signal on ``bars`` (columns ``day, open, high, low, close``; sessions strictly after the signal,
     oldest first, none after the grading date). ``delisted``: the symbol has stopped trading, so horizons the
-    bars cannot reach close at the last close. Pure function: the rules are in the module docstring."""
+    bars cannot reach close at the last close (times ``delist_mult``, the delisting-return multiplier of a
+    performance delisting, ``data.delisted.delisting_returns``). Pure function: the rules are in the module docstring."""
     hs = sorted({int(h) for h in horizons})
     pending = {h: Outcome(Hit.PENDING.value) for h in hs}
     if bars.empty:
@@ -308,7 +310,7 @@ def grade_one(
     n = min(len(days), max_h)
     gone = None
     if delisted and resolved is None:
-        last_close = float(c[n - 1])
+        last_close = float(c[n - 1]) * delist_mult
         gone = Outcome(Hit.DELISTED.value, d * (last_close - entry) / risk, mfe, mae, days[n - 1], last_close, float(n))
     for h in hs:
         if resolved is not None and resolved_at < h:
@@ -446,6 +448,7 @@ def grade_signals(
     horizons: Sequence[int] = DEFAULT_HORIZONS,
     *,
     table: str = SHADOW_TABLE,
+    delist_returns: Mapping[str, float] | None = None,
 ) -> int:
     """Fill the outcome columns of every recorded signal dated before ``as_of`` that is not final yet.
 
@@ -472,6 +475,10 @@ def grade_signals(
     bars = _bars_by_symbol(store, sorted(frame["symbol"].astype(str).unique()), first, day)
     splits = _load_splits(store)
     market_last = _store_last_session(store, day)
+    if delist_returns is None:
+        from swing_engine.data.delisted import delisting_returns
+
+        delist_returns = delisting_returns(store)
     rows: list[dict[str, Any]] = []
     newly = 0
     for rec in frame.to_dict("records"):
@@ -485,7 +492,8 @@ def grade_signals(
         kind = rec.get("entry_type")
         kind = EntryType.OPEN if kind is None or pd.isna(kind) else kind
         grade = grade_one(str(rec["side"]), float(rec["stop"]) / factor, target, after, hs, delisted=delisted,
-                          entry_type=kind, entry_level=float(rec["entry"]) / factor)
+                          entry_type=kind, entry_level=float(rec["entry"]) / factor,
+                          delist_mult=delist_returns.get(str(rec["symbol"]), 1.0))
         key = {k: rec[k] for k in KEYS}
         row = _outcome_row(key, grade, hs, day)
         _keep_final_horizons(row, rec, hs)

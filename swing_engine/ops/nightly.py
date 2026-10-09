@@ -631,6 +631,7 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
     log.info("features_universe", how=how, store_symbols=in_store, screened=None if universe is None else len(universe),
              held=len(held), kept=None if keep is None else len(keep))
     bars = ctx.store.read_bars(keep, start, ctx.as_of)
+    bars = _load("data.delisted.drop_entity_keys")(bars)  # research-only TICKER~YYYYMMDD keys never reach live
     if bars is None or len(bars) == 0:
         raise RuntimeError(f"no bars in the store for {start}..{ctx.as_of}; ingest first")
     build_panel = _load("features.panel.build_panel")

@@ -912,6 +912,47 @@ def ingest_french(ctx: typer.Context) -> None:
     _print_mapping("Ken French factors ingest", dict(_load("data.market_series.run_french_ingest")(store) or {}))
 
 
+@app.command("repair-store")
+def repair_store(
+    ctx: typer.Context,
+    apply: Annotated[bool, typer.Option("--apply/--dry-run", help="write the repair (default: dry run, no writes)")] = False,
+    undo: Annotated[str | None, typer.Option("--undo", help="reverse one applied run by its run_id")] = None,
+) -> None:
+    """Drop pre-2024-10-07 zero-volume filler and split ticker-reuse joins into TICKER~YYYYMMDD keys
+    (data.repair; every change logged in `repairs`). Run on a backup copy first."""
+    store = _open_store(_state(ctx).settings)
+    repair = _load("data.repair")
+    if undo:
+        _print_mapping(f"Repair {undo} reverted", repair.undo_repair(store, undo))
+        return
+    result = repair.apply(store) if apply else repair.plan(store)
+    _print_frame("Zero-volume filler by symbol", result["filler"])
+    _print_frame("Ticker-reuse splits", result["splits"])
+    _print_mapping("Store repair" + (" APPLIED" if apply else " (dry run, nothing written)"),
+                   {k: v for k, v in result.items() if k not in ("filler", "splits")})
+
+
+@app.command("ingest-delisted")
+def ingest_delisted(
+    ctx: typer.Context,
+    refresh: Annotated[bool, typer.Option("--refresh", help="re-enumerate the candidates (Massive + Alpha Vantage)")] = False,
+    limit: Annotated[int | None, typer.Option("--limit", help="fetch at most N candidates this run")] = None,
+) -> None:
+    """Delisted 2017-2024 US common stocks: enumerate (Massive inactive tickers + AV dated delisted lists), fetch
+    Alpaca SIP bars, store under TICKER~YYYYMMDD keys with `listings` rows (data.delisted). Resumable."""
+    settings = _state(ctx).settings
+    secrets = load_secrets()
+    store = _open_store(settings)
+    alpaca = _make_provider("alpaca", settings, secrets)
+    alpaca.feed = "sip"  # historical SIP bars older than 15 minutes are free
+    massive = _make_provider("massive", settings, secrets) if secrets.massive_api_key else None
+    result = _load("data.delisted.run_delisted_ingest")(
+        store, alpaca, massive=massive, av_key=secrets.alphavantage_api_key, refresh=refresh, limit=limit,
+        progress=_ingest_progress,
+    )
+    _print_mapping("Delisted ingest", dict(result or {}))
+
+
 def _ingest_progress(line: str) -> None:
     """`run_ingest(progress=)` sink: estimate and every-N-sessions progress lines go to the console."""
     _console().print(escape(line))
@@ -1138,6 +1179,7 @@ def backtest(
     overrides = _parse_params(param)
     strat = _make_strategy(strategy, settings, overrides)
     universe_at: Callable[[date], frozenset[str]] | None = None
+    delist_returns: dict[str, float] | None = None
 
     if provider:
         panel, market = _panel_from_provider(
@@ -1145,6 +1187,7 @@ def backtest(
         )
     else:
         store = _open_store(settings)
+        delist_returns = _load("data.delisted.delisting_returns")(store, settings)
         panel = _read_panel(store, settings, start_d - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS), end_d, [strat])
         market = _market_slice(panel)  # before the universe screen drops the ETF
         wanted = _split_list(symbols)
@@ -1179,7 +1222,7 @@ def backtest(
     )
     result = _call_supported(
         run_backtest, strat, panel, start_d, end_d, settings.risk, costs,
-        market=market, sizer=sizer, universe_at=universe_at,
+        market=market, sizer=sizer, universe_at=universe_at, delist_returns=delist_returns,
     )
     metrics = dict(summarize(result))
     if not no_log:

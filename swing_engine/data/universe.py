@@ -79,6 +79,8 @@ def filter_symbols(symbols: pd.DataFrame, cfg: UniverseConfig, as_of: date) -> p
     listed = listed_at.isna() | (listed_at <= as_of_ts)
     not_yet_delisted = delisted_at.isna() | (delisted_at > as_of_ts)
     df = df[listed & not_yet_delisted]
+    if df.empty:  # an empty object-dtype mask below would drop the columns
+        return df
     if cfg.exclude_otc:
         df = df[~df["exchange"].map(_is_otc)]
     df = df[df["type"].map(lambda t: _type_allowed(t, cfg.include_etfs))]

@@ -379,7 +379,14 @@ class _PanelView:
         has_bar = ~np.isnan(self.wide["close"])
         n_dates = has_bar.shape[0]
         self.last_bar_idx = np.where(has_bar.any(axis=0), n_dates - 1 - np.argmax(has_bar[::-1], axis=0), -1)
+        #: symbol -> exit multiplier on the last close when its bars stop (data.delisted.delisting_returns)
+        self.delist_mult: dict[str, float] = {}
         self._indexed: pd.DataFrame | None = None
+
+    def delisted_exit(self, symbol: str, last_close: float) -> float:
+        """Raw exit price of a position whose symbol has no more bars: the last close, times the delisting-return
+        multiplier for a performance delisting (Shumway -30% by default), unchanged for mergers / unknown."""
+        return last_close * self.delist_mult.get(symbol, 1.0)
 
     def index_range(self, start: date | None, end: date | None) -> tuple[int, int]:
         mask = np.ones(len(self.dates), dtype=bool)
@@ -598,7 +605,7 @@ def _check_exit(
         if i > view.last_bar_idx[j]:
             last = int(view.last_bar_idx[j])
             pos.bars_held = last - pos.entry_idx + 1
-            return ExitReason.DELISTED, pos.last_close, view.dates[last]
+            return ExitReason.DELISTED, view.delisted_exit(pos.symbol, pos.last_close), view.dates[last]
         return None  # data gap: hold
     pos.bars_held = i - pos.entry_idx + 1
     day = view.dates[i]
@@ -859,6 +866,7 @@ def run_backtest(
     config: BacktestConfig | None = None,
     sizer: Sizer | None = None,
     universe_at: UniverseAt | None = None,
+    delist_returns: Mapping[str, float] | None = None,
 ) -> BacktestResult:
     """Run ``strategy`` over the long feature ``panel`` between ``start`` and ``end`` (inclusive, by date).
 
@@ -867,6 +875,7 @@ def run_backtest(
     ``universe_at(as_of)`` (optional) returns the symbols admissible on that day: signals for names outside
     the point-in-time membership are dropped (counted under ``skip_reasons["not_in_universe"]``), so a
     universe screened on later data cannot admit a name before it would have qualified live.
+    ``delist_returns`` (``data.delisted.delisting_returns``): exit multipliers for performance delistings.
     """
     risk_cfg = risk_cfg or RiskConfig()
     costs = costs or CostModel()
@@ -888,6 +897,7 @@ def run_backtest(
 
     extra = [config.trailing.atr_column] if config.trailing is not None else []
     view = _PanelView(panel, extra)
+    view.delist_mult = dict(delist_returns or {})
     i0, i1 = view.index_range(_as_date(start), _as_date(end))
     regime_at = _RegimeLookup(market, panel)
     max_hold = _max_hold_for(strategy, config)
