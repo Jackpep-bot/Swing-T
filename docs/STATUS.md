@@ -58,15 +58,19 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-08 20:00 ET
-Results: both replays done (stores data/live/replay{,_b,_c,_e}.duckdb). docs/leaderboard.md: NO survivors after costs +
-Harvey-Liu haircut over 750 trials. All 125 cards have Empirical sections. config/live.yaml now trades nothing on
-paper (all strategies shadow-only); 5 paper orders from 2026-10-08 are managed until they exit. launchd nightly
-(06:30 ET weekdays) and monitor run with config/live.yaml; agent.llm_enabled false.
+## Resume here (in order) - updated 2026-10-09 ~01:00 ET
+Approved data built and ingested into data/live/market.duckdb (now the REPAIRED store; the pre-repair copy is
+data/live/market_prerepair.duckdb): insider_trades (SEC Form 4 2006-2026, 4.28M rows), vix (1990-), ff_factors
+(Ken French), listings + ~2,800 delisted 2017-24 names under TICKER~YYYYMMDD keys, repairs table (undo with
+`swing --settings config/live.yaml repair-store --undo 20261009T004831079105Z`).
+Paper trading is off (no leaderboard survivors); nightly scans 21 shadow-only strategies; launchd 06:30 ET weekdays.
 
-1. Jack's queued prompt (memory "queued-skills-data-prompt"), in order: skills rewrite (commit), ranked free-data
-   proposal (proposal ONLY until he approves), docs/methods.md summary.
-2. Weekly report from the nightly on the week's last session; watch the shadow ledger and the dashboard Drift tab.
-3. Re-run cards/leaderboard after any new data or strategy change:
-   uv run python -m swing_engine.research.leaderboard --settings config/replay.yaml --store data/live/replay_b.duckdb
-     --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb   (cards: same args)
+1. v2 replays running (nohup): scripts/lane_r1.sh (2017-24, store data/live/replay_r1.duckdb) and scripts/lane_r2.sh
+   (2024-26, data/live/replay_r2.duckdb), 8 chunks each, tags v2c1..v2c8, logs data/logs/replay/lane_r{1,2}.log.
+   If a chunk is missing, rerun its line from the lane script.
+2. When both are DONE: cards + leaderboard from the v2 stores only:
+   uv run python -m swing_engine.research.leaderboard --settings config/replay_r2.yaml --store data/live/replay_r1.duckdb
+   uv run python -m swing_engine.research.cards --settings config/replay_r2.yaml --store data/live/replay_r1.duckdb
+   Commit; report survivors in five lines. Sensitivity: delisting loss -1.0 (data.delist_return_performance).
+3. Remaining from the queued prompt: done (skills, proposal, methods). Next ideas in docs/methods.md
+   "Order of work" (bootstrap reality check / SPA, PBO wiring, cross-trial Sharpe variance).
