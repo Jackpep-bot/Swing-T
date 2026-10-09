@@ -155,7 +155,7 @@ def log_board_trials(board: pd.DataFrame) -> int:
     return n
 
 
-def main(argv: Sequence[str] | None = None) -> None:
+def main(argv: Sequence[str] | None = None) -> tuple[pd.DataFrame, int]:
     from swing_engine.core.config import load_settings
 
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -174,6 +174,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     log_board_trials(board)
     (ROOT / args.out).write_text(render(board, n_trials))
     print(f"{len(board)} rows, {n_trials} trials, {len(survivors(board))} survivor rows -> {args.out}")
+    return board, n_trials
 
 
 if __name__ == "__main__":

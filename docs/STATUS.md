@@ -67,3 +67,12 @@ its own 2026-10-09 (21 shadow strategies, weekly report data/journal/weekly-2026
 Next (needs Jack's direction): the data and strategy catalog are exhausted without a survivor. Options in
 docs/methods.md "Order of work": combine weak signals (ranker / signal combination) instead of single strategies,
 bootstrap reality check / SPA across the 794 trials, longer shadow-ledger evidence before any paper trading.
+
+## Research commands
+- Full research pass (every registered strategy, both windows, parallel lanes sized from free memory up to 40 GB,
+  cards + leaderboard + Telegram summary at the end; refuses on battery and while the live store is being written):
+  `nohup uv run swing --settings config/live.yaml research run --windows short,long > /dev/null 2>&1 &`
+  Progress `tail -f data/logs/research/<run-id>.log`; manifest `data/live/runs/research/<run-id>.json`.
+- Resume unfinished chunks: `uv run swing --settings config/live.yaml research run --resume latest`.
+- Cards + leaderboard again over the latest run's lane stores: `uv run swing --settings config/live.yaml research rebuild`.
+- The old scripts/lane_r*.sh and run_research_replays.sh are gone; replay_r1/r2.duckdb stay as the v2 record.

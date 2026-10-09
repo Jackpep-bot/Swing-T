@@ -41,3 +41,26 @@ class _Probe(PanelStrategy):
 def test_rows_as_of_empty_slice_keeps_helper_columns(panel):
     rows = _Probe().rows_as_of(panel, date(2000, 1, 3), rolling=[RollingSpec("high", "max", 5, prior=True)])
     assert rows.empty and {"prior_close", "prior_max_high_5"} <= set(rows.columns)
+
+
+def test_rows_as_of_matches_a_per_symbol_reference(panel):
+    """rows_as_of computes helpers on a column subset and copies only the as-of rows (replay speed-up, 2026-10-09):
+    the result must equal the plain per-symbol computation exactly, on a shuffled panel with gaps."""
+    import numpy as np
+    import pandas as pd
+
+    p = panel.sample(frac=1.0, random_state=3)
+    p.loc[p.sample(frac=0.05, random_state=4).index, "low"] = np.nan
+    specs = [RollingSpec("low", "min", 10), RollingSpec("volume", "mean", 7, prior=True),
+             RollingSpec("high", "max", 4, prior=True)]
+    as_of = sorted(p["ts"].unique())[-30].date()
+    got = _Probe().rows_as_of(p, as_of, rolling=specs)
+    for _, row in got.iterrows():
+        h = p.loc[(p["symbol"] == row["symbol"]) & (p["ts"].dt.date <= as_of)].sort_values("ts", kind="stable")
+        assert row.name == h.index[-1]
+        assert row["prior_close"] == h["close"].iloc[-2]
+        for s in specs:
+            ref = getattr(h[s.column].rolling(s.window, min_periods=s.window), s.fn)()
+            want = ref.iloc[-2] if s.prior else ref.iloc[-1]
+            assert (pd.isna(want) and pd.isna(row[s.out])) or row[s.out] == want, s
+    assert len(got) == 3

@@ -27,8 +27,9 @@ from swing_engine.research.shadow import DEFAULT_HORIZONS, REPLAY_SHADOW_TABLE, 
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_DIR = ROOT / "docs" / "strategies"
 SECTION = "## Empirical (replay)"
-#: Tag prefix of the current research replay runs (`swing replay --tag v2c<n>`, scripts/lane_r*.sh, run on the
-#: repaired store with delisted names, 2026-10-09). Older nr*/edgar runs predate the store repair.
+#: Default tag prefix of the research replay runs read by `main` (`--tag`): v2c<n> = the 2026-10-09 runs on the
+#: repaired store with delisted names. `swing research run` tags its chunks <run-id>-<window><n> and passes
+#: `--tag <run-id>`.
 RUN_TAG_PREFIX = "v2c"
 RUNS_SUBDIR = ("runs", "replay")
 PCT = 100.0
@@ -202,9 +203,9 @@ def replace_section(text: str, section: str) -> str:
     return text[:start] + section + ("\n" + tail if tail else "")
 
 
-def load_trades(runs_dir: Path) -> pd.DataFrame:
+def load_trades(runs_dir: Path, tag_prefix: str = RUN_TAG_PREFIX) -> pd.DataFrame:
     frames = []
-    paths = sorted(runs_dir.glob(f"*_{RUN_TAG_PREFIX}*.json"))  # the current --no-router research runs
+    paths = sorted(runs_dir.glob(f"*_{tag_prefix}*.json"))  # the current --no-router research runs
     for path in paths:
         payload = json.loads(path.read_text())
         trades = pd.DataFrame(payload.get("trades") or [])
@@ -272,11 +273,12 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--settings", default="config/replay.yaml")
     ap.add_argument("--store", action="append", default=[], help="extra replay store (repeatable)")
+    ap.add_argument("--tag", default=RUN_TAG_PREFIX, help="replay run tag prefix (`swing research run`: the run id)")
     args = ap.parse_args(argv)
     settings = load_settings.__wrapped__(Path(args.settings))
     store_path = ROOT / settings.data.store_path
     shadow = with_costs(read_shadow([store_path, *(ROOT / s for s in args.store)]), store_path)
-    trades = load_trades(store_path.parent.joinpath(*RUNS_SUBDIR))
+    trades = load_trades(store_path.parent.joinpath(*RUNS_SUBDIR), args.tag)
     slugs = sorted(set(shadow["strategy"].astype(str))) if not shadow.empty else []
     written = write_cards(shadow, trades, slugs)
     print(f"wrote the Empirical section of {len(written)} cards; no card for: "

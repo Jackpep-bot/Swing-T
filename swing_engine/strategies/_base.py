@@ -10,6 +10,7 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any, NamedTuple
 
+import numpy as np
 import pandas as pd
 import structlog
 
@@ -135,29 +136,31 @@ class PanelStrategy(Strategy):
             return panel.iloc[0:0].reindex(columns=empty_cols)
 
         day = _local_day(panel[TS])
-        cutoff = pd.Timestamp(as_of)
-        sub = panel.loc[day <= cutoff]
-        if sub.empty:
-            return sub.reindex(columns=empty_cols)
-        sub = sub.sort_values([SYMBOL, TS], kind="stable")
-        day = _local_day(sub[TS])
+        mask = (day <= pd.Timestamp(as_of)).to_numpy()
+        if not mask.any():
+            return panel.iloc[0:0].reindex(columns=empty_cols)
+        # Order, prior_* and rolling helpers on the few columns they read; only the as-of rows of the full panel
+        # are copied (copying every column of a 300-session slice per strategy per day dominated replay time).
+        cols = list(dict.fromkeys([SYMBOL, TS, *self.prior_columns, *(s.column for s in rolling)]))
+        sub = panel.loc[mask, cols].assign(_day=day[mask].to_numpy(), _pos=np.flatnonzero(mask))
+        sub = sub.sort_values([SYMBOL, TS], kind="stable").reset_index(drop=True)
         grp = sub.groupby(SYMBOL, sort=False)
 
         extra: dict[str, pd.Series] = {}
         for col in self.prior_columns:
             extra[f"{PRIOR_PREFIX}{col}"] = grp[col].shift(1)
         for spec in rolling:
-            series = grp[spec.column].transform(
-                lambda s, spec=spec: getattr(s.rolling(spec.window, min_periods=spec.window), spec.fn)()
-            )
+            # groupby().rolling restarts its window at each symbol, the same arithmetic as a per-symbol rolling
+            roll = grp[spec.column].rolling(spec.window, min_periods=spec.window)
+            series = getattr(roll, spec.fn)().droplevel(0).sort_index()
             if spec.prior:
                 series = series.groupby(sub[SYMBOL], sort=False).shift(1)
             extra[spec.out] = series
-        sub = sub.assign(**extra, _day=day)
 
         session = sub["_day"].max()
-        cur = sub.loc[sub["_day"] == session].groupby(SYMBOL, sort=False).tail(1)
-        return cur.drop(columns="_day")
+        last = sub.loc[sub["_day"] == session].groupby(SYMBOL, sort=False).tail(1).index
+        cur = panel.iloc[sub["_pos"].to_numpy()[last]]
+        return cur.assign(**{k: v.to_numpy()[last] for k, v in extra.items()})
 
     # ----------------------------------------------------------------------------- signal builder
     def build_signal(

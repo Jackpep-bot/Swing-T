@@ -11,18 +11,17 @@ description: Take a strategy hypothesis from card to verdict - pre-register the 
    in one paragraph, the exact param grid (every point is a trial), the windows, the horizon you will judge (5/10/20d),
    and the stop rule ("drop it if no positive haircut Sharpe in both windows"). Do not add params after seeing results.
 2. Implement or modify the module with the add-strategy skill. The full test suite and ruff must be green.
-3. Replay both windows on a research store, never the live one, as a long job (backtest skill: AC power, nohup, at most
-   2 at once, a separate store copy per concurrent replay):
-   `uv run swing --settings config/replay.yaml replay --start 2024-10-07 --end 2026-10-05 --no-router -s <slug> --tag <tag>`
-   `uv run swing --settings config/replay.yaml replay --start 2017-01-01 --end 2024-10-04 --no-router -s <slug> --tag <tag>`
-   For each grid point other than the settings default, use a fresh store copy and a settings file that sets the
-   params. The replay ledger upserts by (strategy, symbol, as_of), so two param sets in one store overwrite each other.
-4. Rebuild the cards and the leaderboard over every research store:
-   `uv run python -m swing_engine.research.cards --settings config/replay.yaml --store data/live/replay_b.duckdb --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb`
-   `uv run python -m swing_engine.research.leaderboard --settings config/replay.yaml --store data/live/replay_b.duckdb --store data/live/replay_c.duckdb --store data/live/replay_e.duckdb`
-   Add the new store with another `--store`. The leaderboard writes `docs/leaderboard.md`. Its haircut uses
-   max(logged trials, strategies x 3 horizons x 2 windows). A survivor has a positive haircut Sharpe at the same horizon
-   in BOTH windows, net of 10 bp/side slippage, with R graded on planned risk and stops under the 0.25% floor dropped.
+3. Replay both windows (backtest skill, "Long jobs"; AC power, detached):
+   `nohup uv run swing --settings config/live.yaml research run --windows short,long -s <slug> > /dev/null 2>&1 &`
+   It copies the live store per lane, replays, and rebuilds the cards and leaderboard over that run's stores
+   (`swing research rebuild` repeats the rebuild). For each grid point other than the settings default, run a
+   separate `research run` with a settings file that extends config/live.yaml and sets the params: the replay ledger
+   upserts by (strategy, symbol, as_of), so two param sets in one store overwrite each other.
+4. Read the result: `docs/leaderboard.md` (survivors) and the card's `## Empirical (replay)` section. The haircut uses
+   max(logged trials, strategies x 3 horizons x 2 windows). A survivor has a positive haircut Sharpe at the same
+   horizon in BOTH windows, net of per-stock spread costs, with R graded on planned risk and stops under the 0.25%
+   floor dropped. The leaderboard of a `-s <slug>` run only covers that run's strategies: compare its trial count
+   with the full board's before calling anything a survivor.
 5. Verdict. Not a survivor: record it in the card and stop. Do not widen the grid, change the horizon or swap filters
    to rescue it; that is a new hypothesis and more trials. Survivor: run the walk-forward skill. For a published
    predictor, also do the manual Chen-Zimmermann check (gates.md gate 2). Plan on at most half the published edge.

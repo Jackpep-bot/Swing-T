@@ -198,13 +198,22 @@ def _session_days() -> Callable[[date, date], list[date]] | None:
     return trading_days
 
 
-def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
-    """Store bars from ``start - WARMUP_CALENDAR_DAYS`` to ``end`` -> ``features.panel.build_panel`` (SPY as market)."""
+def build_replay_panel(store: Any, start: date, end: date, settings: Settings | None = None) -> pd.DataFrame:
+    """Store bars from ``start - WARMUP_CALENDAR_DAYS`` to ``end`` -> ``features.panel.build_panel`` (SPY as market).
+
+    With ``settings``, symbols no universe screen in ``start..end`` admits (``_screened_symbols_only``) are dropped
+    from the bars first: every panel feature is computed per symbol, so the kept rows are unchanged and the
+    feature build skips the ~80% of the store that is never scanned."""
     from swing_engine.features.panel import build_panel
 
-    bars = store.read_bars(None, start - timedelta(days=WARMUP_CALENDAR_DAYS), end)
+    first = start - timedelta(days=WARMUP_CALENDAR_DAYS)
+    bars = store.read_bars(None, first, end)
     if bars is None or bars.empty:
-        raise ValueError(f"no bars in the store between {start - timedelta(days=WARMUP_CALENDAR_DAYS)} and {end}")
+        raise ValueError(f"no bars in the store between {first} and {end}")
+    if settings is not None:
+        screened = _screened_symbols_only(_sessions_only(bars, first, end), settings, store, start, end)
+        if len(screened) < len(bars):
+            bars = bars.loc[bars["symbol"].isin(set(screened["symbol"]))]
     market = bars.loc[bars["symbol"] == MARKET_SYMBOL]
     return build_panel(bars, market if not market.empty else None)
 
@@ -594,15 +603,17 @@ def run_replay(
         raise ValueError(f"end {end_d} is before start {start_d}")
     costs = costs or CostModel()
     strat_map = _resolve_strategies(settings, strategies)
+    screened_bars = panel is None and screen_universe
     if panel is None:
-        panel = build_replay_panel(store, start_d, end_d)
+        panel = build_replay_panel(store, start_d, end_d, settings if screen_universe else None)
     panel = _sessions_only(panel, start_d - timedelta(days=WARMUP_CALENDAR_DAYS), end_d)
-    if screen_universe:
+    if screen_universe and not screened_bars:
         panel = _screened_symbols_only(panel, settings, store, start_d, end_d)
     panel = _with_patterns2(panel)
     panel = _with_edgar(store, panel)
     panel = _with_extras(panel, strat_map.values())
     view = _PanelView(panel)
+    panel = None  # view.frame is a sorted copy: let the unsorted one go
     view.delist_mult = _delisting_returns(store, settings)
     i0, i1 = view.index_range(start_d, end_d)
     rows = _SymbolRows(view)

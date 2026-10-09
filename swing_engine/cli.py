@@ -117,6 +117,8 @@ shadow_app = typer.Typer(help="Shadow ledger: forward outcomes of every signal, 
 app.add_typer(rank_app, name="rank")
 app.add_typer(monitor_app, name="monitor")
 app.add_typer(shadow_app, name="shadow")
+research_app = typer.Typer(help="Research replays of every strategy in parallel lanes, then cards + leaderboard.")
+app.add_typer(research_app, name="research")
 
 
 @dataclass
@@ -2258,6 +2260,46 @@ def monitor_outcomes(
         _console().print(f"no alert outcomes in the last {days} days")
         return
     _print_frame(f"Alert outcomes, last {days} days", pd.DataFrame(frame))
+
+
+@research_app.command("run")
+def research_run(
+    ctx: typer.Context,
+    windows: Annotated[str, typer.Option("--windows", help="comma-separated: short (2024-26), long (2017-24)")] = "short,long",
+    strategies: Annotated[
+        list[str] | None, typer.Option("--strategies", "-s", help="repeat or comma-separate (default: all registered)")
+    ] = None,
+    lanes: Annotated[str, typer.Option("--lanes", help="parallel replays, or auto (from free memory, <= 40 GB)")] = "auto",
+    resume: Annotated[str | None, typer.Option("--resume", help="run id (or latest): rerun its unfinished chunks")] = None,
+    allow_battery: Annotated[bool, typer.Option("--allow-battery", help="run on battery power")] = False,
+) -> None:
+    """Copy the --settings store (config/live.yaml: the live store) to one store per lane, replay every strategy in
+    chunks on both windows (`swing replay --no-router`), then rebuild the cards and docs/leaderboard.md. Progress:
+    data/logs/research/<run-id>.log; manifest: <store dir>/runs/research/<run-id>.json. Safe under nohup."""
+    st = _state(ctx)
+    if st.settings_path is None:
+        _fail("pass --settings (config/live.yaml): the lanes copy its store and extend it", EXIT_USAGE)
+    runner = importlib.import_module("swing_engine.research.runner")
+    try:
+        summary = runner.run(
+            st.settings_path, _store_path(st.settings), _store_path(st.settings).parent / RUNS_DIRNAME,
+            windows=_split_list([windows]) or [], strategies=_split_list(strategies), lanes=lanes, resume=resume,
+            allow_battery=allow_battery,
+        )
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        _fail(str(exc))
+    _print_mapping("Research run", summary)
+
+
+@research_app.command("rebuild")
+def research_rebuild(
+    ctx: typer.Context,
+    run_id: Annotated[str | None, typer.Option("--run-id", help="default: the latest run")] = None,
+) -> None:
+    """Cards + leaderboard over the lane stores of a `swing research run` (its manifest)."""
+    runner = importlib.import_module("swing_engine.research.runner")
+    manifest = runner.load_manifest(_store_path(_state(ctx).settings).parent / RUNS_DIRNAME, run_id)
+    _print_mapping("Research rebuild", runner.rebuild(manifest, runner.file_logger(manifest["run_id"])))
 
 
 if __name__ == "__main__":  # pragma: no cover

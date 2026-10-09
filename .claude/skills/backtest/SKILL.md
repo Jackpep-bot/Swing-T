@@ -24,15 +24,24 @@ description: Run a single-strategy backtest or a multi-strategy replay on real d
 - The replay ledger: `uv run swing --settings config/replay.yaml shadow report --replay --by strategy --horizon 10`.
 - The trial log: `uv run swing trials --last 20 [--name <strategy>]`.
 
-## Long jobs (replay over the long window, big grids)
-- Check `pmset -g batt | head -1` says `AC Power`. On battery the Mac sleeps and caffeinate cannot stop it.
-- Run with nohup in the background, logging to `data/logs/replay/<tag>.log` (see `scripts/run_research_replays.sh`).
-  App restarts kill terminal tabs.
-- Run at most 2 replays at once (~15-20 GB each on this 51 GB Mac), and never next to another heavy job.
-- `replay` opens its store for writing. Never point it at the store the nightly or an ingest is writing. Each
-  concurrent replay needs its own store copy and settings file, e.g. a scratch yaml with
-  `extends: /Users/personal/Desktop/swing-engine/config/replay.yaml` and `data: {store_path: data/live/replay_b.duckdb}`.
-  The leaderboard and cards merge them with `--store`.
+## Long jobs (every strategy over both windows)
+- One command does it all: copy the live store once per lane, chunk every registered strategy (16 per chunk), replay
+  each chunk on both windows as a subprocess, then rebuild the cards and `docs/leaderboard.md` over all lane stores
+  and send the Telegram research summary (when configured):
+  `nohup uv run swing --settings config/live.yaml research run --windows short,long > /dev/null 2>&1 &`
+  Options: `-s a,b` (subset), `--lanes N` (default `auto`: 18 GB per lane within free memory, 40 GB total),
+  `--allow-battery`. Progress: `tail -f data/logs/research/<run-id>.log`; each chunk's output is in
+  `data/logs/research/<run-id>/<tag>.log`; the manifest (lane stores, chunk status) is
+  `data/live/runs/research/<run-id>.json`.
+- It refuses to start on battery (the Mac sleeps; caffeinate cannot stop it) and when the live store is open for
+  writing (nightly, ingest): retry after.
+- A failed chunk is retried once; after that, `uv run swing --settings config/live.yaml research run --resume latest`
+  replays only the unfinished chunks on their own lane stores, then rebuilds.
+- `uv run swing --settings config/live.yaml research rebuild [--run-id <id>]` reruns cards + leaderboard over a run's
+  lane stores without replaying.
+- For one strategy or a param grid point, a single `replay` on its own store copy is still fine: never point it at
+  the store the nightly or an ingest is writing, and give each concurrent replay its own store copy and settings
+  file (`extends: /Users/personal/Desktop/swing-engine/config/replay.yaml` + `data: {store_path: ...}`).
 
 ## Trials and significance
 - Every run you look at is logged. The log is `data/trials.jsonl`: never edit or prune it. `--no-log` is only for
