@@ -303,6 +303,23 @@ def _pick_series(bars: pd.DataFrame, ticker: str, delist: date) -> pd.DataFrame:
     return best
 
 
+def _fetch_bars(alpaca: Any, tickers: list[str], end: date) -> pd.DataFrame:
+    """One request for the chunk; when Alpaca rejects it (e.g. "invalid symbol: UPL1"), one request per ticker,
+    skipping the ones it rejects, so a single bad symbol never stops the run."""
+    try:
+        return alpaca.daily_bars(tickers, ALPACA_HISTORY_START, end)
+    except Exception as exc:  # noqa: BLE001 - the SDK raises its own APIError
+        log.warning("delisted_chunk_rejected", error=str(exc)[:200], tickers=len(tickers))
+    frames = []
+    for t in tickers:
+        try:
+            frames.append(alpaca.daily_bars([t], ALPACA_HISTORY_START, end))
+        except Exception as exc:  # noqa: BLE001
+            log.warning("delisted_ticker_rejected", ticker=t, error=str(exc)[:200])
+    frames = [f for f in frames if f is not None and not f.empty]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def run_delisted_ingest(
     store: Any,
     alpaca: Any,
@@ -347,7 +364,7 @@ def run_delisted_ingest(
     for i in range(0, len(pending), FETCH_CHUNK):
         chunk = pending.iloc[i : i + FETCH_CHUNK]
         tickers = sorted({t for t in chunk["ticker"]} | {t + BANKRUPT_SUFFIX for t in chunk["ticker"]})
-        bars = alpaca.daily_bars(tickers, ALPACA_HISTORY_START, max(chunk["delist_date"]) + timedelta(days=15))
+        bars = _fetch_bars(alpaca, tickers, max(chunk["delist_date"]) + timedelta(days=15))
         listings, metas, frames, status = [], [], [], []
         for cand in chunk.to_dict("records"):
             seg = _pick_series(bars, cand["ticker"], cand["delist_date"]) if not bars.empty else pd.DataFrame()

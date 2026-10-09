@@ -263,3 +263,16 @@ def test_repair_apply_is_logged_and_undo_restores_the_store():
     pd.testing.assert_frame_equal(after.reset_index(drop=True), snapshot.reset_index(drop=True))
     assert store.read_table("repairs")["reverted"].all()
     assert "MON~20180606" not in set(store.read_table("symbols")["symbol"])
+
+
+def test_one_rejected_symbol_does_not_stop_the_chunk() -> None:
+    from swing_engine.data import delisted as dl
+
+    class Alp:
+        def daily_bars(self, tickers, start, end):
+            if "BAD" in tickers:
+                raise RuntimeError('{"message":"invalid symbol: BAD"}')
+            return pd.DataFrame({"symbol": tickers, "close": [1.0] * len(tickers)})
+
+    out = dl._fetch_bars(Alp(), ["AAA", "BAD", "CCC"], date(2020, 1, 1))
+    assert sorted(out["symbol"]) == ["AAA", "CCC"]
