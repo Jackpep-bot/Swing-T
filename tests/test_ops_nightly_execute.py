@@ -305,4 +305,5 @@ def test_all_strategies_disabled_means_no_orders_but_shadow_keeps_grading(settin
     broker = PaperSimBroker()
     report = run_nightly(cfg, no_secrets(), AS_OF, "sample", 50_000.0, False, journal_root=tmp_path, broker=broker)
     assert not broker.open_orders()
+    assert status(report, "scan") == "ok" and report.step("scan").data["signals"] == 0
     assert status(report, "shadow") == "ok"

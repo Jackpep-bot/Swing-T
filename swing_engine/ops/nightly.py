@@ -725,8 +725,8 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
     # sizing an older day's saved signals as the latest ones
     ctx.save(SIGNALS_KIND, [])
     names = _enabled_strategies(ctx.settings)
-    if not names:
-        raise Skip("no strategies enabled in settings and none registered")
+    if not names and not _shadow_only_strategies(ctx.settings):
+        raise Skip("no strategies enabled or shadow-only in settings")
     full = _panel_for(ctx)
     panel, universe_size = _screened(ctx, full)
     ctx.signal_day = _latest_session(panel, ctx.as_of)
