@@ -1240,6 +1240,74 @@ def _resid_mom(ctx: _Ctx, n: str, form: str, skip: str) -> pd.Series:
     return (f * mean_e / np.sqrt(var_e.where(var_e > 0))).astype(float)
 
 
+FF3_COLUMNS = ("ff_mkt_rf", "ff_smb", "ff_hml")  # data.market_series panel columns (decimal daily returns)
+FF_RF_COLUMN = "ff_rf"
+#: data.market_series.FF_PUBLICATION_LAG_MONTHS: a French factor for month D is known from the 1st of month D + 2
+FF_LAG_MONTHS = 2
+VIX_CLOSE_COLUMN = "vix_close"  # data.market_series panel column (same value on every symbol's row)
+
+
+def _window_sums(a: np.ndarray, n: int) -> np.ndarray:
+    """Sum over the ``n`` rows ending at each row (NaN before ``n`` rows); ``a`` has no NaN."""
+    c = np.cumsum(np.concatenate([np.zeros((1, *a.shape[1:])), a]), axis=0)
+    out = np.full(a.shape, np.nan)
+    if len(a) >= n:
+        out[n - 1:] = c[n:] - c[:-n]
+    return out
+
+
+def _ff3_score(y: np.ndarray, mkt: np.ndarray, smb: np.ndarray, hml: np.ndarray, month: np.ndarray,
+               w: int, f: int) -> np.ndarray:
+    """One symbol: at each month's last row fit y = a + b'[mkt, smb, hml] over the last ``w`` rows, score the
+    residuals (intercept excluded) over the last ``f`` rows as sum / population std; a row in month M gets the
+    score from the last row of month M - FF_LAG_MONTHS (NaN if any input in either window is missing)."""
+    k = len(y)
+    x = np.column_stack([np.ones(k), mkt, smb, hml])
+    ok = np.isfinite(y) & np.isfinite(x).all(axis=1)
+    x0, y0 = np.where(ok[:, None], x, 0.0), np.where(ok, y, 0.0)
+    xx, xy = x0[:, :, None] * x0[:, None, :], x0 * y0[:, None]
+    cnt = ok.astype(float)
+    month_end = np.r_[month[1:] != month[:-1], True]
+    idx = np.flatnonzero(month_end & (_window_sums(cnt, w) == w) & (_window_sums(cnt, f) == f))
+    out = np.full(k, np.nan)
+    if idx.size == 0:
+        return out
+    b = (np.linalg.pinv(_window_sums(xx, w)[idx]) @ _window_sums(xy, w)[idx][..., None])[..., 0]
+    sx, sxx, sxy = _window_sums(x0, f)[idx], _window_sums(xx, f)[idx], _window_sums(xy, f)[idx]
+    sum_e = _window_sums(y0, f)[idx] - np.einsum("ij,ij->i", b, sx)
+    sum_e2 = _window_sums(y0 * y0, f)[idx] - 2.0 * np.einsum("ij,ij->i", b, sxy) + np.einsum("ij,ijk,ik->i", b, sxx, b)
+    var = sum_e2 / f - (sum_e / f) ** 2
+    score = np.where(var > 0, sum_e / np.sqrt(np.where(var > 0, var, 1.0)), np.nan)
+    ends = month[idx]
+    pos = np.searchsorted(ends, month - FF_LAG_MONTHS)
+    hit = pos < len(ends)
+    hit[hit] = ends[pos[hit]] == (month - FF_LAG_MONTHS)[hit]
+    out[hit] = score[pos[hit]]
+    return out
+
+
+def _ff3_resid_mom(ctx: _Ctx, n: str, form: str) -> pd.Series:
+    """Residual momentum on the Fama-French 3 factors (Blitz-Huij-Martens 2011; residual_momentum card): regress
+    daily excess returns (r - ff_rf) on ff_mkt_rf, ff_smb, ff_hml over ``n`` bars, score the residuals of the
+    last ``form`` bars. Point-in-time under the French publication lag: a row in month M uses bars and factors
+    through the end of month M-2 only (known from the 1st of M), which is also BHM's t-12 .. t-2 window. NaN when
+    the panel has no ff_* columns (no `swing ingest-french`) or a window has a missing factor day."""
+    if not all(c in ctx.df.columns for c in (FF_RF_COLUMN, *FF3_COLUMNS)):
+        return pd.Series(np.nan, index=ctx.df.index)
+    sess = session_key(ctx.df[TS_COL])
+    month = (sess.dt.year * 12 + sess.dt.month).astype(float)
+    y = ctx.ps(ctx.c, pct_return, 1) - ctx.df[FF_RF_COLUMN].astype(float)
+    w, f = int(n), int(form)
+    return ctx.series(ctx.loop(lambda *a: _ff3_score(*a, w=w, f=f), y, *(ctx.df[c] for c in FF3_COLUMNS), month))
+
+
+def _vix_sma(ctx: _Ctx, n: str) -> pd.Series:
+    """SMA(n) of the joined VIX close (data.market_series), per symbol; NaN without `swing ingest-vix`."""
+    if VIX_CLOSE_COLUMN not in ctx.df.columns:
+        return pd.Series(np.nan, index=ctx.df.index)
+    return ctx.ps(ctx.df[VIX_CLOSE_COLUMN].astype(float), sma, int(n))
+
+
 def _weeks(ctx: _Ctx) -> dict[str, np.ndarray]:
     """Completed W-FRI weeks per symbol, as in ``_wk_macd_hist``: weekly high / low / close / market close (``key``
     = symbol code) and, per row, ``pos`` = index of the latest week whose Friday is on or before the row's session
@@ -1452,6 +1520,8 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"rms_{_N}_of_(\w+)"), _rms, "rms_20_of_roc_12", 1),
     (re.compile(rf"vpn_{_N}"), _vpn, "vpn_30", None),
     (re.compile(rf"resid_mom_{_N}_{_N}_{_N}"), _resid_mom, "resid_mom_120_60_10", None),
+    (re.compile(rf"ff3_resid_mom_{_N}_{_N}"), _ff3_resid_mom, "ff3_resid_mom_60_20", None),
+    (re.compile(rf"vix_sma_{_N}"), _vix_sma, "vix_sma_10", None),
     (re.compile(rf"wk_stoch_{_N}_{_N}"), _wk_stoch, "wk_stoch_10_3", None),
     (re.compile(rf"wk_roc_{_N}"), _wk_roc, "wk_roc_20", None),
     (re.compile(rf"wk_close_max_{_N}"), _wk_close_max, "wk_close_max_20", None),

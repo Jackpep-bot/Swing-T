@@ -72,6 +72,9 @@ class DataConfig(BaseModel):
     event_log_path: str = "data/events.sqlite"
     calendar: str = "NYSE"
     massive_calls_per_min: float | None = None  # paid Massive plans; None = Basic's 5/min (env MASSIVE_CALLS_PER_MIN wins)
+    # exit return when a held delisted entity (`TICKER~YYYYMMDD`, data.delisted) stops trading for a performance reason:
+    # -0.30 = Shumway (1997); -1.0 = conservative (bank failures, Ch.11 equity). Mergers exit at the last close.
+    delist_return_performance: float = Field(default=-0.30, ge=-1.0, le=0.0)
 
 
 class MonitorConfig(BaseModel):
@@ -190,6 +193,7 @@ def default_playbook_overlays() -> dict[str, PlaybookOverlay]:
         ),
         "mcclellan_negative": PlaybookOverlay(multiplier=0.75, params={"osc_below": 0.0}),
         "q25_bearish": PlaybookOverlay(multiplier=0.5, params={"ratio_below": 1.0}),
+        "vix_high": PlaybookOverlay(multiplier=0.5, params={"vix_above": 30.0, "term_ratio_above": 1.0}),
     }
 
 

@@ -597,6 +597,7 @@ def _read_panel(
         bars = _read_bars(store, settings, None, start_d, end_d)
         build_panel = _load("features.panel.build_panel")
         panel = build_panel(bars, _market_slice(bars))
+    panel = _load("data.market_series.join_market_series")(store, panel)  # before extras: ff3_resid_mom reads it
     panel = _with_extras(panel, settings, strategies)
     panel = _load("data.fundamentals.join_edgar")(store, panel)
     panel = _slice_dates(panel, start, end)
@@ -864,17 +865,51 @@ def ingest_edgar(
 ) -> None:
     """Fetch SEC 8-K earnings dates and XBRL fundamentals into the store (data.fundamentals.run_edgar_ingest)."""
     settings = _state(ctx).settings
-    agent = load_secrets().edgar_user_agent or ""
-    if "@" not in agent or agent == Secrets.model_fields["edgar_user_agent"].default:
-        _fail("set EDGAR_USER_AGENT in .env to 'name contact-email' (SEC fair-access policy); the placeholder is refused",
-              EXIT_REFUSED)
-    edgar = _load("data.edgar.Edgar")(agent)
+    edgar = _edgar_client()
     run_edgar_ingest = _load("data.fundamentals.run_edgar_ingest")
     syms = _split_list(symbols)
     store = _open_store(settings, must_exist=syms is None)  # the default universe is the stored bars
     extra = {"refresh_days": refresh_days} if refresh_days is not None else {}
     result = run_edgar_ingest(store, edgar, syms, limit=limit, progress=_ingest_progress, **extra)
     _print_mapping("EDGAR ingest (ticker -> CIK)", dict(result or {}))
+
+
+def _edgar_client() -> Any:
+    agent = load_secrets().edgar_user_agent or ""
+    if "@" not in agent or agent == Secrets.model_fields["edgar_user_agent"].default:
+        _fail("set EDGAR_USER_AGENT in .env to 'name contact-email' (SEC fair-access policy); the placeholder is refused",
+              EXIT_REFUSED)
+    return _load("data.edgar.Edgar")(agent)
+
+
+@app.command("ingest-insiders")
+def ingest_insiders(
+    ctx: typer.Context,
+    start_year: Annotated[int, typer.Option("--start-year", help="first year of quarterly Form 4 data sets")] = 2006,
+    quarters: Annotated[int | None, typer.Option("--quarters", help="fetch at most N quarters this run")] = None,
+) -> None:
+    """Fetch SEC Insider Transactions Data Sets (Form 4 P/S trades) into `insider_trades` (data.insiders)."""
+    settings = _state(ctx).settings
+    edgar = _edgar_client()
+    store = _open_store(settings, must_exist=False)
+    result = _load("data.insiders.run_insider_ingest")(
+        store, edgar, start_year=start_year, quarters=quarters, progress=_ingest_progress
+    )
+    _print_mapping("Insider ingest (Form 4 quarterly data sets)", dict(result or {}))
+
+
+@app.command("ingest-vix")
+def ingest_vix(ctx: typer.Context) -> None:
+    """Fetch Cboe VIX / VIX9D / VIX3M daily history (free, no key) into the `vix` table (data.market_series)."""
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    _print_mapping("Cboe VIX ingest", dict(_load("data.market_series.run_vix_ingest")(store) or {}))
+
+
+@app.command("ingest-french")
+def ingest_french(ctx: typer.Context) -> None:
+    """Fetch Kenneth French daily FF3 + momentum factors (free, no key) into `ff_factors` (data.market_series)."""
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    _print_mapping("Ken French factors ingest", dict(_load("data.market_series.run_french_ingest")(store) or {}))
 
 
 def _ingest_progress(line: str) -> None:

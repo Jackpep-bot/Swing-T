@@ -13,7 +13,7 @@ typical_win_rate: null
 typical_payoff_ratio: null
 evidence_grade: C
 free_data_ok: true
-status: not_built
+status: built_disabled
 ---
 
 # CVR3 VIX market timing
@@ -74,7 +74,9 @@ Everything is mechanical. The only choice is the entry fill (SPY close vs next o
   and vix_close < vix_open` (window variant: all three true at least once in the last 3 bars).
 - Universe: SPY only (optionally QQQ/IWM). Entry: next open. Stop: catastrophic `entry - 3*atr_14` (not in the source).
 - Exit: `vix_close < vix_sma_10[t-1]` or `bars_held >= 4`. `max_hold_days` 4. `min_reward_risk` 0.
-- Missing: VIX ingest; a cross-asset feature join (SPY rows reading VIX columns).
+- Built (2026-10-08): `swing_engine/strategies/connors_cvr3_vix.py`, `enabled: false` in config/settings.yaml. VIX data
+  from `swing ingest-vix` (Cboe CSVs, `vix` table); `data.market_series.join_market_series` puts vix_open/high/low/close on
+  every panel row; extras `vix_sma_10` / `prev_vix_sma_10`. `window` param 1 (default) or 3; long side only.
 
 ## What the router should know
 It fires mostly when the regime classifier says `high_vol_selloff` or `correction`, where the playbook blocks most longs.

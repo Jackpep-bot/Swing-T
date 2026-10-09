@@ -237,9 +237,18 @@ ALL_NAMES = [*ex.EXTRA_FEATURES, *(example for _rx, _fn, example, _inner in ex.E
 def full_and_cut():
     bars = gbm_bars(["AAA", "BBB", "CCC", "SPY"], n_bars=320, seed=9)
     cutoff = bars["ts"].sort_values().unique()[289]
-    full = ex.ensure_extra(build_panel(bars), ALL_NAMES)
-    cut = ex.ensure_extra(build_panel(bars.loc[bars["ts"] <= cutoff]), ALL_NAMES)
+    full = ex.ensure_extra(_with_market_series(build_panel(bars)), ALL_NAMES)
+    cut = ex.ensure_extra(_with_market_series(build_panel(bars.loc[bars["ts"] <= cutoff])), ALL_NAMES)
     return full.loc[full["ts"] <= cutoff].reset_index(drop=True), cut
+
+
+def _with_market_series(panel: pd.DataFrame) -> pd.DataFrame:
+    """Synthetic data.market_series columns (one value per session, same on every symbol): vix_close, ff_*."""
+    day = pd.to_datetime(panel["ts"]).dt.tz_localize(None).dt.normalize()
+    seed = (day - pd.Timestamp("2000-01-01")).dt.days.to_numpy()
+    noise = lambda k: np.random.default_rng(k).normal(0.0, 0.01, seed.max() + 1)[seed]  # noqa: E731
+    return panel.assign(vix_close=15.0 + 100.0 * np.abs(noise(1)), ff_mkt_rf=noise(2), ff_smb=noise(3),
+                        ff_hml=noise(4), ff_rf=0.0001)
 
 
 @pytest.mark.parametrize("name", ALL_NAMES)

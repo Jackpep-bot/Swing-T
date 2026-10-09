@@ -40,6 +40,8 @@ fire in ``MarketState.overlays``; replay / shadow labels append them to the regi
                           off, hl_pct < -10 (catalog ``hill_breadth_model``; doc 06 C)
 - ``mcclellan_negative``  mcclellan_osc < 0 (Keller's healthy bull needs MCO > 0; ``mcclellan_oscillator``)
 - ``q25_bearish``         q25_ratio < 1: fewer stocks up 25% in a quarter than down (``stockbee_primary_q25``)
+- ``vix_high``            the market symbol's joined ``vix_close`` > 30 (``vix_level_regime``) or ``vix9d_close`` /
+                          ``vix_close`` > 1 (term-structure backwardation); needs ``swing ingest-vix``
 
 An input that is NaN or missing never fires an overlay.
 Every number here is arithmetic on panel columns and settings; nothing calls a model.
@@ -108,6 +110,7 @@ OVERLAYS: dict[str, dict[str, float]] = {
     "hill_bearish": {"ad_pct_below": -30.0, "hl_pct_below": -10.0, "min_votes": 2},
     "mcclellan_negative": {"osc_below": 0.0},
     "q25_bearish": {"ratio_below": 1.0},
+    "vix_high": {"vix_above": 30.0, "term_ratio_above": 1.0},
 }
 MS_OVERLAY_STATES = {"market_school_pressure": MS_UNDER_PRESSURE, "market_school_correction": MS_CORRECTION}
 #: features.market_school states as numbers for ``MarketState.inputs``
@@ -408,8 +411,28 @@ def fired_overlays(
         val = _f(row.get(col))
         if name in on and _finite(val) and val < on[name][key]:
             fired.append(name)
+    if "vix_high" in on:
+        vix, ratio = _vix_inputs(panel, as_of, cfg)
+        for key, val in (("vix_close", vix), ("vix9d_vix_ratio", ratio)):
+            if _finite(val):
+                inputs[key] = val
+        p = on["vix_high"]
+        if (_finite(vix) and vix > p["vix_above"]) or (_finite(ratio) and ratio > p["term_ratio_above"]):
+            fired.append("vix_high")
     notes = [f"overlays fired: {', '.join(fired)} (risk scaled down)"] if fired else []
     return fired, notes, inputs
+
+
+def _vix_inputs(panel: pd.DataFrame, as_of: date, cfg: PlaybookConfig) -> tuple[float, float]:
+    """(VIX close, VIX9D / VIX) on the market symbol's last row on or before ``as_of``; NaN without the columns."""
+    if "vix_close" not in panel.columns:
+        return math.nan, math.nan
+    rows = _on_or_before(panel.loc[panel[SYMBOL] == cfg.market_symbol], as_of)
+    if rows.empty:
+        return math.nan, math.nan
+    last = rows.sort_values(TS).iloc[-1]
+    vix, v9 = _f(last.get("vix_close")), _f(last.get("vix9d_close"))
+    return vix, (v9 / vix if _finite(v9) and _finite(vix) and vix > 0 else math.nan)
 
 
 # --------------------------------------------------------------------------------------------- public API

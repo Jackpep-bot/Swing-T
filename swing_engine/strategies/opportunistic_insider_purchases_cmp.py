@@ -6,8 +6,8 @@ value of open-market code-P buys by non-routine insiders filed in the last 21 se
 and returns no signals while that column is absent. Signals fire only on the session the filing becomes public:
 `fresh_column` (`opp_buy_flag`, the card's 1-if-a-filing-landed-on-as_of flag) must be >= 1 on the as-of row, so one
 filing does not re-signal for the 21 sessions it stays in the rolling sum; no flag column, no signals. The
-producer (full Form 4 ingest with owner CIKs and the routine-trader classifier) does not exist yet, so this module
-is wiring only until it does. Exits: the card's proposed CMP params, 2 ATR stop, 2R target and a 21-session (one
+producer is `data.insiders` (`swing ingest-insiders`; CMP routine classifier on owner CIKs, joined via
+`data.fundamentals.join_edgar`). Exits: the card's proposed CMP params, 2 ATR stop, 2R target and a 21-session (one
 calendar month) time exit.
 """
 from __future__ import annotations

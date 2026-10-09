@@ -229,12 +229,14 @@ def _screened_symbols_only(
 
 
 def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
-    """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``) when the store has them."""
+    """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``) and the VIX / French factor columns
+    (``data.market_series.join_market_series``) when the store has them."""
     if store is None:
         return panel
     from swing_engine.data.fundamentals import join_edgar
+    from swing_engine.data.market_series import join_market_series
 
-    return join_edgar(store, panel)
+    return join_market_series(store, join_edgar(store, panel))
 
 
 def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:

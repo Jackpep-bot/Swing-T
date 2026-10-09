@@ -145,7 +145,7 @@ def test_fundamental_setup_technical_trigger():
 # ----------------------------------------------------------------------------------------------- factor / calendar
 def test_residual_momentum_month_start_top_decile():
     s = strat("residual_momentum")
-    col, rank = s.extra_features
+    col, rank = s.extra_features[0], s.extra_features[2]  # capm score / rank (no ff_* columns: auto -> capm)
     p = uptrend().assign(**{col: 1.0, rank: 0.5})
     ts = p["ts"]
     first = ts[ts.dt.month != ts.shift().dt.month].iloc[5]  # a first session of a month
@@ -155,6 +155,24 @@ def test_residual_momentum_month_start_top_decile():
     assert run(s, p, mid.date()) == []  # not a rebalance day
     p.loc[ts == first, rank] = 0.5
     assert run(s, p, first.date()) == []
+
+
+def test_residual_momentum_uses_ff3_scores_when_present():
+    s = strat("residual_momentum")
+    capm, ff3, capm_rank, ff3_rank = s.extra_features
+    assert ff3 == "ff3_resid_mom_756_231"
+    p = uptrend()
+    ts = p["ts"]
+    first = ts[ts.dt.month != ts.shift().dt.month].iloc[5]
+    p = p.assign(**{capm: 1.0, capm_rank: 0.95, ff3: 2.0, ff3_rank: 0.5})
+    assert run(s, p, first.date()) == []  # ff3 present: its rank (0.5) decides, not the capm one
+    p.loc[ts == first, ff3_rank] = 0.95
+    sig = only(run(s, p, first.date()))
+    assert ff3 in sig.features and "(ff3)" in sig.notes
+    capm_only = strat("residual_momentum", {"factor_model": "capm"})
+    assert "(capm)" in only(run(capm_only, p.assign(**{ff3_rank: 0.5}), first.date())).notes
+    no_ff = p.assign(**{ff3: np.nan, ff3_rank: np.nan})  # SPY fallback when the factors are absent
+    assert "(capm)" in only(run(s, no_ff, first.date())).notes
 
 
 def test_last_stochastic_weekly_cross():

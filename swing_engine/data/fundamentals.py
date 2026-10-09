@@ -475,7 +475,11 @@ def build_fundamental_events(store: Store) -> int:
 def join_edgar(store: Store, panel: pd.DataFrame) -> pd.DataFrame:
     """``panel`` plus FEATURE_COLUMNS from the store's EDGAR tables (point-in-time: fundamentals from the session
     after their filed date, earnings from their reaction session). Unchanged when the store has no EDGAR data or
-    the panel already carries the columns; uses the cached `fundamental_events` table when present."""
+    the panel already carries the columns; uses the cached `fundamental_events` table when present. Also adds the
+    Form 4 columns (`data.insiders.join_insiders`), so every join_edgar call site (replay, CLI, nightly) gets them."""
+    from .insiders import join_insiders
+
+    panel = join_insiders(store, panel)
     if panel is None or panel.empty or all(c in panel.columns for c in FEATURE_COLUMNS):
         return panel
     has = getattr(store, "has_table", None)

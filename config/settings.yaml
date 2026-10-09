@@ -6,6 +6,7 @@ data:
   event_log_path: data/events.sqlite
   calendar: NYSE
   massive_calls_per_min: null  # paid Massive plan only (e.g. 100); null = Basic's 5/min. Env MASSIVE_CALLS_PER_MIN wins
+  delist_return_performance: -0.30  # Shumway 1997 exit loss for failure delistings (data.delisted); -1.0 = conservative variant
 
 universe:
   min_price: 5.0
@@ -42,7 +43,7 @@ strategies:                    # name -> {enabled, params}; names come from swin
   breakout_52w:     {enabled: true}
   momentum_burst:   {enabled: false}   # logged as a feature; weak standalone evidence
   rsi2_meanrev:     {enabled: true, min_reward_risk: 0.0}   # rule exit (close > sma_10 / rsi_2 > 70), no fixed target: skip the 2:1 floor
-  insider_cluster:  {enabled: false}   # needs EDGAR Form 4 ingest
+  insider_cluster:  {enabled: false}   # needs `swing ingest-insiders` (data.insiders)
   # docs/methods.md 7b P1 modules: "register enabled: false" until docs/gates.md is met (methods.md 7, gates.md
   # step 4). shadow_only: the nightly scans them in every regime and records each signal in the shadow ledger, but
   # never sizes, reviews or executes them. episodic_pivot and power_gap also stay out of execution until
@@ -57,8 +58,8 @@ strategies:                    # name -> {enabled, params}; names come from swin
   # implement/approximate -> shadow_only; implement_disabled_for_comparison -> disabled (research and replay only).
   # catalog batch 0 (docs/strategies/<slug>.md). min_reward_risk 0.0 = rule / time exit with no fixed target.
   earnings_announcement_premium: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # needs optional days_since_earnings join; quarter-earlier proxy
-  opportunistic_insider_purchases_cmp: {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # needs optional opp_buy_value_21d (no Form 4 producer yet)
-  residual_momentum: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # daily CAPM-vs-SPY proxy, 756-bar fit; month-start top decile, 21d hold
+  opportunistic_insider_purchases_cmp: {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # opp_buy_value_21d / opp_buy_flag from `swing ingest-insiders`
+  residual_momentum: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # factor_model auto: FF3 residuals after `swing ingest-french`, else CAPM-vs-SPY; 756-bar fit; month-start top decile, 21d hold
   pullback_ema_zone: {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # 3rd+ ema_20/50 zone test; ema_50 close exit; engine_trail off
   bollinger_band_mean_reversion: {enabled: false, min_reward_risk: 0.0}  # buy stop at bb_lower_20 after re-entry; exit at sma_20
   calhoun_adx_breakout: {enabled: false}  # ADX14 crosses 40 at 15-bar high; buy stop high + 0.15 ATR; 2R
@@ -144,6 +145,7 @@ strategies:                    # name -> {enabled, params}; names come from swin
   industry_momentum_overlay:       {enabled: false, shadow_only: true, min_reward_risk: 0.0}  # sector-ETF proxy (no SIC map); month-end top third by ret_126d, 21-session hold
   avwap_pullback_shannon:          {enabled: false, shadow_only: true, min_reward_risk: 1.0}  # pivot-low AVWAP, daily trigger; target = prior 20-bar high
   turnaround_tuesday:              {enabled: false, min_reward_risk: 0.0}  # SPY only; next-open fill, not MOC (card); 1-session hold
+  connors_cvr3_vix:                {enabled: false, min_reward_risk: 0.0}  # catalog implement_disabled_for_comparison; needs `swing ingest-vix`; SPY only, VIX bar vs its 10-day SMA, exit VIX < prior SMA or 4 days
   boomers_cooper:                  {enabled: false, min_reward_risk: 1.0}  # buy stop over 2nd inside day; fixed 2R reference target
   cci_correction:                  {enabled: false, min_reward_risk: 0.0}  # daily CCI(100) bias (card's daily alternative); rule exit
   connors_rsi2_variants:           {enabled: false, min_reward_risk: 0.0, variant: double_7s}  # also cumulative_rsi, r3, crsi_pullback (one trial each)
@@ -296,3 +298,7 @@ playbook:                      # strategies.playbook market-regime router; see d
       enabled: false
       multiplier: 0.5
       params: {ratio_below: 1.0}
+    vix_high:                  # needs `swing ingest-vix`: VIX close > 30 (catalog vix_level_regime, Schwab) or
+      enabled: false           # VIX9D / VIX > 1 (term-structure backwardation; free-data proposal section 6)
+      multiplier: 0.5
+      params: {vix_above: 30.0, term_ratio_above: 1.0}

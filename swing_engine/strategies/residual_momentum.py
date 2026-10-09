@@ -1,9 +1,15 @@
 """Residual momentum (long top decile), docs/strategies/residual_momentum.md (catalog E04, Blitz-Huij-Martens 2011).
 
-APPROXIMATION (the card's "daily proxy"): there is no Fama-French factor ingest, so `features.extra`
-`resid_mom_<n>_<form>_<skip>` fits daily returns on the market proxy's (SPY) over the last 756 bars (36 months),
-then scores sum(residuals) / std(residuals) over bars t-252 .. t-21 (months t-12 .. t-2). Needs SPY in the panel (or
-the market frame) and 756+ bars of history; NaN otherwise. On the first session of each month the names in the top
+Score (`factor_model` param):
+* "ff3" / "auto" with French factors in the panel (`swing ingest-french`; data.market_series joins `ff_*`):
+  `features.extra` `ff3_resid_mom_<n>_<form>` regresses daily excess returns on Mkt-RF, SMB, HML over 756 bars and
+  scores the residuals of the last 231 bars, both windows ending at the end of month t-2 (BHM's t-12 .. t-2, and
+  the French publication lag: month t-1's factors are not out yet at the month start).
+* "capm" / "auto" without factors (the card's "daily proxy"): `resid_mom_<n>_<form>_<skip>` fits daily returns on
+  the market proxy's (SPY) over the last 756 bars, then scores sum(residuals) / std(residuals) over bars
+  t-252 .. t-21. Needs SPY in the panel (or the market frame).
+"auto" picks ff3 on a session where any scanned row has a finite ff3 score, else capm (never mixed in one
+ranking). Both need 756+ bars of history; NaN otherwise. On the first session of each month the names in the top
 decile of the same-session cross-sectional rank are bought (long side only; the short leg is dropped). Hold one month
 (`max_hold_days` 21) with an engine ATR stop; no target.
 """
@@ -26,6 +32,15 @@ def score_column(params: dict[str, Any]) -> str:
     return f"resid_mom_{int(params['beta_bars'])}_{int(params['formation_bars'])}_{int(params['skip_bars'])}"
 
 
+def ff3_score_column(params: dict[str, Any]) -> str:
+    return f"ff3_resid_mom_{int(params['beta_bars'])}_{int(params['formation_bars'])}"
+
+
+def _extras(params: dict[str, Any]) -> list[str]:
+    cols = [score_column(params), ff3_score_column(params)]
+    return [*cols, *(f"{c}_rank" for c in cols)]
+
+
 @register("strategy", NAME)
 class ResidualMomentum(PanelStrategy):
     name = NAME
@@ -35,19 +50,23 @@ class ResidualMomentum(PanelStrategy):
         "formation_bars": 231,  # card: months t-12 .. t-2 = bars t-252 .. t-21
         "skip_bars": 21,  # card: skip month t-1
         "rank_min": 0.90,  # card: long the top decile
+        "factor_model": "auto",  # auto | ff3 | capm (module docstring)
         "stop_atr_mult": 2.0,  # engine safety stop (paper: none)
         "max_hold_days": 21,  # card: hold 1 month
         P_MIN_MARKET_TREND: TREND_DOWN,
         P_MIN_RR: 0.0,  # time exit, no target
     }
     features_required = ["atr_14"]
-    extra_features = [score_column(default_params), f"{score_column(default_params)}_rank"]
+    extra_features = _extras(default_params)
     prior_columns = [*PanelStrategy.prior_columns, "ts"]
 
     def __init__(self, params: dict[str, Any] | None = None):
         super().__init__(params)
-        col = score_column(self.params)
-        self.extra_features = [col, f"{col}_rank"]
+        self.extra_features = _extras(self.params)
+
+    def required_features(self) -> list[str]:
+        ff3 = ff3_score_column(self.params)
+        return [c for c in super().required_features() if c not in (ff3, f"{ff3}_rank")]  # optional: no factors
 
     def should_exit(self, row: pd.Series, bars_held: int) -> bool:
         return bars_held >= int(self.params["max_hold_days"])
@@ -55,8 +74,12 @@ class ResidualMomentum(PanelStrategy):
     def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
         if not self.market_ok(regime):
             return []
-        col, rank_col = self.extra_features
         rows = self.rows_as_of(panel, as_of, required=self.required_features())
+        capm, ff3 = score_column(self.params), ff3_score_column(self.params)
+        model = str(self.params["factor_model"])
+        use_ff3 = model == "ff3" or (model == "auto" and ff3 in rows and bool(rows[ff3].notna().any()))
+        col = ff3 if use_ff3 else capm
+        rank_col = f"{col}_rank"
         out: list[Signal] = []
         for _, row in rows.iterrows():
             ts, prior = pd.Timestamp(row["ts"]), row["prior_ts"]
@@ -74,7 +97,8 @@ class ResidualMomentum(PanelStrategy):
                 target=None,
                 score=float(rank),
                 features={col: row[col], rank_col: rank, "atr_14": atr, "max_hold_days": self.params["max_hold_days"]},
-                notes=f"residual momentum rank {float(rank):.2f} (score {float(row[col]):.2f}) at the month start",
+                notes=f"residual momentum ({'ff3' if use_ff3 else 'capm'}) rank {float(rank):.2f} "
+                      f"(score {float(row[col]):.2f}) at the month start",
             )
             if sig:
                 out.append(sig)

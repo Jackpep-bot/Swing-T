@@ -639,7 +639,8 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
     active = [registry.get("strategy", n)(_strategy_params(ctx.settings, n))  # instances: param-dependent extras
               for n in sorted({*_enabled_strategies(ctx.settings), *_shadow_only_strategies(ctx.settings)})
               if n in registry.names("strategy")]
-    panel = ensure_extra(build_panel(bars, market), required_extras(active), market)  # enabled + shadow-only extras
+    panel = _load("data.market_series.join_market_series")(ctx.store, build_panel(bars, market))  # VIX, ff_* first
+    panel = ensure_extra(panel, required_extras(active), market)  # enabled + shadow-only extras
     panel = _load("data.fundamentals.join_edgar")(ctx.store, panel)
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
