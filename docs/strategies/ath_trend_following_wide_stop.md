@@ -109,4 +109,9 @@ Rolling 3-year average R per closed trade below +0.15R; share of trades held > 1
 - https://harbourfrontquant.substack.com/p/does-trend-following-work-on-single
 
 ## Empirical (replay)
-_Pending: graded per `docs/preregistration/2026-10-09-three-picks.md`._
+Pre-registered group test (docs/preregistration/2026-10-09-three-picks.md, amendment 1), graded as a portfolio net of per-stock costs, n_trials = 3. **FAIL**: no positive haircut Sharpe in the 2024-26 window. Full table: docs/preregistration/2026-10-09-three-picks-results.md.
+
+| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| ath_trend_following_wide_stop | 2024 | 115 | +0.064 | 0.48 | 0.06 | 0.00 | 0.22 | 17.6% | 129 | -91930% | -0.0% |
+| ath_trend_following_wide_stop | 2017 | 381 | +0.191 | 2.17 | 0.39 | 0.08 | 0.59 | 27.9% | 151 | 174% | +31.3% |

@@ -95,4 +95,9 @@ Trailing 8-quarter average excess return (vs SPY) of the top quintile in the win
 - https://rpc.cfainstitute.org/research/cfa-digest/2017/06/being-surprised-by-the-unsurprising-earnings-seasonality-and-stock-returns-digest-summary
 
 ## Empirical (replay)
-_Pending: graded per `docs/preregistration/2026-10-09-three-picks.md`._
+Pre-registered group test (docs/preregistration/2026-10-09-three-picks.md, amendment 1), graded as a portfolio net of per-stock costs, n_trials = 3. **FAIL**: no positive haircut Sharpe in the 2024-26 window. Full table: docs/preregistration/2026-10-09-three-picks-results.md.
+
+| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| earnings_seasonality | 2024 | 576 | -0.101 | -2.25 | -1.26 | -1.26 | 0.00 | 29.7% | 9 | -154% | -21.1% |
+| earnings_seasonality | 2017 | 2128 | +0.058 | 2.53 | 0.55 | 0.32 | 0.76 | 21.5% | 9 | 308% | +55.2% |

@@ -114,4 +114,9 @@ Trailing 24-month net excess return vs equal-weight universe <= 0; turnover abov
 - https://papers.ssrn.com/abstract=3450322
 
 ## Empirical (replay)
-_Pending: graded per `docs/preregistration/2026-10-09-three-picks.md`._
+Pre-registered group test (docs/preregistration/2026-10-09-three-picks.md, amendment 1), graded as a portfolio net of per-stock costs, n_trials = 3. **FAIL**: no positive haircut Sharpe in the 2024-26 window. Full table: docs/preregistration/2026-10-09-three-picks-results.md.
+
+| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| composite_cost_aware_rank | 2024 | 127 | -0.195 | -0.90 | -0.42 | -0.42 | 0.07 | 14.1% | 68 | -140% | -10.1% |
+| composite_cost_aware_rank | 2017 | 381 | +0.629 | 3.01 | 0.52 | 0.28 | 0.72 | 30.9% | 105 | 168% | +69.2% |
