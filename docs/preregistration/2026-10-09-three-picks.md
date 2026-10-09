@@ -1,7 +1,7 @@
 # Pre-registration: three picks (2026-10-09)
 
 Written 2026-10-09, before any replay of these strategies was run or any result looked at.
-COMMIT: <to fill>
+COMMIT: 2a27797
 
 Group: `ath_trend_following_wide_stop`, `composite_cost_aware_rank`, `earnings_seasonality` (cards:
 `docs/strategies/<slug>.md`, drafted in `docs/proposals/swing-methods-2026-10/`). Jack chose to test these three as a
