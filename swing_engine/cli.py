@@ -921,7 +921,7 @@ def repair_store(
     """Drop pre-2024-10-07 zero-volume filler and split ticker-reuse joins into TICKER~YYYYMMDD keys
     (data.repair; every change logged in `repairs`). Run on a backup copy first."""
     store = _open_store(_state(ctx).settings)
-    repair = _load("data.repair")
+    repair = importlib.import_module("swing_engine.data.repair")
     if undo:
         _print_mapping(f"Repair {undo} reverted", repair.undo_repair(store, undo))
         return
