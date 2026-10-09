@@ -138,10 +138,21 @@ SURPRISE_STD_DDOF = 1
 # ---- earnings-calendar features ----------------------------------------------------------------------------------
 EARNINGS_WINDOW_SESSIONS = 2  # announcement session and the next one
 
+# ---- earnings seasonality (Chang, Hartzmark, Solomon & Soltes 2017; docs/strategies/earnings_seasonality.md) -----
+SEASON_WINDOW = 20  # quarters t-23 .. t-4 are ranked
+SEASON_SKIP = 3  # the latest three known quarters (t-3 .. t-1) are not in the ranked window
+SEASON_STEP = 4  # same fiscal quarter: t-4, t-8, ..., t-20
+EXPECTED_LAG_DAYS = 364  # expected announcement = the announcement 52 weeks earlier (keeps the weekday)
+QUARTER_DAYS = 91  # end of the upcoming quarter ~ latest known quarter end + 91 days
+MAX_REPORT_LAG_DAYS = 90  # the expected announcement must fall 0..90 days after the upcoming quarter's end
+
 FEATURE_COLUMNS: list[str] = [
     "sue", "rev_surprise", "gross_prof", "shares_outstanding", "turnover", "days_since_earnings",
-    "is_earnings_window", "days_since_filing",
+    "is_earnings_window", "days_since_filing", "earn_season", "sessions_to_expected_earnings",
 ]
+#: per-filing values cached in EVENTS_TABLE (`fundamental_events`)
+EVENT_VALUE_COLUMNS: list[str] = ["sue", "rev_surprise", "gross_prof", "shares_outstanding", "earn_season",
+                                  "eps_last_q_end"]
 
 
 # =================================================================================================== parsing
@@ -303,6 +314,22 @@ def seasonal_surprise(values: pd.Series) -> float:
     return diffs[latest] / std
 
 
+def earnings_seasonality(values: pd.Series) -> float:
+    """Chang-Hartzmark-Solomon-Soltes EarnRank for the quarter after the latest one in ``values`` (quarter t, with
+    t-1 the latest known): rank the 20 quarters t-23 .. t-4 from largest (1) to smallest and average the ranks of
+    t-4, t-8, t-12, t-16, t-20. Low = the upcoming fiscal quarter is historically strong. NaN unless the latest
+    23 quarters are consecutive (each quarter end QUARTER_MIN_DAYS..QUARTER_MAX_DAYS after the previous)."""
+    need = SEASON_WINDOW + SEASON_SKIP
+    if len(values) < need:
+        return float("nan")
+    last = values.iloc[-need:]
+    gaps = np.diff(np.array(last.index, dtype="datetime64[D]")).astype(int)
+    if ((gaps < QUARTER_MIN_DAYS) | (gaps > QUARTER_MAX_DAYS)).any():
+        return float("nan")
+    ranks = last.iloc[:SEASON_WINDOW].rank(ascending=False).to_numpy()
+    return float(ranks[SEASON_WINDOW - 1::-SEASON_STEP].mean())
+
+
 def sue_asof(fund: pd.DataFrame, symbol: str, day: date | str) -> float:
     """SUE on diluted EPS for the latest quarter filed on or before `day` (catalog `pead_sue`)."""
     return seasonal_surprise(quarterly_values(fund, symbol, EPS_DILUTED, day))
@@ -380,12 +407,16 @@ def _sessions_since(ts: pd.Series, event_ts: pd.Series) -> pd.Series:
 
 def earnings_calendar_features(earnings: pd.DataFrame, index: pd.DataFrame) -> pd.DataFrame:
     """Per (symbol, ts) of `index`: `days_since_earnings` (sessions since the latest announcement session on or
-    before ts; 0 on it) and `is_earnings_window` (announcement session or the next one). NaN/False before the
-    first known announcement."""
+    before ts; 0 on it), `is_earnings_window` (announcement session or the next one), `expected_earnings` (the
+    earliest announcement session in the EXPECTED_LAG_DAYS calendar days up to ts, plus EXPECTED_LAG_DAYS, rolled
+    to the next session; naive date) and `sessions_to_expected_earnings` (sessions from ts to it). NaN/False/NaT
+    without a known announcement."""
     out = index[["symbol", "ts"]].reset_index(drop=True).copy()
     out["ts"] = _norm_ts(out["ts"])
     out["days_since_earnings"] = np.nan
     out["is_earnings_window"] = False
+    out["expected_earnings"] = pd.NaT
+    out["sessions_to_expected_earnings"] = np.nan
     if out.empty or earnings is None or earnings.empty:
         return out.reset_index(drop=True)
     ev = earnings[["symbol", "session"]].dropna().drop_duplicates()
@@ -396,13 +427,44 @@ def earnings_calendar_features(earnings: pd.DataFrame, index: pd.DataFrame) -> p
     days = _sessions_since(merged["ts"], merged["ann_ts"])
     merged["days_since_earnings"] = days
     merged["is_earnings_window"] = ((days >= 0) & (days < EARNINGS_WINDOW_SESSIONS)).astype(bool)
-    return merged[["symbol", "ts", "days_since_earnings", "is_earnings_window"]]
+    exp = _expected_earnings(ev, merged)
+    merged = merged.drop(columns=list(exp.columns)).join(exp)
+    return merged[["symbol", "ts", "days_since_earnings", "is_earnings_window", "expected_earnings",
+                   "sessions_to_expected_earnings"]]
+
+
+def _expected_earnings(ev: pd.DataFrame, rows: pd.DataFrame) -> pd.DataFrame:
+    """`expected_earnings` / `sessions_to_expected_earnings` for `rows` (symbol, ts) from announcement sessions `ev`
+    (symbol, session): only announcements on or before each row's day are read."""
+    lag = np.timedelta64(EXPECTED_LAG_DAYS, "D")
+    day = rows["ts"].dt.tz_convert(TZ).dt.tz_localize(None).values.astype("datetime64[D]")
+    expected = np.full(len(rows), np.datetime64("NaT", "D"), dtype="datetime64[D]")
+    by_sym = {s: np.sort(np.array(g, dtype="datetime64[D]")) for s, g in ev.groupby("symbol")["session"]}
+    for sym, idx in rows.groupby("symbol", sort=False).indices.items():
+        ann = by_sym.get(sym)
+        if ann is None:
+            continue
+        d = day[idx]
+        j = np.searchsorted(ann, d - lag + np.timedelta64(1, "D"), side="left")  # earliest announcement a with a > d - 364 days
+        ok = j < len(ann)
+        a = ann[np.minimum(j, len(ann) - 1)]
+        ok &= a <= d
+        expected[idx[ok]] = a[ok] + lag
+    out = pd.DataFrame({"expected_earnings": pd.to_datetime(expected),
+                        "sessions_to_expected_earnings": np.nan}, index=rows.index)
+    has = ~np.isnat(expected)
+    if has.any():
+        sessions = _session_ordinals(day.min().astype(date), expected[has].max().astype(date) + timedelta(days=10))
+        to = np.searchsorted(sessions, expected[has], side="left") - np.searchsorted(sessions, day[has], side="left")
+        out.loc[has, "sessions_to_expected_earnings"] = to.astype(float)
+    return out
 
 
 def fundamental_events(fund: pd.DataFrame, symbols: Iterable[str] | None = None) -> pd.DataFrame:
-    """One row per (symbol, filed date): sue, rev_surprise, gross_prof and shares_outstanding as known on that
-    date, plus `avail_ts` = the first session after the filed date (when the values become usable at a close)."""
-    cols = ["symbol", "filed", "avail_ts", "sue", "rev_surprise", "gross_prof", "shares_outstanding"]
+    """One row per (symbol, filed date): EVENT_VALUE_COLUMNS as known on that date (`earn_season` is the
+    seasonality of the quarter after `eps_last_q_end`, the latest known EPS quarter end), plus `avail_ts` = the
+    first session after the filed date (when the values become usable at a close)."""
+    cols = ["symbol", "filed", "avail_ts", *EVENT_VALUE_COLUMNS]
     if fund is None or fund.empty:
         return pd.DataFrame(columns=cols)
     wanted = None if symbols is None else {s.upper() for s in symbols}
@@ -411,15 +473,18 @@ def fundamental_events(fund: pd.DataFrame, symbols: Iterable[str] | None = None)
         if wanted is not None and sym not in wanted:
             continue
         for filed in sorted(set(sub["filed"])):
+            eps = quarterly_values(sub, sym, EPS_DILUTED, filed)
             rows.append(
                 {
                     "symbol": sym,
                     "filed": filed,
                     "avail_ts": session_ts(next_trading_day(filed)),
-                    "sue": sue_asof(sub, sym, filed),
+                    "sue": seasonal_surprise(eps),
                     "rev_surprise": revenue_surprise_asof(sub, sym, filed),
                     "gross_prof": gross_profitability_asof(sub, sym, filed),
                     "shares_outstanding": shares_outstanding_asof(sub, sym, filed),
+                    "earn_season": earnings_seasonality(eps),
+                    "eps_last_q_end": pd.Timestamp(eps.index[-1]) if len(eps) else pd.NaT,
                 }
             )
     return pd.DataFrame(rows, columns=cols)
@@ -439,7 +504,11 @@ def fundamental_features(
     base["ts"] = _norm_ts(base["ts"])
     volume = index["volume"].reset_index(drop=True) if "volume" in index.columns else pd.Series(np.nan, index=base.index)
     ev = fundamental_events(fund, base["symbol"].unique()) if events is None else events
-    value_cols = ["sue", "rev_surprise", "gross_prof", "shares_outstanding"]
+    stale = [c for c in EVENT_VALUE_COLUMNS if c not in ev.columns]
+    if stale and not ev.empty:  # an EVENTS_TABLE cached before these columns existed
+        log.warning("edgar_events_cache_stale", missing=stale, fix="data.fundamentals.build_fundamental_events(store)")
+    ev = ev.assign(**{c: np.nan for c in stale})
+    value_cols = EVENT_VALUE_COLUMNS
     left = base.reset_index(names="_row").sort_values("ts")
     if ev.empty:
         merged = left.assign(avail_ts=pd.NaT, **{c: np.nan for c in value_cols})
@@ -453,6 +522,13 @@ def fundamental_features(
     merged["days_since_earnings"] = cal["days_since_earnings"].values
     merged["is_earnings_window"] = cal["is_earnings_window"].values
     merged["days_since_filing"] = _sessions_since(merged["ts"], merged["avail_ts"]).values
+    merged["sessions_to_expected_earnings"] = cal["sessions_to_expected_earnings"].values
+    # earn_season ranks the quarter after eps_last_q_end: keep it only when the expected announcement is the one
+    # that reports that quarter (0..MAX_REPORT_LAG_DAYS after its estimated end)
+    lag = (pd.to_datetime(cal["expected_earnings"]).values
+           - (pd.to_datetime(merged["eps_last_q_end"]) + pd.Timedelta(days=QUARTER_DAYS)).values)
+    lag_days = pd.Series(lag).dt.days
+    merged["earn_season"] = merged["earn_season"].where((lag_days >= 0) & (lag_days <= MAX_REPORT_LAG_DAYS))
     return merged[["symbol", "ts", *FEATURE_COLUMNS]]
 
 
@@ -605,7 +681,7 @@ def run_edgar_ingest(
 __all__ = [
     "EARNINGS_TABLE", "FUNDAMENTALS_TABLE", "META_TABLE", "FEATURE_COLUMNS", "parse_companyfacts", "read_earnings",
     "read_fundamentals", "earnings_dates_asof", "quarterly_values", "seasonal_surprise", "sue_asof",
-    "revenue_surprise_asof", "gross_profitability_asof", "shares_outstanding_asof", "turnover_asof",
+    "revenue_surprise_asof", "gross_profitability_asof", "earnings_seasonality", "shares_outstanding_asof", "turnover_asof",
     "earnings_calendar_features", "fundamental_events", "fundamental_features", "edgar_panel_features",
     "EVENTS_TABLE", "build_fundamental_events", "join_edgar",
     "run_edgar_ingest",

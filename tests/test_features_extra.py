@@ -247,8 +247,9 @@ def _with_market_series(panel: pd.DataFrame) -> pd.DataFrame:
     day = pd.to_datetime(panel["ts"]).dt.tz_localize(None).dt.normalize()
     seed = (day - pd.Timestamp("2000-01-01")).dt.days.to_numpy()
     noise = lambda k: np.random.default_rng(k).normal(0.0, 0.01, seed.max() + 1)[seed]  # noqa: E731
+    sym = panel["symbol"].astype(str).map(lambda s: sum(map(ord, s)))  # EDGAR-style per-symbol values (ccr_score)
     return panel.assign(vix_close=15.0 + 100.0 * np.abs(noise(1)), ff_mkt_rf=noise(2), ff_smb=noise(3),
-                        ff_hml=noise(4), ff_rf=0.0001)
+                        ff_hml=noise(4), ff_rf=0.0001, gross_prof=sym / 1000.0, shares_outstanding=1e6 * sym)
 
 
 @pytest.mark.parametrize("name", ALL_NAMES)

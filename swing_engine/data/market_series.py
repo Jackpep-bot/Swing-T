@@ -198,13 +198,37 @@ def _session_dates(ts: pd.Series) -> pd.Series:
     return t.dt.normalize()
 
 
+#: per-symbol store history before the panel's first session (``join_pre_panel_high``; read by features.extra
+#: ``ath_close`` / ``hist_bars``, docs/preregistration/2026-10-09-three-picks.md)
+PRE_PANEL_HIGH, PRE_PANEL_BARS = "pre_panel_high", "pre_panel_bars"
+BARS_TABLE = "bars"  # data.store.BARS_TABLE
+
+
+def join_pre_panel_high(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
+    """``panel`` plus, per symbol, the highest close (`pre_panel_high`, NaN when none) and the number of bars
+    (`pre_panel_bars`) in the store's `bars` dated before the panel's first bar. Every such bar precedes every panel
+    row, so the columns are point-in-time; they let an all-time high reach back past the panel's warm-up."""
+    sql, has = getattr(store, "sql", None), getattr(store, "has_table", None)
+    if panel is None or panel.empty or PRE_PANEL_HIGH in panel.columns or not callable(sql) or not callable(has) \
+            or not has(BARS_TABLE):
+        return panel
+    first = pd.to_datetime(panel["ts"]).min()
+    pre = sql(f"SELECT symbol, max(close) AS h, count(*) AS n FROM {BARS_TABLE} WHERE ts < ? GROUP BY symbol",
+              [first.to_pydatetime()]).set_index("symbol")
+    sym = panel["symbol"].astype(str)
+    return panel.assign(**{PRE_PANEL_HIGH: sym.map(pre["h"]).astype(float).to_numpy(),
+                           PRE_PANEL_BARS: sym.map(pre["n"]).fillna(0).astype(float).to_numpy()})
+
+
 def join_market_series(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
-    """``panel`` plus the `vix` columns and `ff_*` factor columns by session date, for the tables the store has.
+    """``panel`` plus the `vix` columns and `ff_*` factor columns by session date, for the tables the store has,
+    and the pre-panel history columns (``join_pre_panel_high``; this join runs before the extras on every path).
     Unchanged when neither table exists or the panel already carries the columns. See the module docstring for
     which columns are known on their own row's date (VIX: yes, at the close; ff_*: no)."""
     has = getattr(store, "has_table", None)
     if panel is None or panel.empty or not callable(has):
         return panel
+    panel = join_pre_panel_high(store, panel)
     add: dict[str, np.ndarray] = {}
     day = None
     for table, cols, prefix in ((VIX_TABLE, VIX_COLUMNS, ""), (FF_TABLE, FF_COLUMNS, FF_PANEL_PREFIX)):
@@ -229,5 +253,5 @@ __all__ = [
     "VIX_URLS", "FF3_URL", "MOM_URL", "VIX_TABLE", "FF_TABLE", "META_TABLE", "VIX_COLUMNS", "FF_COLUMNS",
     "FF_PANEL_PREFIX", "FF_PUBLICATION_LAG_MONTHS", "parse_cboe_csv", "vix_frame", "parse_french_daily",
     "french_vintage", "ff_frame", "known_from", "unzip_text", "run_vix_ingest", "run_french_ingest",
-    "join_market_series",
+    "join_market_series", "join_pre_panel_high", "PRE_PANEL_HIGH", "PRE_PANEL_BARS",
 ]

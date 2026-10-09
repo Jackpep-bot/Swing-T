@@ -39,7 +39,7 @@ from ._common import (
     shift_per_symbol,
     symbol_codes,
 )
-from .cross_section import pct_return, rolling_max, rolling_mean, rolling_min
+from .cross_section import pct_return, realized_vol, rolling_max, rolling_mean, rolling_min
 from .indicators import ema, rsi, sma, true_range, wilder_smooth
 from .panel import FEATURE_COLUMNS
 from .patterns import bars_since
@@ -1398,6 +1398,57 @@ def _gandalf_weak(ctx: _Ctx) -> pd.Series:
     return _flag(set_c | set_d, sh(ohlc4, 4).notna())
 
 
+# ----------------------------------------------------------------------------------------------- three picks
+# docs/preregistration/2026-10-09-three-picks.md (cards ath_trend_following_wide_stop, composite_cost_aware_rank)
+PRE_PANEL_HIGH, PRE_PANEL_BARS = "pre_panel_high", "pre_panel_bars"  # data.market_series.join_pre_panel_high
+CCR_MIN_PRICE = 5.0  # composite card rule 1: price >= $5
+CCR_DV_WINDOW = 63  # card rule 1: 63-day median dollar volume ...
+CCR_MIN_MEDIAN_DOLLAR_VOL = 20_000_000.0  # ... >= $20M
+CCR_SIZE_FLOOR_PCT = 0.20  # card rule 1: not in the bottom 20% of market cap (shares_outstanding x close)
+CCR_VOL_WINDOW = 252  # card 2d: low 252-day volatility
+CCR_INPUTS = 4  # card rule 2: momentum, gross profitability, 52-week-high proximity, low volatility
+
+
+def _optional(ctx: _Ctx, name: str) -> pd.Series:
+    """A joined column (EDGAR, store history) as float, or NaN when the panel was built without it."""
+    return ctx.df[name].astype(float) if name in ctx.df.columns else pd.Series(np.nan, index=ctx.df.index)
+
+
+def _ath_close(ctx: _Ctx) -> pd.Series:
+    """``ath_close``: highest close from the symbol's first store bar through this row: the running max of the
+    panel's closes, folded with ``pre_panel_high`` (store bars before the panel) when the panel carries it."""
+    return np.fmax(ctx.c.groupby(ctx.key, sort=False).cummax(), _optional(ctx, PRE_PANEL_HIGH))
+
+
+def _hist_bars(ctx: _Ctx) -> pd.Series:
+    """``hist_bars``: bars of the symbol in the store up to and including this row (panel bars + ``pre_panel_bars``)."""
+    pre = _optional(ctx, PRE_PANEL_BARS).fillna(0.0)
+    return ctx.c.groupby(ctx.key, sort=False).cumcount().astype(float) + 1.0 + pre
+
+
+def _med_dv(ctx: _Ctx, n: str) -> pd.Series:
+    """``med_dv_<n>``: median of daily dollar volume (close x volume) over the last ``n`` bars, this one included."""
+    w = int(n)
+    return ctx.ps(ctx.c * ctx.v, lambda s: s.rolling(w, min_periods=w).median())
+
+
+def _ccr_score(ctx: _Ctx) -> pd.Series:
+    """``ccr_score``: equal-weight mean of the same-session percentile ranks of mom_12_1, gross_prof,
+    dist_52w_high and minus 252-day realised vol, ranked among the session's eligible rows (close >= $5, 63-day
+    median dollar volume >= $20M, market cap >= the session's 20th percentile, all four inputs known); NaN for the
+    rest. ``gross_prof`` / ``shares_outstanding`` come from data.fundamentals.join_edgar (NaN without them)."""
+    day = session_key(ctx.df[TS_COL])
+    mcap = _optional(ctx, "shares_outstanding") * ctx.c
+    floor = mcap.groupby(day, sort=False).transform(lambda x: x.quantile(CCR_SIZE_FLOOR_PCT))
+    dv = ctx.col(f"med_dv_{CCR_DV_WINDOW}")
+    inputs = [ctx.col("mom_12_1"), _optional(ctx, "gross_prof"), ctx.col("dist_52w_high"),
+              -ctx.ps(ctx.c, realized_vol, CCR_VOL_WINDOW)]
+    ok = (ctx.c >= CCR_MIN_PRICE) & (dv >= CCR_MIN_MEDIAN_DOLLAR_VOL) & (mcap >= floor)
+    for x in inputs:
+        ok &= x.notna()
+    return sum(x.where(ok).groupby(day, sort=False).rank(pct=True) for x in inputs) / CCR_INPUTS
+
+
 # ----------------------------------------------------------------------------------------------- registry
 def _cal(name: str) -> Feature:
     return lambda ctx: _calendar(ctx)[name]
@@ -1449,6 +1500,9 @@ EXTRA_FEATURES: dict[str, Feature] = {
     **{k: (lambda ctx, k=k: _td(ctx, k)) for k in TD_COLUMNS},
     "month_end": lambda ctx: (_calendar(ctx)["tom_day"] == -1).astype(float),  # 1 on the month's last NYSE session
     "gandalf_weak": _gandalf_weak,
+    "ath_close": _ath_close,
+    "hist_bars": _hist_bars,
+    "ccr_score": _ccr_score,
 }
 
 _N = r"(\d+)"
@@ -1527,6 +1581,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"wk_close_max_{_N}"), _wk_close_max, "wk_close_max_20", None),
     (re.compile(rf"mkt_wk_above_{_N}"), _mkt_wk_above, "mkt_wk_above_10", None),
     (re.compile(r"wk_fresh"), _wk_fresh, "wk_fresh", None),
+    (re.compile(rf"med_dv_{_N}"), _med_dv, "med_dv_63", None),
     (re.compile(r"wk_close"), lambda ctx: _wk(ctx, lambda g: g["close"]), "wk_close", None),
 ]
 
