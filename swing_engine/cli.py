@@ -1775,6 +1775,23 @@ def journal(
     _console().print(str(out), markup=False)
 
 
+@app.command("notify-test")
+def notify_test(
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="print the message instead of sending it")] = False,
+) -> None:
+    """Send a short Telegram message to TELEGRAM_CHAT_ID to confirm nightly / research reports will arrive."""
+    from swing_engine.ops import notify
+
+    title, body = notify.ping_message(datetime.now().strftime("%Y-%m-%d %H:%M"))
+    if dry_run:
+        _console().print(escape(f"{title}\n{body}"), highlight=False)
+        return
+    why = notify.deliver(title, body, secrets=load_secrets())
+    if why:
+        _fail(f"not delivered: {why}")
+    _console().print("sent")
+
+
 @app.command("weekly-report")
 def weekly_report(
     ctx: typer.Context,

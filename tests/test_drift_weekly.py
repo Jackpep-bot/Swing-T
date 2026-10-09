@@ -116,4 +116,4 @@ def test_nightly_weekly_step_runs_only_on_the_last_session(tmp_path: Path) -> No
         ran = nightly._run_step(friday, "weekly", nightly._step_weekly)
     path = tmp_path / "data" / "journal" / "weekly-2026-W41.md"
     assert ran.status is nightly.StepStatus.OK and path.exists() and friday.report.files["weekly"] == str(path)
-    assert nightly.STEP_NAMES[-1] == "weekly" and [n for n, _ in nightly.STEPS] == list(nightly.STEP_NAMES)
+    assert nightly.STEP_NAMES[-2:] == ("weekly", "notify") and [n for n, _ in nightly.STEPS] == list(nightly.STEP_NAMES)

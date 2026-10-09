@@ -5,7 +5,8 @@ playbook router -> allowed strategies) -> rank predict (when a model exists) -> 
 router's per-strategy multiplier scales risk_per_trade_pct) -> review (ANTHROPIC key, not dry-run) -> shadow
 (every signal into the shadow ledger, taken or not, and grading of matured ones) -> positions (exit decisions,
 when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal -> weekly (agent.weekly, last session of the ISO
-week only). A failing step is recorded and the pipeline carries on with
+week only) -> notify (ops.notify: one Telegram message, plus the weekly report when written; never fails the run).
+A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
 
@@ -92,7 +93,7 @@ ERROR_PREVIEW_CHARS = 200
 
 STEP_NAMES = (
     "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
-    "weekly",
+    "weekly", "notify",
 )
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
@@ -428,6 +429,7 @@ class _Context:
     risk_multipliers: dict[str, float] | None = None  # allowed strategy -> multiplier; None = no routing (full risk)
     signal_day: date | None = None  # session of the bars the scan computed signals from (<= as_of)
     shadow_signals: list[Signal] = field(default_factory=list)  # shadow_only strategies: recorded, never sized
+    notify_sender: Any | None = None  # ops.notify.Sender override (tests); None = Telegram from secrets
 
     @property
     def history_start(self) -> date:
@@ -1101,6 +1103,39 @@ def _step_weekly(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"weekly report written to {path}", {"path": path}
 
 
+def _step_notify(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """One Telegram summary of this run (plus the weekly report when the weekly step wrote one). Data only, no LLM.
+    Any problem is a skip, never a failure: a dead bot must not mark the nightly failed."""
+    if ctx.dry_run:
+        raise Skip("dry run")
+    notify = importlib.import_module("swing_engine.ops.notify")
+    sender = ctx.notify_sender or notify.telegram_sender(ctx.secrets)
+    if sender is None:
+        raise Skip("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
+    top: list[Any] = []
+    shadow = ctx.report.step("shadow")
+    if shadow is not None and shadow.status is StepStatus.OK:
+        try:
+            top = notify.shadow_top_today(ctx.store, date.fromisoformat(shadow.data["signal_day"]))
+        except Exception as e:  # noqa: BLE001 - the summary goes out without the ranking
+            log.warning("notify_shadow_top_failed", error=_error_text(e))
+    weekly = ctx.report.files.get("weekly")
+    problems: list[str] = []
+    try:
+        messages = [("nightly", notify.nightly_message(ctx.report, top))]
+        if weekly:
+            messages.append(("weekly", notify.weekly_message(weekly)))
+    except Exception as e:  # noqa: BLE001
+        raise Skip(f"could not build the message: {_error_text(e)}") from e
+    for label, (title, body) in messages:
+        why = notify.deliver(title, body, sender)
+        if why:
+            problems.append(f"{label}: {why}")
+    if problems:
+        raise Skip("; ".join(problems))
+    return f"sent nightly summary{' and weekly report' if weekly else ''}", {"weekly": bool(weekly), "top": top}
+
+
 def _accepts(fn: Any, name: str) -> bool:
     try:
         params = inspect.signature(fn).parameters
@@ -1189,6 +1224,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("execute", _step_execute),
     ("journal", _step_journal),
     ("weekly", _step_weekly),
+    ("notify", _step_notify),
 )
 
 
@@ -1239,6 +1275,7 @@ def run_nightly(
     review_client: Any | None = None,
     journal_client: Any | None = None,
     journal_root: Path | None = None,
+    notify_sender: Any | None = None,
 ) -> NightlyReport:
     """Run the nightly pipeline for `as_of` (default today) and write the JSON report.
 
@@ -1265,6 +1302,7 @@ def run_nightly(
         journal_root=journal_root,
         report=report,
         execute=settings.execution.nightly_execute if execute is None else bool(execute),
+        notify_sender=notify_sender,
     )
     log.info("nightly_start", as_of=str(as_of_d), provider=provider_name, dry_run=dry_run, execute=ctx.execute,
              broker=getattr(broker, "name", None))
