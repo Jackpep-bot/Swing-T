@@ -2813,3 +2813,23 @@ haircut Sharpe.
 block-return matrix in the leaderboard, feeding PBO, RC/SPA, DSR with real `sharpe_var`, and Holm/BHY
 columns. (3) Correlation-cluster caps. (4) A single composite-signal trial. Steps 1-2 will probably confirm
 "no survivors". Their value is that a survivor found after they are in place can be believed.
+
+## Event avoid filters and the no-news flag (2026-10-09)
+
+Data: `eightk_items` and `sched13d` (`swing ingest-edgar`, or `--8k-only`) and `news_articles` (`swing ingest-news`,
+Alpaca/Benzinga headline counts), joined by `data.fundamentals.join_edgar`. Every clock is keyed on EDGAR acceptance time
+or the article's first-publication time, rolled to the first session whose close can react.
+
+- **Avoid filter (general form).** Skip a long entry when `days_since_<event> < N` for an event that signals a
+  credibility or information shock: 8-K Item 4.02 non-reliance (restatement) is the shown case
+  (`pullback_trend_avoid_402`, N = 63 sessions, engine choice). Evidence for 4.02 covers the announcement reaction
+  (Palmrose, Richardson and Scholz 2004, about -9% over two days, abstract), not a later drift, so the filter is a
+  risk control to be judged on drawdown and losers removed, not on raising the mean. Do not add it as a param to
+  every long strategy: each strategy x filter pair is a trial, and the haircut grows with them. Add it to one
+  strategy at a time as a named variant, and only promote it if that variant beats its base in both windows.
+- **No-news filter.** Mean-reversion entries only on sessions with no news (`news_flag_1d == 0`; fallback
+  `news_8k_flag_1d == 0`), after Chan (2003): no-news moves tend to reverse, news moves drift. Built as
+  `<base>_no_news` for the three mean-reversion strategies with the most leaderboard signals. Unknown coverage never
+  counts as "no news".
+- **Event entries.** `activist_13d_drift` buys the session after an original 13D is public (Brav et al. 2008); its
+  card derives the tradable post-filing part (about 2% gross over ~18 sessions in 2001-2006) and halves it.

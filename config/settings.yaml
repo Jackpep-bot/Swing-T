@@ -181,6 +181,12 @@ strategies:                    # name -> {enabled, params}; names come from swin
   kell_cycle_of_price_action:    {enabled: false}   # wedge_pop (setup: base_break); SPY trend stands in for QQQ > ema_20
   price_zone_oscillator:         {enabled: false}   # PZO -40 / +15 crosses by ADX/EMA60 mode; row-based LX exits
   supertrend_flip_strategy:      {enabled: false}   # ST(10,3) flip up; line is stop and trail
+  # event-data filters and strategies (2026-10-09; data.news / data.filings; each its own trial; [] without the columns)
+  connors_rsi2_variants_no_news:      {enabled: false, min_reward_risk: 0.0, variant: double_7s, news_source: auto}  # no news on the signal session (Chan 2003)
+  connors_tps_scale_in_no_news:       {enabled: false, news_source: auto}  # benzinga | 8k | auto (benzinga where covered, else 8-K)
+  connors_hpetf_rsi_variants_no_news: {enabled: false, news_source: auto}
+  pullback_trend_avoid_402:           {enabled: false, avoid_402_sessions: 63}  # skip symbols with an 8-K Item 4.02 in the last 63 sessions
+  activist_13d_drift:                 {enabled: false, max_hold_days: 10}  # original Schedule 13D; next-open entry, 2 ATR stop, time exit
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]

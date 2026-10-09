@@ -15,7 +15,6 @@ import pytest
 from swing_engine.data import fundamentals as F
 from swing_engine.data._common import TZ
 from swing_engine.data.calendar import trading_days
-from swing_engine.data.edgar import parse_submissions
 from swing_engine.data.store import Store
 
 EDGAR_FIXTURES = Path(__file__).parent / "fixtures" / "edgar"
@@ -50,12 +49,11 @@ class FakeEdgar:
     def company_tickers(self) -> pd.DataFrame:
         return pd.DataFrame({"cik": [CIK, "0001067983"], "symbol": [SYM, "BRK-B"], "name": ["ACME CORP", "BERKSHIRE"]})
 
-    def earnings_dates(self, cik: str, symbols: list[str]) -> pd.DataFrame:
+    def submissions(self, cik: str) -> list[dict[str, Any]]:
         self.calls.append(cik)
         if cik != CIK:
             raise RuntimeError("boom")
-        pages = [load("submissions_CIK0000123456.json"), load("CIK0000123456-submissions-001.json")]
-        return pd.concat([parse_submissions(p, symbols, cik) for p in pages], ignore_index=True)
+        return [load("submissions_CIK0000123456.json"), load("CIK0000123456-submissions-001.json")]
 
     def companyfacts(self, cik: str) -> dict[str, Any] | None:
         return self.facts

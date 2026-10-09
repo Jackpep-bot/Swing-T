@@ -73,6 +73,7 @@ META_TABLE = "edgar_ingest_meta"
 EVENTS_TABLE = "fundamental_events"
 EVENTS_KEYS: list[str] = ["symbol", "filed"]
 META_KEYS: list[str] = ["cik"]
+EIGHTK_META_TABLE = "eightk_ingest_meta"  # resume table of `swing ingest-edgar --8k-only` (same schema)
 META_SCHEMA: dict[str, str] = {
     "cik": "VARCHAR",
     "symbols": "VARCHAR",
@@ -476,10 +477,13 @@ def join_edgar(store: Store, panel: pd.DataFrame) -> pd.DataFrame:
     """``panel`` plus FEATURE_COLUMNS from the store's EDGAR tables (point-in-time: fundamentals from the session
     after their filed date, earnings from their reaction session). Unchanged when the store has no EDGAR data or
     the panel already carries the columns; uses the cached `fundamental_events` table when present. Also adds the
-    Form 4 columns (`data.insiders.join_insiders`), so every join_edgar call site (replay, CLI, nightly) gets them."""
+    Form 4 columns (`data.insiders.join_insiders`), the 8-K / 13D columns (`data.filings.join_filings`) and the news
+    columns (`data.news.join_news`), so every join_edgar call site (replay, CLI, nightly) gets them."""
+    from .filings import join_filings
     from .insiders import join_insiders
+    from .news import join_news
 
-    panel = join_insiders(store, panel)
+    panel = join_news(store, join_filings(store, join_insiders(store, panel)))
     if panel is None or panel.empty or all(c in panel.columns for c in FEATURE_COLUMNS):
         return panel
     has = getattr(store, "has_table", None)
@@ -507,8 +511,8 @@ def _cik_map(tickers: pd.DataFrame) -> dict[str, str]:
     return out
 
 
-def _fresh_ciks(store: Store, today: date, refresh_days: int) -> set[str]:
-    meta = store.read_table(META_TABLE)
+def _fresh_ciks(store: Store, today: date, refresh_days: int, table: str = META_TABLE) -> set[str]:
+    meta = store.read_table(table)
     if meta.empty:
         return set()
     cutoff = today - timedelta(days=refresh_days)
@@ -526,11 +530,18 @@ def run_edgar_ingest(
     refresh_days: int = DEFAULT_REFRESH_DAYS,
     today: date | None = None,
     progress: Callable[[str], None] | None = None,
+    eightk_only: bool = False,
 ) -> dict[str, Any]:
     """Fetch 8-K Item 2.02 earnings dates and XBRL fundamentals for `symbols` (default: every symbol in the
     store) into `earnings_dates` / `fundamentals`. Ticker -> CIK via company_tickers.json; one fetch per CIK
     (share classes share it). Resumable: CIKs fetched OK within `refresh_days` are skipped (`edgar_ingest_meta`).
-    A failing CIK is logged and recorded, never fails the run. Rate limiting is the Edgar client's bucket."""
+    A failing CIK is logged and recorded, never fails the run. Rate limiting is the Edgar client's bucket.
+    The same submissions fetch also fills `eightk_items` and `sched13d` (data.filings). ``eightk_only`` skips
+    companyfacts and keeps its own resume table (`EIGHTK_META_TABLE`), so it runs even when every CIK is fresh."""
+    from .edgar import submission_tables
+    from .filings import EIGHTK_SCHEMA, EIGHTK_TABLE, KEYS, SCHED13D_SCHEMA, SCHED13D_TABLE
+
+    meta_table = EIGHTK_META_TABLE if eightk_only else META_TABLE
     day = today or date.today()
     universe = sorted({s.upper().strip() for s in (symbols if symbols is not None else store.symbols()) if s})
     cik_map = _cik_map(edgar.company_tickers())
@@ -542,26 +553,29 @@ def run_edgar_ingest(
             no_cik.append(sym)
         else:
             by_cik.setdefault(cik, []).append(sym)
-    fresh = _fresh_ciks(store, day, refresh_days)
+    fresh = _fresh_ciks(store, day, refresh_days, meta_table)
     todo = [c for c in sorted(by_cik) if c not in fresh]
     skipped = len(by_cik) - len(todo)
     if limit is not None:
         todo = todo[: max(0, int(limit))]
     if progress:
         progress(f"edgar: {len(universe)} symbols, {len(by_cik)} CIKs, {skipped} fresh, {len(todo)} to fetch")
-    totals = {"earnings_rows": 0, "fundamentals_rows": 0}
+    totals = {"earnings_rows": 0, "fundamentals_rows": 0, "eightk_rows": 0, "sched13d_rows": 0}
     errors: dict[str, str] = {}
     for n, cik in enumerate(todo, start=1):
         syms = by_cik[cik]
         meta: dict[str, Any] = {"cik": cik, "symbols": ",".join(syms), "fetched_on": day, "earnings_rows": 0,
                                 "fundamentals_rows": 0, "error": None}
         try:
-            earnings = edgar.earnings_dates(cik, syms)
-            fund = parse_companyfacts(edgar.companyfacts(cik), syms, cik)
+            earnings, eightk, sched = submission_tables(edgar.submissions(cik), cik, syms)
+            fund = None if eightk_only else parse_companyfacts(edgar.companyfacts(cik), syms, cik)
             meta["earnings_rows"] = store.write_table(EARNINGS_TABLE, earnings, EARNINGS_KEYS, schema=EARNINGS_SCHEMA)
-            meta["fundamentals_rows"] = store.write_table(
-                FUNDAMENTALS_TABLE, fund, FUNDAMENTALS_KEYS, schema=FUNDAMENTALS_SCHEMA
-            )
+            if fund is not None:
+                meta["fundamentals_rows"] = store.write_table(
+                    FUNDAMENTALS_TABLE, fund, FUNDAMENTALS_KEYS, schema=FUNDAMENTALS_SCHEMA
+                )
+            totals["eightk_rows"] += store.write_table(EIGHTK_TABLE, eightk, KEYS, schema=EIGHTK_SCHEMA)
+            totals["sched13d_rows"] += store.write_table(SCHED13D_TABLE, sched, KEYS, schema=SCHED13D_SCHEMA)
             meta["status"] = STATUS_OK
             totals["earnings_rows"] += meta["earnings_rows"]
             totals["fundamentals_rows"] += meta["fundamentals_rows"]
@@ -570,7 +584,7 @@ def run_edgar_ingest(
             meta["error"] = str(exc)[:500]
             errors[cik] = meta["error"]
             log.warning("edgar_ingest_cik_failed", cik=cik, symbols=syms, error=meta["error"])
-        store.write_table(META_TABLE, pd.DataFrame([meta], columns=list(META_SCHEMA)), META_KEYS, schema=META_SCHEMA)
+        store.write_table(meta_table, pd.DataFrame([meta], columns=list(META_SCHEMA)), META_KEYS, schema=META_SCHEMA)
         if progress and n % PROGRESS_EVERY == 0:
             progress(f"edgar: {n}/{len(todo)} CIKs")
     result = {

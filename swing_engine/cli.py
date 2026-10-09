@@ -862,15 +862,18 @@ def ingest_edgar(
     refresh_days: Annotated[
         int | None, typer.Option("--refresh-days", help="skip CIKs fetched OK within N days (default 7)")
     ] = None,
+    eightk_only: Annotated[
+        bool, typer.Option("--8k-only", help="submissions only (8-K items, 13D, earnings dates); own resume table")
+    ] = False,
 ) -> None:
-    """Fetch SEC 8-K earnings dates and XBRL fundamentals into the store (data.fundamentals.run_edgar_ingest)."""
+    """Fetch SEC 8-K earnings dates, all 8-K items, Schedule 13D and XBRL fundamentals (data.fundamentals)."""
     settings = _state(ctx).settings
     edgar = _edgar_client()
     run_edgar_ingest = _load("data.fundamentals.run_edgar_ingest")
     syms = _split_list(symbols)
     store = _open_store(settings, must_exist=syms is None)  # the default universe is the stored bars
     extra = {"refresh_days": refresh_days} if refresh_days is not None else {}
-    result = run_edgar_ingest(store, edgar, syms, limit=limit, progress=_ingest_progress, **extra)
+    result = run_edgar_ingest(store, edgar, syms, limit=limit, progress=_ingest_progress, eightk_only=eightk_only, **extra)
     _print_mapping("EDGAR ingest (ticker -> CIK)", dict(result or {}))
 
 
@@ -880,6 +883,21 @@ def _edgar_client() -> Any:
         _fail("set EDGAR_USER_AGENT in .env to 'name contact-email' (SEC fair-access policy); the placeholder is refused",
               EXIT_REFUSED)
     return _load("data.edgar.Edgar")(agent)
+
+
+@app.command("ingest-news")
+def ingest_news(
+    ctx: typer.Context,
+    start: Annotated[str | None, typer.Option("--start", help="first month (YYYY-MM-DD; default 2016-01-01)")] = None,
+    months: Annotated[int | None, typer.Option("--months", help="fetch at most N months this run")] = None,
+) -> None:
+    """Fetch Alpaca (Benzinga) news headline counts per symbol into `news_articles` (data.news; resumable)."""
+    secrets = load_secrets()
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    client = _load("data.news.AlpacaNews")(secrets.alpaca_api_key or "", secrets.alpaca_secret_key or "")
+    first = _parse_date(start, _load("data.news.NEWS_DEFAULT_START"))
+    result = _load("data.news.run_news_ingest")(store, client, start=first, months=months, progress=_ingest_progress)
+    _print_mapping("Alpaca news ingest (headline counts)", dict(result or {}))
 
 
 @app.command("ingest-insiders")

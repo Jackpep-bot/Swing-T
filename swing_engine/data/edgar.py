@@ -151,6 +151,73 @@ def parse_submissions(payload: dict[str, Any], symbols: Iterable[str], cik: str 
     df["accepted_at"] = pd.to_datetime(df["accepted_at"], utc=True).dt.tz_convert(TZ)
     return df.sort_values(["symbol", "accepted_at"], kind="mergesort").reset_index(drop=True)
 
+# ---- every 8-K item list and Schedule 13D filings (data.filings) from the same submissions pages ---------------
+EIGHTK_FORMS: frozenset[str] = frozenset({"8-K", "8-K/A"})
+EIGHTK_COLUMNS = ["symbol", "cik", "accession", "form", "filing_date", "acceptance", "session", "items"]
+#: Schedule 13D appears in the SUBJECT company's submissions list; EDGAR renamed the form "SCHEDULE 13D" when the
+#: structured 13D/G format began (Dec 2024), so both spellings are kept.
+SCHED13D_FORMS: frozenset[str] = frozenset({"SC 13D", "SC 13D/A", "SCHEDULE 13D", "SCHEDULE 13D/A"})
+SCHED13D_COLUMNS = ["symbol", "cik", "filer", "accession", "form", "filing_date", "acceptance", "session"]
+ACCESSION_FILER_WIDTH = 10  # accession prefix = CIK of the filer OR its filing agent (submissions JSON has no filer)
+
+
+def _no_time_session(filing_date: Any) -> date:
+    """A filing with a date but no acceptance time is visible from the session AFTER its filing date."""
+    return next_trading_day(filing_date.date())
+
+
+def parse_filings(
+    payload: dict[str, Any], symbols: Iterable[str], cik: str | None, forms: frozenset[str], columns: list[str]
+) -> pd.DataFrame:
+    """Rows for `forms` from one submissions document/page, one per (symbol, accession): `acceptance` (Eastern,
+    decoded from UTC like `parse_submissions`), `session` (first session whose close can react; the session after
+    filing_date when acceptance is missing), raw `items`, and `filer` (accession prefix)."""
+    block = _filings_block(payload)
+    cik_s = str(cik if cik is not None else payload.get("cik", "")).zfill(CIK_WIDTH)
+    syms = sorted({s.upper().strip() for s in symbols if s})
+    rows: list[dict[str, Any]] = []
+    for i, form in enumerate(block.get("form") or []):
+        if str(form) not in forms:
+            continue
+        filing_date = pd.to_datetime(_cell(block, "filingDate", i), errors="coerce")
+        accepted = _acceptance_ts(_cell(block, "acceptanceDateTime", i))
+        if pd.isna(accepted) and pd.isna(filing_date):
+            continue
+        session = _no_time_session(filing_date) if pd.isna(accepted) else _reaction_session(accepted, filing_date)
+        accession = str(_cell(block, "accessionNumber", i) or "")
+        items = ",".join(t.strip() for t in str(_cell(block, "items", i) or "").split(ITEMS_SEPARATOR) if t.strip())
+        for sym in syms:
+            rows.append({
+                "symbol": sym, "cik": cik_s, "filer": accession[:ACCESSION_FILER_WIDTH], "accession": accession,
+                "form": str(form), "filing_date": filing_date.date() if pd.notna(filing_date) else None,
+                "acceptance": accepted, "session": session, "items": items,
+            })
+    df = pd.DataFrame(rows, columns=columns)
+    if df.empty:
+        return df
+    df["acceptance"] = pd.to_datetime(df["acceptance"], utc=True).dt.tz_convert(TZ)
+    return df.sort_values(["symbol", "session", "accession"], kind="mergesort").reset_index(drop=True)
+
+
+def submission_tables(
+    pages: Iterable[dict[str, Any]], cik: str, symbols: Iterable[str]
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """(earnings_dates, eightk_items, sched13d) frames from one CIK's submissions pages (one fetch, three tables)."""
+    syms = list(symbols)
+    pages = list(pages)
+
+    def cat(frames: list[pd.DataFrame], columns: list[str]) -> pd.DataFrame:
+        frames = [f for f in frames if not f.empty]
+        if not frames:
+            return pd.DataFrame(columns=columns)
+        return pd.concat(frames, ignore_index=True).drop_duplicates(subset=["symbol", "accession"]).reset_index(drop=True)
+
+    return (
+        cat([parse_submissions(p, syms, cik) for p in pages], EARNINGS_COLUMNS),
+        cat([parse_filings(p, syms, cik, EIGHTK_FORMS, EIGHTK_COLUMNS) for p in pages], EIGHTK_COLUMNS),
+        cat([parse_filings(p, syms, cik, SCHED13D_FORMS, SCHED13D_COLUMNS) for p in pages], SCHED13D_COLUMNS),
+    )
+
 # edgartools' DataFrame column names have shifted between releases; look for any of these
 _CODE_CANDIDATES = ("Code", "TransactionCode", "transaction_code", "code")
 _AD_CANDIDATES = ("AcquiredDisposed", "acquired_disposed", "AD", "acquiredDisposed")
@@ -374,5 +441,6 @@ class Edgar:
 
 __all__ = [
     "Edgar", "FORM4_COLUMNS", "CURRENT_COLUMNS", "COMPANY_TICKER_COLUMNS", "EARNINGS_COLUMNS", "earnings_session",
-    "parse_submissions",
+    "parse_submissions", "parse_filings", "submission_tables", "EIGHTK_COLUMNS", "SCHED13D_COLUMNS", "EIGHTK_FORMS",
+    "SCHED13D_FORMS",
 ]
