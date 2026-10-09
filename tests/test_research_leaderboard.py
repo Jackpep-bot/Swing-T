@@ -51,3 +51,9 @@ def test_board_looks_are_logged_once(tmp_path, monkeypatch) -> None:
     board, _ = lb.leaderboard(frame("noise", "2024-01-02", 0.0), WINDOWS[:1])
     assert lb.log_board_trials(board) == 3 and lb.log_board_trials(board) == 0
     assert trials.trial_count(None, path) == 3
+
+
+def test_liquid_variant_filters_and_renames() -> None:
+    shadow = frame("s", "2024-01-02", 0.1).assign(dollar_volume=[1e6, 6e7] * 200)
+    out = lb.liquid_variant(shadow, 5e7)
+    assert len(out) == 200 and set(out["strategy"]) == {"s@liq50"}

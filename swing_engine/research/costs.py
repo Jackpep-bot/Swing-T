@@ -38,9 +38,9 @@ def cost_table(bars: pd.DataFrame) -> pd.DataFrame:
 
 
 def attach_costs(frame: pd.DataFrame, table: pd.DataFrame) -> pd.DataFrame:
-    """``frame`` (shadow rows: symbol, as_of) plus ``cost_bps`` from the signal day's row of ``table``."""
+    """``frame`` (shadow rows: symbol, as_of) plus ``cost_bps`` and ``dollar_volume`` from the signal day's row of ``table``."""
     left = frame.assign(as_of=pd.to_datetime(frame["as_of"]).dt.date)
-    return left.merge(table[["symbol", "as_of", "cost_bps"]], on=["symbol", "as_of"], how="left")
+    return left.merge(table[["symbol", "as_of", "cost_bps", "dollar_volume"]], on=["symbol", "as_of"], how="left")
 
 
 __all__ = ["attach_costs", "cost_table"]

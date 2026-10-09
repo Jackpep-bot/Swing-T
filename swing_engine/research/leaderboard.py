@@ -130,6 +130,14 @@ def render(board: pd.DataFrame, n_trials: int, windows: Sequence[Window] = WINDO
 LEADERBOARD_TAG = "leaderboard"
 
 
+def liquid_variant(shadow: pd.DataFrame, min_dollar_volume: float) -> pd.DataFrame:
+    """Signals on names trading at least ``min_dollar_volume`` a day (20-day mean, as of the signal day), under the
+    strategy name ``<slug>@liq<$M>`` so every variant is logged and haircut as its own trial."""
+    keep = shadow.loc[shadow["dollar_volume"].astype(float) >= min_dollar_volume].copy()
+    keep["strategy"] = keep["strategy"].astype(str) + f"@liq{min_dollar_volume / 1e6:g}"
+    return keep
+
+
 def log_board_trials(board: pd.DataFrame) -> int:
     """Log each (strategy, window, horizon) look as a trial once, so research.metrics.multiple_testing and
     `swing backtest` deflate by every look the leaderboard took, not only the runs logged elsewhere."""
@@ -154,10 +162,14 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap.add_argument("--settings", default="config/replay.yaml")
     ap.add_argument("--store", action="append", default=[], help="extra replay store (repeatable)")
     ap.add_argument("--out", default="docs/leaderboard.md")
+    ap.add_argument("--min-dollar-volume", type=float, default=None,
+                    help="variant: only signals whose 20-day dollar volume is at least this (counted as new trials)")
     args = ap.parse_args(argv)
     settings = load_settings.__wrapped__(Path(args.settings))
     shadow = with_costs(read_shadow([ROOT / settings.data.store_path, *(ROOT / s for s in args.store)]),
                         ROOT / settings.data.store_path)
+    if args.min_dollar_volume is not None:
+        shadow = liquid_variant(shadow, args.min_dollar_volume)
     board, n_trials = leaderboard(shadow, logged_trials=trial_count(None))
     log_board_trials(board)
     (ROOT / args.out).write_text(render(board, n_trials))
