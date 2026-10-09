@@ -188,9 +188,9 @@ strategies:                    # name -> {enabled, params}; names come from swin
   pullback_trend_avoid_402:           {enabled: false, avoid_402_sessions: 63}  # skip symbols with an 8-K Item 4.02 in the last 63 sessions
   activist_13d_drift:                 {enabled: false, max_hold_days: 10}  # original Schedule 13D; next-open entry, 2 ATR stop, time exit
   # pre-registered group of three (docs/preregistration/2026-10-09-three-picks.md): params are the module defaults; any change is a new trial
-  ath_trend_following_wide_stop:      {enabled: false}  # close at all-time high; 10 x ATR(42) trail from the high; no target / time stop
-  composite_cost_aware_rank:          {enabled: false}  # month end: buy top 10% of 4-signal composite, sell below top 20%; replay only
-  earnings_seasonality:               {enabled: false}  # top EarnRank quintile 5 sessions before expected 8-K 2.02; exit 2 sessions after
+  ath_trend_following_wide_stop:      {enabled: false, min_reward_risk: 0.0}  # close at all-time high; 10 x ATR(42) trail from the high; no target / time stop
+  composite_cost_aware_rank:          {enabled: false, min_reward_risk: 0.0}  # month end: buy top 10% of 4-signal composite, sell below top 20%; replay only
+  earnings_seasonality:               {enabled: false, min_reward_risk: 0.0}  # top EarnRank quintile 5 sessions before expected 8-K 2.02; exit 2 sessions after
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]

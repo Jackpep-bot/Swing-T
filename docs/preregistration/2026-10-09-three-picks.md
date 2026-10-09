@@ -144,3 +144,10 @@ walk-forward skill and gates.md; it does not enable anything.
   papers' portfolios.
 - ATH lookback is capped by the store start (2016-01-04).
 - Earnings seasonality uses diluted, unadjusted-for-splits XBRL EPS and a 364-day expected date.
+
+## Amendment 1 (2026-10-09, harness only, after a run that produced no trades)
+The first six runs (16:00 ET) produced zero trades: every signal was refused by the portfolio's 2:1 reward/risk
+floor (`skip_reasons: below_min_reward_risk`) because these strategies exit on their own rules and set no target.
+That is a sizing-config omission, not a strategy result. Fix: `min_reward_risk: 0.0` for the three strategies in
+`config/settings.yaml` (as every other rule-exit strategy in the engine has). No strategy rule or parameter changed.
+The zero-trade runs are discarded; the six runs are repeated once with the same commands.
