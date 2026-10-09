@@ -27,6 +27,9 @@ from swing_engine.research.shadow import DEFAULT_HORIZONS, REPLAY_SHADOW_TABLE, 
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_DIR = ROOT / "docs" / "strategies"
 SECTION = "## Empirical (replay)"
+#: Tag prefix of the current research replay runs (`swing replay --tag v2c<n>`, scripts/lane_r*.sh, run on the
+#: repaired store with delisted names, 2026-10-09). Older nr*/edgar runs predate the store repair.
+RUN_TAG_PREFIX = "v2c"
 RUNS_SUBDIR = ("runs", "replay")
 PCT = 100.0
 BPS = 1e4
@@ -87,7 +90,7 @@ class Window:
 #: store holds Alpaca history for ~4,300 names that were still liquid in 2024 (survivorship bias).
 WINDOWS: tuple[Window, ...] = (
     Window(date(2024, 10, 7), date(2026, 10, 5), "survivorship-free, every US ticker"),
-    Window(date(2017, 1, 1), date(2024, 10, 4), "survivors only: ~4,300 names liquid in 2024, biased upward"),
+    Window(date(2017, 1, 1), date(2024, 10, 4), "~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store"),
 )
 
 
@@ -201,7 +204,7 @@ def replace_section(text: str, section: str) -> str:
 
 def load_trades(runs_dir: Path) -> pd.DataFrame:
     frames = []
-    paths = sorted({*runs_dir.glob("*_nr*.json"), *runs_dir.glob("*_edgar.json")})  # --no-router research runs
+    paths = sorted(runs_dir.glob(f"*_{RUN_TAG_PREFIX}*.json"))  # the current --no-router research runs
     for path in paths:
         payload = json.loads(path.read_text())
         trades = pd.DataFrame(payload.get("trades") or [])
