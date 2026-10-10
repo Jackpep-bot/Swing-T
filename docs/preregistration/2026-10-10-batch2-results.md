@@ -28,3 +28,26 @@ Daily net return minus SPY close-to-close return on the same sessions. Pass rule
 - **fomc_cycle_even_weeks**: FAIL
 - **large_cap_net_repurchasers**: PASS
 - **volatility_managed_spy**: FAIL
+
+## Post-hoc diagnostics for large_cap_net_repurchasers (not a test, no parameter changed)
+The strategy has one pre-registered parameter set, so there is nothing to tune walk-forward; its two windows already
+are a selection-free test. Calendar-year returns of the replay equity curve against SPY (same sessions):
+
+| year | strategy | SPY | excess |
+|---|---|---|---|
+| 2017 | +0.0% | +18.6% | -18.6% |
+| 2018 | -12.5% | -7.0% | -5.5% |
+| 2019 | +27.5% | +28.6% | -1.1% |
+| 2020 | +22.0% | +15.2% | +6.8% |
+| 2021 | +36.6% | +28.7% | +7.9% |
+| 2022 | -9.0% | -19.9% | +10.9% |
+| 2023 | +11.7% | +24.8% | -13.1% |
+| 2024 (to Oct 4) | +20.8% | +21.2% | -0.4% |
+| 2024 (from Oct 7) | -1.5% | +3.2% | -4.7% |
+| 2025 | +7.2% | +16.6% | -9.5% |
+| 2026 (to Oct 5) | +13.7% | +13.4% | +0.3% |
+
+It beat SPY in 4 of 11 periods (2017 is mostly warm-up: no share-count history yet). Reading: it is a diversified
+long book with beta 0.6-0.7 that makes money when the market does and has no measurable alpha. It passes the
+pre-registered absolute rule and fails the question that matters for a trader who could just hold SPY. Decision:
+not enabled on paper; kept as a research result.
