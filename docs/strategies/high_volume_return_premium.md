@@ -120,4 +120,9 @@ Trailing 250-signal average 20-session return in excess of SPY <= 0.
 - https://ideas.repec.org/a/eee/jfinec/v103y2012i2p255-279.html (Kaniel-Ozoguz-Starks 2012; citation only, not read)
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+Pre-registered group test (docs/preregistration/2026-10-10-two-picks.md), graded as a portfolio net of per-stock costs, n_trials = 2. **FAIL**. Full table: docs/preregistration/2026-10-10-two-picks-results.md.
+
+| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| high_volume_return_premium | 2024 | 842 | -0.061 | -1.72 | -0.03 | -0.03 | 0.29 | 21.3% | 17 | -1301% | -3.4% |
+| high_volume_return_premium | 2017 | 3255 | -0.065 | -3.05 | -0.28 | -0.28 | 0.09 | 67.2% | 17 | -291% | -51.1% |

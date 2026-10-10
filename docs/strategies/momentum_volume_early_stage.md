@@ -109,4 +109,9 @@ Trailing 24-month average 126-session return of the picks minus that of all top-
 - https://ideas.repec.org/a/bla/jfinan/v55y2000i5p2017-2069.html (citation)
 
 ## Empirical (replay)
-_Pending: filled in from swing replay on real data._
+Pre-registered group test (docs/preregistration/2026-10-10-two-picks.md), graded as a portfolio net of per-stock costs, n_trials = 2. **FAIL**. Full table: docs/preregistration/2026-10-10-two-picks-results.md.
+
+| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| momentum_volume_early_stage | 2024 | 81 | -0.228 | -1.05 | -0.26 | -0.26 | 0.19 | 12.2% | 43 | -215% | -5.1% |
+| momentum_volume_early_stage | 2017 | 430 | +0.130 | 1.09 | 0.18 | 0.00 | 0.50 | 30.5% | 57 | 555% | +12.7% |
