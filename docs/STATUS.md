@@ -58,15 +58,20 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-09 14:30 ET
-v2 results (repaired store with ~2,800 delisted names, insider/VIX/French data, per-stock spread costs):
-docs/leaderboard.md over 794 trials - NO survivors; 128 cards updated. Stores: data/live/replay_r2.duckdb (2024-26 +
-2017-24 chunks 7-8), data/live/replay_r1.duckdb (2017-24 chunks 1-6). Paper trading off; the launchd nightly ran on
-its own 2026-10-09 (21 shadow strategies, weekly report data/journal/weekly-2026-W41.md).
+## Resume here (in order) - updated 2026-10-09 21:30 ET
+Leaderboard (docs/leaderboard.md, 2,394 trials incl. liquid-only variants, no-news variants, 13D drift, avoid-4.02):
+NO survivors. Pre-registered three-pick group (docs/preregistration/2026-10-09-three-picks-results.md): all FAIL in
+2024-26. Data now in data/live/market.duckdb: bars (repaired, delisted keys), insider_trades, vix, ff_factors,
+eightk_items (886k), sched13d (75k), news_articles (Alpaca, 2016-). Research stores: replay_r1, replay_r2 (v2 full
+runs), replay_p3 (three picks + events), replay_news (no-news variants). Telegram push is live; paper trading off.
 
-Next (needs Jack's direction): the data and strategy catalog are exhausted without a survivor. Options in
-docs/methods.md "Order of work": combine weak signals (ranker / signal combination) instead of single strategies,
-bootstrap reality check / SPA across the 794 trials, longer shadow-ledger evidence before any paper trading.
+Queue (run each heavy job detached with nohup; one at a time):
+1. Two more candidates (high_volume_return_premium, momentum_volume_early_stage): cards + pre-registration
+   docs/preregistration/2026-10-10-two-picks.md being written; commit it BEFORE replaying; then
+   cp data/live/market.duckdb data/live/replay_p2.duckdb, run the 4 replays with config/prereg2.yaml, grade with
+   research.prereg_eval, record results in the cards.
+2. Ideas left in docs/methods.md "Order of work": bootstrap reality check / SPA across trials, signal combination.
+3. Weekly report + drift tab build up live shadow evidence; nothing trades on paper until a survivor exists.
 
 ## Research commands
 - Full research pass (every registered strategy, both windows, parallel lanes sized from free memory up to 40 GB,
