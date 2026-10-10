@@ -1,6 +1,6 @@
 # Pre-registration: walk-forward ensemble of (strategy, regime) cells (2026-10-10)
 
-COMMIT: <to fill>
+COMMIT: 5330336
 
 One test, fixed before it is run, graded on the existing replay shadow ledgers (replay_r1, replay_r2, replay_news;
 these predate the 2026-10-10 splits backfill, which is noted as a limit). Same statistic and code path as
