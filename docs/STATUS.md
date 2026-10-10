@@ -58,20 +58,17 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-09 21:30 ET
-Leaderboard (docs/leaderboard.md, 2,394 trials incl. liquid-only variants, no-news variants, 13D drift, avoid-4.02):
-NO survivors. Pre-registered three-pick group (docs/preregistration/2026-10-09-three-picks-results.md): all FAIL in
-2024-26. Data now in data/live/market.duckdb: bars (repaired, delisted keys), insider_trades, vix, ff_factors,
-eightk_items (886k), sched13d (75k), news_articles (Alpaca, 2016-). Research stores: replay_r1, replay_r2 (v2 full
-runs), replay_p3 (three picks + events), replay_news (no-news variants). Telegram push is live; paper trading off.
+## Resume here (in order) - updated 2026-10-09 22:30 ET
+No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no
+window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
+(docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
 
-Queue (run each heavy job detached with nohup; one at a time):
-1. Two more candidates (high_volume_return_premium, momentum_volume_early_stage): cards + pre-registration
-   docs/preregistration/2026-10-10-two-picks.md being written; commit it BEFORE replaying; then
-   cp data/live/market.duckdb data/live/replay_p2.duckdb, run the 4 replays with config/prereg2.yaml, grade with
-   research.prereg_eval, record results in the cards.
-2. Ideas left in docs/methods.md "Order of work": bootstrap reality check / SPA across trials, signal combination.
-3. Weekly report + drift tab build up live shadow evidence; nothing trades on paper until a survivor exists.
+Queue:
+1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
+   research-ingest -> pre-registration doc committed BEFORE any replay -> `python -m swing_engine.research.prereg_run`
+   (parallel, 40GB budget, identical to serial) -> results into the cards.
+2. New data sources need Jack's approval before building.
+3. Keep the Mac on AC power for long runs (it sleeps on battery / lid closed).
 
 ## Research commands
 - Full research pass (every registered strategy, both windows, parallel lanes sized from free memory up to 40 GB,
