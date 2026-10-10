@@ -29,3 +29,10 @@ negative); #2 is the only stock-selection idea left that the literature finds in
   cross-sectional volatility is controlled. Mean reversion has already failed here.
 - **Asset growth (Cooper-Gulen-Schill)**: absent in big stocks (FF 2008), not significant net of costs (Novy-Marx-Velikov
   net 0.26%/month, t=1.75), and the CMA factor averaged 0.22% a year in 2010-2019.
+- **SPY 10-month SMA timing (Faber 2007)**: mainly cuts drawdowns, and most of that came in 2000-02 and 2008. CXO
+  (2019, independent) finds every timing variant "substantially underperforms" buy-and-hold since January 2009, and
+  the month-end result is fragile to the check day (6 of 21 shifted variants beat buy-and-hold, 1990-2019).
+  https://www.cxoadvisory.com/calendar-effects/optimal-cycle-for-monthly-sma-signals/
+- **Dual momentum / GEM (Antonacci)**: an independent EDHEC replication (Petit, SSRN 7427878, 2026) finds GEM trailed the
+  index by 4.8 points a year since 2010, with its deepest drawdown in 55 years in 2021-23. Graded on alpha vs SPY, both
+  of these would almost certainly fail, so they are not worth the trials.
