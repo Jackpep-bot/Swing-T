@@ -25,11 +25,11 @@
   "ref_codes": "B<n>=brokers.json items[n], P<n>=platforms.json items[n], C<n>=classic.json items[n], E<nn>=evidence.json id, M1a<n>/M1b:<name>/M6.<n>/M7a<n>/M7b<n>=docs/methods.md table rows/sections; '#part' = only that part maps here"
  },
  "counts": {
-  "items": 281,
+  "items": 283,
   "by_decision": {
    "have": 32,
-   "implement": 65,
-   "implement_disabled_for_comparison": 130,
+   "implement": 66,
+   "implement_disabled_for_comparison": 131,
    "approximate": 14,
    "blocked_paid_data": 14,
    "avoid": 26
@@ -38,14 +38,14 @@
    "strategies_trend": 44,
    "strategies_meanrev": 37,
    "strategies_breakout": 35,
-   "ratings_screens": 51,
+   "ratings_screens": 53,
    "regime_tools": 41,
    "strategies_pattern": 12,
    "risk_tools": 22,
    "indicators": 39
   },
   "by_category": {
-   "strategy": 133,
+   "strategy": 135,
    "screen": 17,
    "pattern": 16,
    "regime_tool": 33,
@@ -54,7 +54,7 @@
    "rating": 21,
    "other": 1
   },
-  "strategy_cards": 130,
+  "strategy_cards": 132,
   "raw_inputs": {
    "brokers.json items": 93,
    "platforms.json items": 82,
@@ -16880,6 +16880,72 @@
      "url": "https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/M-N/MultiCurrencyCorrelationOsc"
     }
    ]
+  },
+  {
+   "slug": "high_volume_return_premium",
+   "name": "High-volume return premium (Gervais-Kaniel-Mingelgrin)",
+   "brands": [
+    "Gervais-Kaniel-Mingelgrin"
+   ],
+   "brand_sources": [
+    "Gervais-Kaniel-Mingelgrin (JF 2001; Rodney L. White Center WP 001-99 read)"
+   ],
+   "category": "strategy",
+   "kind": "factor",
+   "rules_or_formula": "Each session: dollar volume (close x volume) rank >= 46 of the stock's own last 50 sessions (top 10%: 1-day formation vs 49-day reference) and, registered version, 1-day return rank 16..35 of its own last 50 daily returns (normal-return subsample); every close of the 50 sessions >= $5; >= 1 year of history. Long the high-volume stocks at the next open, hold 20 sessions. Paper: NYSE 1963-1996, long high / short low volume, by size group.",
+   "formula_status": "approximation",
+   "data_needed": "Daily closes and volume",
+   "free_data_ok": true,
+   "evidence_grade": "B",
+   "decision": "implement",
+   "batch": "ratings_screens",
+   "maps_to": "swing_engine/strategies/high_volume_return_premium.py",
+   "notes": "B. Pre-registered 2026-10-10 (docs/preregistration/2026-10-10-two-picks.md), built disabled. Gross long-leg edge vs size group 0.29-0.45% per 20 days; the authors' bid/ask market-order test is negative for every size group and the limit-order version is negative for large firms. Working paper read, published tables not. CZ signal not identified; plan on at most half the published edge.",
+   "holding_period": "20 sessions",
+   "evidence_text": "Working paper (17 Dec 1998), NYSE 1963-1996, gross: Table 2 zero-investment 20-day net return 0.94% small (t=2.98), 1.07% medium (t=5.77), 0.50% large (t=3.11); long leg vs size group 0.45% / 0.41% / 0.29%. Table 4 normal-return subsample 1.15% / 1.25% / 0.60%. Table 12 (TAQ) limit orders 0.33% / 0.26% / -0.22%; market orders at bid/ask -3.08% / -1.35% / -0.87%. Kaniel-Ozoguz-Starks (JFE 2012) not read.",
+   "source_grades": {},
+   "source_formula_status": {},
+   "unverified": "",
+   "source_engine_use": "",
+   "source_refs": [],
+   "source_urls": [
+    "https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf",
+    "https://ideas.repec.org/a/bla/jfinan/v56y2001i3p877-919.html"
+   ],
+   "appendix_entries": []
+  },
+  {
+   "slug": "momentum_volume_early_stage",
+   "name": "Early-stage momentum: low-turnover winners (Lee-Swaminathan)",
+   "brands": [
+    "Lee-Swaminathan"
+   ],
+   "brand_sources": [
+    "Lee-Swaminathan (JF 2000)"
+   ],
+   "category": "strategy",
+   "kind": "factor",
+   "rules_or_formula": "Month end, two independent sorts over J = 6 months (126 sessions, ending one week before the signal): top return decile (R10) AND bottom tercile of average daily turnover (volume / shares outstanding, V1). Long, next open, hold K = 6 months. Paper: NYSE/AMEX 1965-1995, equal-weighted; early-stage strategy is long R10V1 / short R1V3.",
+   "formula_status": "approximation",
+   "data_needed": "Daily closes and volume, point-in-time shares outstanding (EDGAR)",
+   "free_data_ok": true,
+   "evidence_grade": "B",
+   "decision": "implement_disabled_for_comparison",
+   "batch": "ratings_screens",
+   "maps_to": "swing_engine/strategies/momentum_volume_early_stage.py",
+   "notes": "B, old sample (to 1995), gross. Pre-registered 2026-10-10 (docs/preregistration/2026-10-10-two-picks.md), built disabled. Disabled-compare because the long leg alone shows no significant first-year edge over high-volume winners (V3-V1 among winners -0.06% to -0.23%/month, |t| < 1.4); the edge is in years 2+ and in the short leg. Better as a fifth input to composite_cost_aware_rank. CZ signal not identified; plan on at most half the published edge.",
+   "holding_period": "6 months (126 sessions)",
+   "evidence_text": "Published article, NYSE/AMEX 1965-1995, gross: Table II J=6 R10V1 1.63% / 1.67% / 1.72% / 1.66% a month (K=3/6/9/12) vs R10V3 1.57% / 1.55% / 1.56% / 1.42%. Table VI raw annual R10V1 20.64% year 1, 19.58% year 2; V3-V1 among winners -1.44% (t=-0.65) year 1, -6.44% (t=-3.15) year 2. Table VII long-short early-stage 16.70% year 1 (t=5.85) vs simple momentum 12.49%.",
+   "source_grades": {},
+   "source_formula_status": {},
+   "unverified": "",
+   "source_engine_use": "",
+   "source_refs": [],
+   "source_urls": [
+    "https://www.johnhcochrane.com/s/lee_swaminathan_returns_volume_JF.pdf",
+    "https://ideas.repec.org/a/bla/jfinan/v55y2000i5p2017-2069.html"
+   ],
+   "appendix_entries": []
   }
  ],
  "strategies_to_card": [
@@ -17531,6 +17597,16 @@
   {
    "slug": "pivot_extension_reversal",
    "name": "Pivot Extension reversal (TradeStation, TradingView)",
+   "decision": "implement_disabled_for_comparison"
+  },
+  {
+   "slug": "high_volume_return_premium",
+   "name": "High-volume return premium (Gervais-Kaniel-Mingelgrin)",
+   "decision": "implement"
+  },
+  {
+   "slug": "momentum_volume_early_stage",
+   "name": "Early-stage momentum: low-turnover winners (Lee-Swaminathan)",
    "decision": "implement_disabled_for_comparison"
   }
  ],

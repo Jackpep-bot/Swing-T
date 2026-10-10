@@ -1,10 +1,14 @@
-"""Grade the pre-registered three-pick group exactly as docs/preregistration/2026-10-09-three-picks.md specifies.
+"""Grade a pre-registered group exactly as its docs/preregistration/<date>-<group>.md specifies (default: the
+three-pick group, docs/preregistration/2026-10-09-three-picks.md).
 
-Inputs: the six saved replays (runs/replay/<start>_<end>_prereg3-<slug>.json) and the bars of the replay store (for
-the per-stock cost top-up, research.costs). Output: a markdown table per strategy and window, the n_trials = 3
+Inputs: the saved replays (runs/replay/<start>_<end>_<tag-prefix><slug>.json) and the bars of the replay store (for
+the per-stock cost top-up, research.costs). Output: a markdown table per strategy and window, the n_trials
 haircut and deflated Sharpe, and PASS / FAIL against the pre-registered criteria. Run::
 
     uv run python -m swing_engine.research.prereg_eval --settings config/prereg3.yaml
+    uv run python -m swing_engine.research.prereg_eval --settings config/prereg2.yaml \
+        --slugs high_volume_return_premium,momentum_volume_early_stage --tag-prefix prereg2- --n-trials 2 \
+        --out docs/preregistration/2026-10-10-two-picks-results.md
 """
 from __future__ import annotations
 
@@ -24,6 +28,8 @@ from swing_engine.research.metrics import deflated_sharpe, haircut_sharpe, max_d
 
 SLUGS = ("ath_trend_following_wide_stop", "composite_cost_aware_rank", "earnings_seasonality")
 N_TRIALS = 3
+TAG_PREFIX = "prereg3-"
+OUT = "docs/preregistration/2026-10-09-three-picks-results.md"
 REPLAY_BPS = 10.0  # already charged per side by the replay's CostModel
 BPS = 1e4
 TOP_TRADE_SHARE = 0.07
@@ -34,7 +40,7 @@ def _cost_lookup(table: pd.DataFrame) -> dict[tuple[str, Any], float]:
     return {(s, d): c for s, d, c in zip(table["symbol"], table["as_of"], table["cost_bps"], strict=True)}
 
 
-def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float]) -> dict[str, float]:
+def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_trials: int = N_TRIALS) -> dict[str, float]:
     trades = pd.DataFrame(payload.get("trades") or [])
     curve = pd.DataFrame(payload.get("equity_curve") or [])
     out: dict[str, float] = {"trades": float(len(trades))}
@@ -64,8 +70,8 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float]) -> d
         net_r=float(net_r.mean()) if len(net_r) else math.nan,
         t=float(net_r.mean() / (net_r.std(ddof=1) / math.sqrt(len(net_r)))) if len(net_r) > 1 and net_r.std(ddof=1) > 0 else math.nan,
         sharpe=float(sr),
-        haircut_sharpe=float(haircut_sharpe(sr, years, N_TRIALS)[0]) if math.isfinite(sr) and sr > 0 else float(sr),
-        dsr=float(deflated_sharpe(sr, N_TRIALS, len(rets), float(rets.skew()), float(rets.kurt()) + 3.0)),
+        haircut_sharpe=float(haircut_sharpe(sr, years, n_trials)[0]) if math.isfinite(sr) and sr > 0 else float(sr),
+        dsr=float(deflated_sharpe(sr, n_trials, len(rets), float(rets.skew()), float(rets.kurt()) + 3.0)),
         max_dd=float(max_drawdown(equity)),
         hold_days=float(trades["bars_held"].astype(float).mean()),
         top7_share=float(pnl.iloc[:k].sum() / pnl.sum()) if pnl.sum() != 0 else math.nan,
@@ -76,33 +82,20 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float]) -> d
     return out
 
 
-def main(argv: Sequence[str] | None = None) -> None:
-    from swing_engine.core.config import load_settings
-    from swing_engine.data.store import Store
-
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--settings", default="config/prereg3.yaml")
-    ap.add_argument("--out", default="docs/preregistration/2026-10-09-three-picks-results.md")
-    args = ap.parse_args(argv)
-    settings = load_settings.__wrapped__(Path(args.settings))
-    store_path = ROOT / settings.data.store_path
-    runs = store_path.parent / "runs" / "replay"
-    store = Store(str(store_path), read_only=True)
-    try:
-        bars = store.read_bars(None, min(w.start for w in WINDOWS), max(w.end for w in WINDOWS))
-    finally:
-        store.close()
-    costs = _cost_lookup(cost_table(bars))
-    lines = ["# Three-pick group: results", "", "Graded per docs/preregistration/2026-10-09-three-picks.md "
-             f"(n_trials = {N_TRIALS}). Net of replay costs plus the per-stock spread top-up.", "",
+def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequence[str] = SLUGS,
+                 tag_prefix: str = TAG_PREFIX, n_trials: int = N_TRIALS, out: str = OUT) -> list[str]:
+    """Markdown lines: one row per strategy and window, then the PASS / FAIL verdicts."""
+    title = "Three-pick group" if tuple(slugs) == SLUGS else f"Pre-registered group of {len(slugs)}"
+    lines = [f"# {title}: results", "", f"Graded per {out.replace('-results.md', '.md')} "
+             f"(n_trials = {n_trials}). Net of replay costs plus the per-stock spread top-up.", "",
              "| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | "
              "top-7% P&L share | return |", "|" + "---|" * 12]
     verdicts = {}
-    for slug in SLUGS:
+    for slug in slugs:
         ok = True
         for w in WINDOWS:
-            path = runs / f"{w.start.isoformat()}_{w.end.isoformat()}_prereg3-{slug}.json"
-            g = grade_run(json.loads(path.read_text()), costs) if path.exists() else {"trades": math.nan}
+            path = runs / f"{w.start.isoformat()}_{w.end.isoformat()}_{tag_prefix}{slug}.json"
+            g = grade_run(json.loads(path.read_text()), costs, n_trials) if path.exists() else {"trades": math.nan}
             ok = ok and g.get("haircut_sharpe", -1) > 0 and g.get("net_r", -1) > 0
 
             def f(key: str, spec: str = ".2f", g: dict[str, float] = g) -> str:
@@ -113,9 +106,32 @@ def main(argv: Sequence[str] | None = None) -> None:
                          f"{f('sharpe')} | {f('haircut_sharpe')} | {f('dsr')} | {f('max_dd', '.1%')} | "
                          f"{f('hold_days', '.0f')} | {f('top7_share', '.0%')} | {f('total_return', '+.1%')} |")
         verdicts[slug] = "PASS" if ok else "FAIL"
-    lines += ["", "## Verdicts", *[f"- **{s}**: {v}" for s, v in verdicts.items()]]
+    return [*lines, "", "## Verdicts", *[f"- **{s}**: {v}" for s, v in verdicts.items()]]
+
+
+def main(argv: Sequence[str] | None = None) -> None:
+    from swing_engine.core.config import load_settings
+    from swing_engine.data.store import Store
+
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--settings", default="config/prereg3.yaml")
+    ap.add_argument("--slugs", default=",".join(SLUGS), help="comma-separated strategy slugs of the group")
+    ap.add_argument("--tag-prefix", default=TAG_PREFIX, help="replay --tag was <tag-prefix><slug>")
+    ap.add_argument("--n-trials", type=int, default=N_TRIALS, help="group size for the haircut and deflated Sharpe")
+    ap.add_argument("--out", default=OUT)
+    args = ap.parse_args(argv)
+    slugs = tuple(s.strip() for s in args.slugs.split(",") if s.strip())
+    settings = load_settings.__wrapped__(Path(args.settings))
+    store_path = ROOT / settings.data.store_path
+    store = Store(str(store_path), read_only=True)
+    try:
+        bars = store.read_bars(None, min(w.start for w in WINDOWS), max(w.end for w in WINDOWS))
+    finally:
+        store.close()
+    lines = build_report(store_path.parent / "runs" / "replay", _cost_lookup(cost_table(bars)), slugs,
+                         args.tag_prefix, args.n_trials, args.out)
     (ROOT / args.out).write_text("\n".join(lines) + "\n")
-    print("\n".join(lines[-4:]))
+    print("\n".join(lines[-(len(slugs) + 1):]))
 
 
 if __name__ == "__main__":

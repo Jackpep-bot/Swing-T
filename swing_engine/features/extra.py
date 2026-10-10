@@ -1503,6 +1503,7 @@ EXTRA_FEATURES: dict[str, Feature] = {
     "ath_close": _ath_close,
     "hist_bars": _hist_bars,
     "ccr_score": _ccr_score,
+    "dollar_vol": lambda ctx: ctx.c * ctx.v,  # daily dollar volume (GKM 2001 volume measure); rank it with pctile_<n>_of_dollar_vol
 }
 
 _N = r"(\d+)"

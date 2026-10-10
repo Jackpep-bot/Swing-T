@@ -6,7 +6,7 @@
 
 - **Inputs**: 367 research rows (brokers 93, platforms 82, classic 61, evidence 51, methods.md 1a 16, 1b 39, 6.x 14, 7a 5, 7b 6) plus the broker built-in appendix (95 thinkorswim strategies, 350 thinkorswim studies, 128 TradeStation strategies).
 - **Deduplication**: the same tool across brands is one item that keeps every brand name and source (for example the Donchian / price-channel breakout appears in thinkorswim, TradeStation, TradingView and ChartSchool). Variants of one idea that share a setup become one item with a `variant` parameter (MA crossovers, oscillator crosses, Connors RSI(2) variants, Turtle Soup and Turtle Soup +1, NR7/NR4/ID-NR4), so the trial count in `research/trials.py` stays honest.
-- **Result**: **281 distinct items**. A build-time check fails if any research row, methods.md row or appendix entry is not mapped to an item, so nothing is dropped silently. `catalog.json` `source_coverage` lists, for every source row, the item(s) it landed in; `appendix_coverage` does the same for all 573 appendix entries.
+- **Result**: **283 distinct items** (281 from the build plus `high_volume_return_premium` and `momentum_volume_early_stage`, ingested by hand 2026-10-09). A build-time check fails if any research row, methods.md row or appendix entry is not mapped to an item, so nothing is dropped silently. `catalog.json` `source_coverage` lists, for every source row, the item(s) it landed in; `appendix_coverage` does the same for all 573 appendix entries.
 - **Evidence grades** are normalised to the methods.md scale (A, B, C, D, Neg, none; a trailing '-' marks the weak end). Each source file uses its own rubric, so per-source grades are kept in `source_grades`; conflicts are called out in the notes.
 
 **Decisions**
@@ -14,19 +14,19 @@
 | Decision | Meaning | Items |
 |---|---|---|
 | `have` | an existing module or feature already covers it (maps_to) | 32 |
-| `implement` | build it as a normal candidate (still subject to docs/gates.md) | 65 |
-| `implement_disabled_for_comparison` | build it, keep it disabled, measure it in replay (weak or negative evidence, or a negative control) | 130 |
+| `implement` | build it as a normal candidate (still subject to docs/gates.md) | 66 |
+| `implement_disabled_for_comparison` | build it, keep it disabled, measure it in replay (weak or negative evidence, or a negative control) | 131 |
 | `approximate` | proprietary rating rebuilt from its published description | 14 |
 | `blocked_paid_data` | needs data the free stack does not have (options, analyst estimates, vendor scores) | 14 |
 | `avoid` | no evidence, pure discretion, not testable, or out of scope; notes say why | 26 |
-| **total** | | **281** |
+| **total** | | **283** |
 
 **Items by build batch and decision**
 
 | Batch | have | implement | disabled-compare | approximate | blocked (paid data) | avoid | total |
 |---|---|---|---|---|---|---|---|
 | `indicators` | 6 | 25 | 2 | 0 | 2 | 4 | 39 |
-| `ratings_screens` | 4 | 14 | 5 | 14 | 9 | 5 | 51 |
+| `ratings_screens` | 4 | 15 | 6 | 14 | 9 | 5 | 53 |
 | `strategies_trend` | 2 | 2 | 36 | 0 | 0 | 4 | 44 |
 | `strategies_meanrev` | 2 | 0 | 33 | 0 | 0 | 2 | 37 |
 | `strategies_breakout` | 8 | 0 | 26 | 0 | 0 | 1 | 35 |
@@ -34,7 +34,7 @@
 | `regime_tools` | 4 | 13 | 16 | 0 | 1 | 7 | 41 |
 | `risk_tools` | 6 | 11 | 2 | 0 | 2 | 1 | 22 |
 
-**Strategy cards**: 130 strategy or strategy-like pattern items are `have`, `implement` or `implement_disabled_for_comparison`; they are listed at the end and in `catalog.json` `strategies_to_card`.
+**Strategy cards**: 132 strategy or strategy-like pattern items are `have`, `implement` or `implement_disabled_for_comparison`; they are listed at the end and in `catalog.json` `strategies_to_card`.
 
 ## Cross-cutting work the catalog implies
 
@@ -205,7 +205,7 @@ disabled-compare: 16, avoid: 2
 
 ## Strategies: factor, event and calendar rules (academic and quant)
 
-implement: 9, disabled-compare: 3, blocked (paid data): 1, avoid: 8
+implement: 10, disabled-compare: 4, blocked (paid data): 1, avoid: 8
 
 | Item | Brands / origin | Decision | Grade | Free data | Maps to | Rationale |
 |---|---|---|---|---|---|---|
@@ -218,9 +218,11 @@ implement: 9, disabled-compare: 3, blocked (paid data): 1, avoid: 8
 | **Same-calendar-month return seasonality (Heston-Sadka)** `heston_sadka_seasonality` | Heston-Sadka | implement | B | yes | research/ranker.py feature (new) | B, survives VW/NYSE breakpoints at every lag. Needs 5-20 years of monthly history (free from Alpha Vantage monthly adjusted). |
 | **Short-term momentum in high-turnover stocks (Medhat-Schmeling)** `high_turnover_short_term_momentum` | Medhat-Schmeling | implement | B | yes | features (new): turnover = volume / shares outstanding | B. Gates reversal entries: a big 1-month move on high turnover is a continuation candidate, not a fade. |
 | **Turn-of-the-month window** `turn_of_month` | Quantified Strategies; Ariel; Lakonishok-Smidt (+1) | implement | B | yes | strategies/playbook.py calendar tilt (new) | B, persistent but small (~0.55% per 4-day window). Use as an entry/exit timing tilt; QS index rule replayed for comparison. |
+| **High-volume return premium (Gervais-Kaniel-Mingelgrin)** `high_volume_return_premium` | Gervais-Kaniel-Mingelgrin | implement | B | yes | swing_engine/strategies/high_volume_return_premium.py | B (JF 2001; working paper read). One-day dollar-volume shock vs the stock's own 50 sessions, 20-session hold; gross long-leg edge 0.29-0.45% per 20 days and the authors' bid/ask test is negative, so expect little after costs. Pre-registered 2026-10-10, built disabled. |
 | **Pre-holiday effect** `pre_holiday_effect` | StockCharts / ChartSchool; Yale Hirsch / Stock Trader's Almanac; Ariel (+1) | disabled-compare | C | yes | calendar flag (new) + data/calendar.py | Decayed in large caps after 1990 (Ko 2021); tie-breaker only. |
 | **Revenue surprise (Jegadeesh-Livnat)** `revenue_surprise` | Jegadeesh-Livnat | disabled-compare | C | yes | new factor (XBRL revenue) | Marginal (t ~2.2); minor confirmation feature. |
 | **Santa Claus rally window** `santa_claus_rally` | Yale & Jeffrey Hirsch | disabled-compare | C | yes | calendar flag (new) | Almanac averages, not cost-tested. |
+| **Early-stage momentum: low-turnover winners (Lee-Swaminathan)** `momentum_volume_early_stage` | Lee-Swaminathan | disabled-compare | B | yes | swing_engine/strategies/momentum_volume_early_stage.py | B, sample to 1995. Long leg alone has no significant first-year edge over high-volume winners; edge is in years 2+ and the short leg. Pre-registered 2026-10-10 as a comparison; better as an input to composite_cost_aware_rank. |
 | **Analyst forecast revision momentum** `analyst_revision_momentum` | Chan-Jegadeesh-Lakonishok; Hawkins-Chamberlin-Daniel | blocked (paid data) | B | no | - | B (CJL; HXZ Re1 0.81%/mo) but needs I/B/E/S-type consensus history. |
 | **Congressional-trade following** `congressional_trade_copying` | Congressional-trade ETFs (NANC, KRUZ) | avoid | Neg | yes | - | No edge post-STOCK Act (45-day lag); NANC/KRUZ track the S&P. |
 | **Core position plus options overlay** `core_position_options_overlay` | Reddit sweep (r/Trading) | avoid | D | yes | - | Options strategy; the engine trades stock. |
@@ -474,7 +476,7 @@ The 131 thinkorswim studies without a dedicated item go to `indicator_library_lo
 
 ## Strategy cards to write
 
-130 items (category strategy or strategy-like pattern, decision have / implement / implement_disabled_for_comparison):
+132 items (category strategy or strategy-like pattern, decision have / implement / implement_disabled_for_comparison):
 
 | Slug | Name | Decision |
 |---|---|---|
@@ -608,7 +610,8 @@ The 131 thinkorswim studies without a dedicated item go to `indicator_library_lo
 | `williams_smash_day` | Smash Day and Hidden Smash Day reversals (Larry Williams) | disabled-compare |
 | `wyckoff_spring_accumulation` | Wyckoff accumulation: spring / test / SOS / LPS entries | disabled-compare |
 | `zscore_mean_reversion_garner` | SimpleMeanReversion z-score (Anthony Garner) | disabled-compare |
-
+| `high_volume_return_premium` | High-volume return premium (Gervais-Kaniel-Mingelgrin) | implement |
+| `momentum_volume_early_stage` | Early-stage momentum: low-turnover winners (Lee-Swaminathan) | implement_disabled_for_comparison |
 
 ## Fact-check (2026-10-07)
 
@@ -643,3 +646,13 @@ Stopped early at the user's request. Claims marked "refuted (fixed 2026-10-08)" 
 | Stockbee momentum burst: ≥ 4% up, volume > prior day, ≥ 100k | strategies/momentum_burst.md | confirmed (secondary implementations) | https://www.luxalgo.com/library/indicator/6h74IRYK-stockbee-momentum-burst/ |
 | Brandt-Kishore-Santa-Clara-Venkatachalam EAR 6.3% vs SUE 5.6%/yr | strategies/power_gap.md | unverifiable (paper not reached) | - |
 | Lakonishok-Lee 2001; Zhao 2026; Chordia 2009; Bulkowski NR7/BGU/cup stats; Stonks/EasySwing/Qullamaggie figures; Backtrex RSI2 OOS; JT 1993 figures; Crabel exits | various | not yet checked | - |
+| GKM: high volume = formation-day dollar volume rank >= 46 of the 50-day interval (49-day reference + 1-day formation); normal return = rank 16..35; price >= $5 in the reference period; >= 1 year of history | strategies/high_volume_return_premium.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (working paper of 17 Dec 1998, section 2 and eqs. 2 and 7; published JF tables not read) | https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf |
+| GKM Table 2: 20-day zero-investment net return 0.94% small (t=2.98), 1.07% medium (t=5.77), 0.50% large (t=3.11); long leg vs size group 0.45% / 0.41% / 0.29% | strategies/high_volume_return_premium.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (working paper) | https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf |
+| GKM Table 4 normal-return subsample, 20 days: 1.15% / 1.25% / 0.60% | strategies/high_volume_return_premium.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (working paper) | https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf |
+| GKM Table 12 (TAQ, 20 days): limit orders 0.33% / 0.26% / -0.22%, normal-return 0.89% / 0.73% / -0.06%; market orders at bid/ask -3.08% / -1.35% / -0.87%; midpoint 1.39% / 0.88% / 0.32% | strategies/high_volume_return_premium.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (working paper) | https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf |
+| GKM Table 7: excluding dividend / earnings announcement days leaves 0.99% / 1.10% / 0.47% | strategies/high_volume_return_premium.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (working paper, section 6 text) | https://rodneywhitecenter.wharton.upenn.edu/wp-content/uploads/2014/04/9901.pdf |
+| Kaniel-Ozoguz-Starks 2012 figures quoted in docs/proposals/swing-methods-2026-10/README.md (US 1.12% per 20 days; 0.57% in 1997-2001) | docs/proposals/swing-methods-2026-10/README.md (not used in the card) | not yet checked (no free copy found 2026-10-09) | - |
+| Lee-Swaminathan: NYSE/AMEX 1965-1995, >= 2 years of data, price >= $1, turnover = shares traded / shares outstanding, independent 10 x 3 sorts, one-week lag, early stage = long R10V1 / short R1V3 | strategies/momentum_volume_early_stage.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 (published article, section II and III.F) | https://www.johnhcochrane.com/s/lee_swaminathan_returns_volume_JF.pdf |
+| Lee-Swaminathan Table II, J=6: R10V1 1.63 / 1.67 / 1.72 / 1.66% a month (K=3/6/9/12), R10V3 1.57 / 1.55 / 1.56 / 1.42%; V3-V1 among winners t = -0.31 / -0.67 / -0.89 / -1.34 | strategies/momentum_volume_early_stage.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 | https://www.johnhcochrane.com/s/lee_swaminathan_returns_volume_JF.pdf |
+| Lee-Swaminathan Table VI Panel A: R10V1 20.64% year 1, 19.58% year 2; R10V3 19.20%, 13.14%; V3-V1 -1.44% (t=-0.65), -6.44% (t=-3.15); industry-adjusted R10V1 3.00% / 3.10%, size-adjusted 3.45% / 2.74% | strategies/momentum_volume_early_stage.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 | https://www.johnhcochrane.com/s/lee_swaminathan_returns_volume_JF.pdf |
+| Lee-Swaminathan Table VII: early-stage 16.70% (t=5.85) / 6.19% / 5.85% in years 1-3; simple 12.49%; late 6.84% then -5.35%; largest 50% of firms early 11.16% vs simple 7.71% (difference 3.45%, t=1.34) | strategies/momentum_volume_early_stage.md, catalog.json, CATALOG.md row, docs/preregistration/2026-10-10-two-picks.md | confirmed 2026-10-09 | https://www.johnhcochrane.com/s/lee_swaminathan_returns_volume_JF.pdf |

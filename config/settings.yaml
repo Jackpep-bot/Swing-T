@@ -191,6 +191,9 @@ strategies:                    # name -> {enabled, params}; names come from swin
   ath_trend_following_wide_stop:      {enabled: false, min_reward_risk: 0.0}  # close at all-time high; 10 x ATR(42) trail from the high; no target / time stop
   composite_cost_aware_rank:          {enabled: false, min_reward_risk: 0.0}  # month end: buy top 10% of 4-signal composite, sell below top 20%; replay only
   earnings_seasonality:               {enabled: false, min_reward_risk: 0.0}  # top EarnRank quintile 5 sessions before expected 8-K 2.02; exit 2 sessions after
+  # pre-registered group of two (docs/preregistration/2026-10-10-two-picks.md): params are the module defaults; any change is a new trial
+  high_volume_return_premium:         {enabled: false, min_reward_risk: 0.0}  # dollar volume rank >= 46/50 on a normal-return day (rank 16-35/50); hold 20 sessions
+  momentum_volume_early_stage:        {enabled: false, min_reward_risk: 0.0}  # month end: top-decile 6-month return AND bottom-tercile EDGAR turnover; hold 126 sessions
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]
