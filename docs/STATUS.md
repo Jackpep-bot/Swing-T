@@ -67,7 +67,7 @@ Running unattended (2026-10-10 09:00 ET, Mac on AC), detached with nohup:
 a. Full leaderboard re-run on the corrected universe: `swing research run` (run 20261010-033614, 2 lanes, log
    data/logs/research/full_rerun.log); 2024-26 done, 2017-24 in progress. It rebuilds cards, leaderboard and
    reality check and Telegrams the summary at the end. Then: commit docs/leaderboard.md, docs/strategies, docs/reality_check.md.
-b. scripts/after_rerun_b3.sh waits for (a), runs the batch 3 pre-registered group
+b. scripts/after_rerun_b3.sh (started 13:00 ET, runs beside (a) within a 44GB budget) runs the batch 3 pre-registered group
    (docs/preregistration/2026-10-10-batch3.md; results -> ...-batch3-results.md, Telegram), then re-replays
    residual_momentum on 2024-26 (tag v2c-resmom, store replay_p3) because its earlier row had 3 graded signals
    (replay warm-up was too short for its 756-bar fit; fixed with per-strategy warmup_calendar_days).
