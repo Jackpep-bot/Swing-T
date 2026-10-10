@@ -63,7 +63,12 @@ No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reali
 window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
 (docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
 
-Queue:
+Queue (2026-10-10 02:15 ET, Mac on AC):
+0. Batch 2 cards (FOMC cycle, large-cap buybacks, vol-managed SPY) are expected on origin branch
+   claude/batch2-cards under docs/proposals/swing-methods-2026-10/batch2/ (not there at 02:15). When present:
+   git fetch origin claude/batch2-cards; git checkout origin/claude/batch2-cards -- docs/proposals/swing-methods-2026-10/batch2
+   then pre-register as one group and run research.prereg_run. The signal-combination test is DONE (walk-forward
+   ensemble, FAIL).
 1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
    research-ingest -> pre-registration doc committed BEFORE any replay -> `python -m swing_engine.research.prereg_run`
    (parallel, 40GB budget, identical to serial) -> results into the cards.
