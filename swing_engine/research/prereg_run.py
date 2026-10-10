@@ -28,7 +28,8 @@ from swing_engine.research.cards import ROOT, WINDOWS
 
 #: Peak memory of a single-strategy replay by window start year (GB), measured 2026-10-09 (research/runner.py notes).
 JOB_GB = {2024: 5.0, 2017: 18.0}
-MEMORY_BUDGET_GB = 40.0
+#: 51.5 GB Mac minus ~7 GB for the OS and apps (owner, 2026-10-10: use all the RAM available without swapping)
+MEMORY_BUDGET_GB = 44.0
 POLL_S = 5.0
 
 
@@ -56,6 +57,25 @@ def next_batch(pending: list[Job], running_gb: float, budget: float = MEMORY_BUD
             out.append(job)
             used += job.gb
     return out
+
+
+def reserved_gb(ps_lines: Sequence[str]) -> float:
+    """Memory to reserve for every replay process on the machine (ours and other runners'), from `ps` command
+    lines: each `... replay --start <YYYY>-...` counts as its window's peak (JOB_GB), whatever it uses right now."""
+    total = 0.0
+    for line in ps_lines:
+        if "swing_engine.cli" not in line and "/swing " not in line:
+            continue
+        if " replay " not in line or "--start" not in line:
+            continue
+        year = line.split("--start", 1)[1].split()[0][:4]
+        total += JOB_GB.get(int(year), max(JOB_GB.values())) if year.isdigit() else max(JOB_GB.values())
+    return total
+
+
+def _replay_processes() -> list[str]:
+    out = subprocess.run(["ps", "-axo", "command"], capture_output=True, text=True, check=False).stdout
+    return [line for line in out.splitlines() if "python" in line]
 
 
 def eval_benchmark_args(args: argparse.Namespace) -> list[str]:
@@ -97,7 +117,7 @@ def main(argv: Sequence[str] | None = None) -> None:
                 for path in (store, cfg, Path(f"{store}.wal")):
                     path.unlink(missing_ok=True)
                 del running[job]
-        for job in next_batch(pending, sum(j.gb for j in running)):
+        for job in next_batch(pending, max(sum(j.gb for j in running), reserved_gb(_replay_processes()))):
             pending.remove(job)
             stem = f"pr_{args.tag_prefix}{job.slug}_{job.start[:4]}"
             store, cfg = base.with_name(f"{stem}.duckdb"), base.with_name(f"{stem}.yaml")
