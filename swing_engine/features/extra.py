@@ -27,6 +27,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+import structlog
 from numpy.lib.stride_tricks import sliding_window_view
 
 from ._common import (
@@ -1468,11 +1469,38 @@ def _big_net_issuance(ctx: _Ctx) -> pd.Series:
     ago) for the session's 500 largest rows by ``mcap_pit`` that also have an as-traded close >= $10 and >= 504
     bars of history; NaN for the rest. The three inputs come from data.fundamentals.join_share_issuance (NaN
     without them). ``big_net_issuance_rank`` is its same-session percentile (low = largest net repurchase)."""
-    day = session_key(ctx.df[TS_COL])
-    mcap = _optional(ctx, "mcap_pit")
-    big = mcap.groupby(day, sort=False).rank(ascending=False, method="first") <= BIG_TOP_N
-    ok = big & (_optional(ctx, "close_as_traded") >= BIG_MIN_PRICE) & (ctx.col("hist_bars") >= BIG_MIN_HIST_BARS)
+    ok = _big(ctx) & (_optional(ctx, "close_as_traded") >= BIG_MIN_PRICE) & (ctx.col("hist_bars") >= BIG_MIN_HIST_BARS)
     return _optional(ctx, "net_share_issuance").where(ok)
+
+
+def _big(ctx: _Ctx) -> pd.Series:
+    """True on the session's BIG_TOP_N largest rows by ``mcap_pit`` (data.fundamentals.join_share_issuance)."""
+    day = session_key(ctx.df[TS_COL])
+    return ctx.memo("_big", lambda: _optional(ctx, "mcap_pit").groupby(day, sort=False).rank(
+        ascending=False, method="first") <= BIG_TOP_N)
+
+
+# ----------------------------------------------------------------------------------------------- batch 3
+# docs/preregistration/2026-10-10-batch3.md (cards large_cap_gross_profitability, large_cap_residual_momentum)
+def _big_gross_prof(ctx: _Ctx) -> pd.Series:
+    """``big_gross_prof``: ``gross_prof`` (TTM gross profit / latest assets, data.fundamentals.join_edgar) on the
+    session's 500 largest rows by ``mcap_pit``; NaN for the rest and for names without it (the card's stand-in for
+    "financial": banks and insurers report no GrossProfit). Logs how many of the 500 drop out that way."""
+    big = _big(ctx)
+    out = _optional(ctx, "gross_prof").where(big)
+    n_big = int(big.sum())
+    if n_big:
+        structlog.get_logger(__name__).info("big_gross_prof", top_rows=n_big, without_gross_profit=int(out[big].isna().sum()),
+                                            dropped_share=round(float(out[big].isna().mean()), 4))
+    return out
+
+
+def _big_ff3_resid_mom(ctx: _Ctx, n: str, form: str) -> pd.Series:
+    """``big_ff3_resid_mom_<n>_<form>``: ``ff3_resid_mom_<n>_<form>`` on the session's 500 largest rows by
+    ``mcap_pit`` that also have an as-traded close >= $10 and >= ``n`` bars of history (the card: 756); NaN for the
+    rest (and everywhere without the ff_* columns)."""
+    ok = _big(ctx) & (_optional(ctx, "close_as_traded") >= BIG_MIN_PRICE) & (ctx.col("hist_bars") >= int(n))
+    return ctx.col(f"ff3_resid_mom_{n}_{form}").where(ok)
 
 
 # ----------------------------------------------------------------------------------------------- registry
@@ -1529,6 +1557,7 @@ EXTRA_FEATURES: dict[str, Feature] = {
     "ath_close": _ath_close,
     "hist_bars": _hist_bars,
     "big_net_issuance": _big_net_issuance,
+    "big_gross_prof": _big_gross_prof,
     "ccr_score": _ccr_score,
     "dollar_vol": lambda ctx: ctx.c * ctx.v,  # daily dollar volume (GKM 2001 volume measure); rank it with pctile_<n>_of_dollar_vol
 }
@@ -1603,6 +1632,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"vpn_{_N}"), _vpn, "vpn_30", None),
     (re.compile(rf"resid_mom_{_N}_{_N}_{_N}"), _resid_mom, "resid_mom_120_60_10", None),
     (re.compile(rf"ff3_resid_mom_{_N}_{_N}"), _ff3_resid_mom, "ff3_resid_mom_60_20", None),
+    (re.compile(rf"big_ff3_resid_mom_{_N}_{_N}"), _big_ff3_resid_mom, "big_ff3_resid_mom_60_20", None),
     (re.compile(rf"vix_sma_{_N}"), _vix_sma, "vix_sma_10", None),
     (re.compile(rf"wk_stoch_{_N}_{_N}"), _wk_stoch, "wk_stoch_10_3", None),
     (re.compile(rf"wk_roc_{_N}"), _wk_roc, "wk_roc_20", None),

@@ -96,6 +96,9 @@ class PanelStrategy(Strategy):
     #: `params["engine_trail"]` value wins over this attribute. Cards: docs/strategies/qullamaggie_flag.md,
     #: episodic_pivot.md (the overlay cuts the winners those methods depend on).
     engine_trail: bool = True
+    #: Calendar days of bars the replay must load before its first session when the default warm-up (400 days,
+    #: research.replay.WARMUP_CALENDAR_DAYS) is shorter than the strategy's longest window; 0 = the default.
+    warmup_calendar_days: int = 0
 
     def required_features(self) -> list[str]:
         return list(dict.fromkeys([*self.features_required, *self.extra_features]))

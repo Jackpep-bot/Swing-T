@@ -95,3 +95,36 @@ def test_benchmark_slugs_pass_on_haircut_ir_only(tmp_path) -> None:
     assert "## Against buy-and-hold SPY" in lines and sum("| timer |" in x for x in lines) == 4
     plain = pe.build_report(tmp_path, {}, ("timer", "picker"), "b2-", 3, "x-results.md")
     assert plain[-2:] == ["- **timer**: FAIL", "- **picker**: FAIL"] and not any("buy-and-hold" in x for x in plain)
+
+
+def test_alpha_slugs_need_the_standard_rule_and_a_bonferroni_significant_alpha(tmp_path) -> None:
+    assert pe.alpha_t_critical(2) == pytest.approx(2.2414, abs=1e-4)  # two-sided 5% over 2 trials
+    assert pe.alpha_t_critical(1) == pytest.approx(1.96, abs=1e-3)
+    rng = np.random.default_rng(3)
+    days = pd.bdate_range("2025-01-02", periods=300)
+    spy_ret = rng.normal(0.002, 0.01, len(days))  # a rising market: anything long passes the standard rule
+    spy = pd.Series(400.0 * (1.0 + spy_ret).cumprod(), index=[d.date() for d in days])
+    noise = rng.normal(0.0, 0.002, len(days))
+    noise -= noise.mean()
+
+    def payload(edge: float) -> dict:
+        p = _timing_payload(days, 100_000.0 * (1.0 + spy_ret + edge + noise).cumprod())
+        p["trades"][0].update(exit_price=12.0, pnl=200.0)  # net R > 0
+        return p
+
+    for w in WINDOWS:
+        for slug, edge in (("alpha", 0.001), ("beta", 0.0)):
+            (tmp_path / f"{w.start.isoformat()}_{w.end.isoformat()}_b3-{slug}.json").write_text(json.dumps(payload(edge)))
+    g = pe.grade_run(payload(0.001), {}, 2, spy)
+    assert g["alpha_t"] > 5 and g["turnover_ann"] == pytest.approx((10.0 + 12.0) * 100 / 2 / g_mean(payload(0.001)) / (299 / 252))
+    assert abs(pe.grade_run(payload(0.0), {}, 2, spy)["alpha_t"]) < 1
+    args = (tmp_path, {}, ("alpha", "beta"), "b3-", 2, "x-results.md", spy, (), "SPY")
+    lines = pe.build_report(*args, ("alpha", "beta"))
+    assert lines[-2:] == ["- **alpha**: PASS", "- **beta**: FAIL"]  # beta: positive Sharpe and net R, no alpha
+    assert any("alpha t >= 2.241" in x for x in lines) and any("turnover / yr" in x for x in lines)
+    assert pe.build_report(*args)[-2:] == ["- **alpha**: PASS", "- **beta**: PASS"]  # the standard rule alone
+    assert pe.build_report(*args[:6], None, (), "", ("alpha",))[-2] == "- **alpha**: FAIL"  # no benchmark: no alpha
+
+
+def g_mean(payload: dict) -> float:
+    return float(np.mean([r["equity"] for r in payload["equity_curve"]]))

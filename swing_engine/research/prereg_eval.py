@@ -13,7 +13,10 @@ haircut and deflated Sharpe, and PASS / FAIL against the pre-registered criteria
 ``--benchmark SPY`` adds a second table (daily net return minus the benchmark's close-to-close return from the store:
 annual excess return, information ratio and its haircut, OLS alpha / beta, exposure); the slugs in
 ``--benchmark-slugs`` (single-ETF timing strategies) then pass on a positive haircut information ratio in both
-windows instead of the haircut Sharpe / net R rule (docs/preregistration/2026-10-10-batch2.md).
+windows instead of the haircut Sharpe / net R rule (docs/preregistration/2026-10-10-batch2.md). The slugs in
+``--alpha-slugs`` (stock portfolios graded on alpha, docs/preregistration/2026-10-10-batch3.md) must meet that
+standard rule AND have a positive OLS alpha against the benchmark with alpha t >= ``alpha_t_critical(n_trials)`` (the
+two-sided Bonferroni critical value at ALPHA_LEVEL) in both windows.
 """
 from __future__ import annotations
 
@@ -22,6 +25,7 @@ import json
 import math
 from collections.abc import Sequence
 from pathlib import Path
+from statistics import NormalDist
 from typing import Any
 
 import numpy as np
@@ -39,6 +43,12 @@ REPLAY_BPS = 10.0  # already charged per side by the replay's CostModel
 BPS = 1e4
 TOP_TRADE_SHARE = 0.07
 PERIODS = 252
+ALPHA_LEVEL = 0.05  # family-wise two-sided level of the --alpha-slugs rule
+
+
+def alpha_t_critical(n_trials: int) -> float:
+    """Two-sided Bonferroni critical value (normal): |t| needed for p <= ALPHA_LEVEL / n_trials."""
+    return NormalDist().inv_cdf(1.0 - ALPHA_LEVEL / (2.0 * max(1, n_trials)))
 
 
 def _cost_lookup(table: pd.DataFrame) -> dict[tuple[str, Any], float]:
@@ -103,6 +113,9 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_tr
         hold_days=float(trades["bars_held"].astype(float).mean()),
         top7_share=float(pnl.iloc[:k].sum() / pnl.sum()) if pnl.sum() != 0 else math.nan,
         total_return=float(equity.iloc[-1] / equity.iloc[0] - 1.0),
+        # one-way: half of (bought + sold notional) over mean equity, per year
+        turnover_ann=float(((trades["entry_price"].astype(float) + trades["exit_price"].astype(float)) * qty).sum()
+                           / 2.0 / equity.mean() / years) if years > 0 else math.nan,
     )
     if "exposure" in curve.columns:
         out["exposure"] = float(curve["exposure"].astype(float).mean())
@@ -114,10 +127,12 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_tr
 def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequence[str] = SLUGS,
                  tag_prefix: str = TAG_PREFIX, n_trials: int = N_TRIALS, out: str = OUT,
                  benchmark: pd.Series | None = None, benchmark_slugs: Sequence[str] = (),
-                 benchmark_name: str = "benchmark") -> list[str]:
+                 benchmark_name: str = "benchmark", alpha_slugs: Sequence[str] = ()) -> list[str]:
     """Markdown lines: one row per strategy and window, then the PASS / FAIL verdicts. With ``benchmark`` (close
     by date) a second table reports every strategy against it, and ``benchmark_slugs`` pass on a positive haircut
-    information ratio in both windows instead of the absolute rule."""
+    information ratio in both windows instead of the absolute rule; ``alpha_slugs`` need the absolute rule and a
+    positive alpha with t >= ``alpha_t_critical(n_trials)`` in both windows."""
+    crit = alpha_t_critical(n_trials)
     title = "Three-pick group" if tuple(slugs) == SLUGS else f"Pre-registered group of {len(slugs)}"
     lines = [f"# {title}: results", "", f"Graded per {out.replace('-results.md', '.md')} "
              f"(n_trials = {n_trials}). Net of replay costs plus the per-stock spread top-up.", "",
@@ -135,6 +150,8 @@ def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequenc
                 ok = ok and g.get("haircut_ir", -1) > 0
             else:
                 ok = ok and g.get("haircut_sharpe", -1) > 0 and g.get("net_r", -1) > 0
+                if slug in alpha_slugs:  # NaN / missing compare False: no benchmark or no run fails
+                    ok = ok and g.get("alpha_ann", -1) > 0 and g.get("alpha_t", -1) >= crit
 
             def f(key: str, spec: str = ".2f", g: dict[str, float] = g) -> str:
                 v = g.get(key)
@@ -145,15 +162,18 @@ def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequenc
                          f"{f('hold_days', '.0f')} | {f('top7_share', '.0%')} | {f('total_return', '+.1%')} |")
             versus.append(f"| {slug} | {w.start.year} | {f('excess_ann', '+.1%')} | {f('ir')} | {f('haircut_ir')} | "
                           f"{f('alpha_ann', '+.1%')} | {f('alpha_t')} | {f('beta')} | {f('exposure', '.0%')} | "
-                          f"{f('sharpe')} | {f('bench_sharpe')} |")
+                          f"{f('sharpe')} | {f('bench_sharpe')} | {f('turnover_ann', '.0%')} |")
         verdicts[slug] = "PASS" if ok else "FAIL"
     if benchmark is not None:
         lines += ["", f"## Against buy-and-hold {benchmark_name}", "",
                   f"Daily net return minus {benchmark_name} close-to-close return on the same sessions. Pass rule for "
-                  f"{', '.join(benchmark_slugs) or 'no strategy'}: positive haircut IR in both windows; the columns "
-                  "are information only for the others.", "",
+                  f"{', '.join(benchmark_slugs) or 'no strategy'}: positive haircut IR in both windows. Pass rule "
+                  f"for {', '.join(alpha_slugs) or 'no strategy'}: the standard rule (haircut Sharpe > 0 and net R > "
+                  f"0) and alpha > 0 with alpha t >= {crit:.3f} (two-sided Bonferroni, {ALPHA_LEVEL:.0%} over "
+                  f"{n_trials} trials) in both windows. The columns are information only for the others; turnover "
+                  "is one-way (half of bought + sold notional over mean equity).", "",
                   "| strategy | window | excess / yr | IR | haircut IR | alpha / yr | alpha t | beta | exposure | "
-                  f"net Sharpe | {benchmark_name} Sharpe |", "|" + "---|" * 11, *versus]
+                  f"net Sharpe | {benchmark_name} Sharpe | turnover / yr |", "|" + "---|" * 12, *versus]
     return [*lines, "", "## Verdicts", *[f"- **{s}**: {v}" for s, v in verdicts.items()]]
 
 
@@ -175,13 +195,16 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--benchmark", default=None, help="store symbol to report excess returns against (e.g. SPY)")
     ap.add_argument("--benchmark-slugs", default="", help="slugs whose pass rule is the haircut IR vs --benchmark")
+    ap.add_argument("--alpha-slugs", default="",
+                    help="slugs that also need alpha vs --benchmark > 0 with t >= the Bonferroni critical value")
     args = ap.parse_args(argv)
     slugs = tuple(s.strip() for s in args.slugs.split(",") if s.strip())
     bench_slugs = tuple(s.strip() for s in args.benchmark_slugs.split(",") if s.strip())
-    if bench_slugs and not args.benchmark:
-        ap.error("--benchmark-slugs needs --benchmark")
-    if set(bench_slugs) - set(slugs):
-        ap.error(f"--benchmark-slugs not in --slugs: {sorted(set(bench_slugs) - set(slugs))}")
+    alpha_slugs = tuple(s.strip() for s in args.alpha_slugs.split(",") if s.strip())
+    if (bench_slugs or alpha_slugs) and not args.benchmark:
+        ap.error("--benchmark-slugs / --alpha-slugs need --benchmark")
+    if set(bench_slugs + alpha_slugs) - set(slugs):
+        ap.error(f"--benchmark-slugs / --alpha-slugs not in --slugs: {sorted(set(bench_slugs + alpha_slugs) - set(slugs))}")
     settings = load_settings.__wrapped__(Path(args.settings))
     store_path = ROOT / settings.data.store_path
     store = Store(str(store_path), read_only=True)
@@ -196,7 +219,7 @@ def main(argv: Sequence[str] | None = None) -> None:
             raise SystemExit(f"no {args.benchmark} bars in {store_path}")
         benchmark = pd.Series(b["close"].astype(float).to_numpy(), index=_bar_days(b["ts"])).sort_index()
     lines = build_report(store_path.parent / "runs" / "replay", _cost_lookup(cost_table(bars)), slugs,
-                         args.tag_prefix, args.n_trials, args.out, benchmark, bench_slugs, args.benchmark or "")
+                         args.tag_prefix, args.n_trials, args.out, benchmark, bench_slugs, args.benchmark or "", alpha_slugs)
     (ROOT / args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[-(len(slugs) + 1):]))
 

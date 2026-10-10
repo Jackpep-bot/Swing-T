@@ -59,6 +59,9 @@ class ResidualMomentum(PanelStrategy):
     features_required = ["atr_14"]
     extra_features = _extras(default_params)
     prior_columns = [*PanelStrategy.prior_columns, "ts"]
+    #: 757 bars (~1,100 days) + the two-month French lag. On the replay's default 400-day warm-up both scores were
+    #: NaN until three years into a window: the 2024-26 replay only fired on its last month start (2026-10-01).
+    warmup_calendar_days = 1200
 
     def __init__(self, params: dict[str, Any] | None = None):
         super().__init__(params)

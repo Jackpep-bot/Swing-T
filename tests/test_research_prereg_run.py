@@ -19,3 +19,5 @@ def test_benchmark_arguments_are_handed_to_the_grader() -> None:
     ns = argparse.Namespace(benchmark="SPY", benchmark_slugs="a,b")
     assert pr.eval_benchmark_args(ns) == ["--benchmark", "SPY", "--benchmark-slugs", "a,b"]
     assert pr.eval_benchmark_args(argparse.Namespace(benchmark=None, benchmark_slugs="")) == []
+    ns = argparse.Namespace(benchmark="SPY", benchmark_slugs="", alpha_slugs="a,b")
+    assert pr.eval_benchmark_args(ns) == ["--benchmark", "SPY", "--benchmark-slugs", "", "--alpha-slugs", "a,b"]
