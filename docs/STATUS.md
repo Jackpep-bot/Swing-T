@@ -63,17 +63,19 @@ No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reali
 window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
 (docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
 
-Running unattended (2026-10-10 03:40 ET, Mac on AC). Batch 2 is DONE and committed (net repurchasers PASS on its absolute rule with zero alpha vs SPY -> walk-forward next; FOMC and vol-managed SPY FAIL). The full re-run (b) is running with --lanes 2, log data/logs/research/full_rerun.log:
-a. Batch 2 pre-registered group (docs/preregistration/2026-10-10-batch2.md): research.prereg_run, log
-   data/logs/research/prereg_b2.log, results -> docs/preregistration/2026-10-10-batch2-results.md (commit them and
-   copy the table into the three cards' Empirical sections).
-b. scripts/after_b2_full_rerun.sh waits for (a), Telegrams the batch 2 table, then runs
-   `swing research run --windows short,long` on the live store (log data/logs/research/<run-id>.log) because the
-   splits table was nearly empty until 2026-10-10 (backfilled 14,707 splits since 2015): earlier boards screened the
-   universe on adjusted, not as-traded, prices. When it finishes: commit docs/leaderboard.md, the cards and
-   docs/reality_check.md; the old liquid-only boards (docs/leaderboard_liq*.md) predate the fix.
-c. Re-fetch origin/claude/batch2-cards after each group for more cards
-   (git checkout origin/claude/batch2-cards -- docs/proposals/swing-methods-2026-10/batch2).
+Running unattended (2026-10-10 09:00 ET, Mac on AC), detached with nohup:
+a. Full leaderboard re-run on the corrected universe: `swing research run` (run 20261010-033614, 2 lanes, log
+   data/logs/research/full_rerun.log); 2024-26 done, 2017-24 in progress. It rebuilds cards, leaderboard and
+   reality check and Telegrams the summary at the end. Then: commit docs/leaderboard.md, docs/strategies, docs/reality_check.md.
+b. scripts/after_rerun_b3.sh waits for (a), runs the batch 3 pre-registered group
+   (docs/preregistration/2026-10-10-batch3.md; results -> ...-batch3-results.md, Telegram), then re-replays
+   residual_momentum on 2024-26 (tag v2c-resmom, store replay_p3) because its earlier row had 3 graded signals
+   (replay warm-up was too short for its 756-bar fit; fixed with per-strategy warmup_calendar_days).
+c. 1R-exit family test (docs/preregistration/2026-10-10-exit-1r.md): regrade from existing ledgers into
+   data/live/regrade_1r.duckdb -> docs/leaderboard_t1r.md (a worker is running it).
+Done today: batch 2 (repurchasers PASS on its rule, zero alpha vs SPY, not enabled; FOMC and vol-managed SPY FAIL),
+regime-cell walk-forward FAIL, docs/attribution.md (most gross edge is market drift; targets almost never hit).
+Card branches: origin/claude/batch2-cards, origin/claude/batch3-cards (fetch for new files).
 
 Queue:
 1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
