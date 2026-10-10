@@ -1449,6 +1449,32 @@ def _ccr_score(ctx: _Ctx) -> pd.Series:
     return sum(x.where(ok).groupby(day, sort=False).rank(pct=True) for x in inputs) / CCR_INPUTS
 
 
+# ----------------------------------------------------------------------------------------------- batch 2
+# docs/preregistration/2026-10-10-batch2.md (cards volatility_managed_spy, large_cap_net_repurchasers)
+BIG_TOP_N = 500  # repurchasers card: the 500 largest names by market cap
+BIG_MIN_PRICE = 10.0  # card: price >= $10 (as-traded close)
+BIG_MIN_HIST_BARS = 504  # card: at least 504 bars of history
+
+
+def _rvar(ctx: _Ctx, n: str) -> pd.Series:
+    """``rvar_<n>``: realized variance = sum of squared close-to-close log returns over the last ``n`` bars."""
+    w = int(n)
+    r2 = np.log(ctx.c / ctx.shift(ctx.c)) ** 2
+    return ctx.ps(r2, lambda s: s.rolling(w, min_periods=w).sum())
+
+
+def _big_net_issuance(ctx: _Ctx) -> pd.Series:
+    """``big_net_issuance``: ``net_share_issuance`` (ln of split-adjusted shares 126 sessions ago over 378 sessions
+    ago) for the session's 500 largest rows by ``mcap_pit`` that also have an as-traded close >= $10 and >= 504
+    bars of history; NaN for the rest. The three inputs come from data.fundamentals.join_share_issuance (NaN
+    without them). ``big_net_issuance_rank`` is its same-session percentile (low = largest net repurchase)."""
+    day = session_key(ctx.df[TS_COL])
+    mcap = _optional(ctx, "mcap_pit")
+    big = mcap.groupby(day, sort=False).rank(ascending=False, method="first") <= BIG_TOP_N
+    ok = big & (_optional(ctx, "close_as_traded") >= BIG_MIN_PRICE) & (ctx.col("hist_bars") >= BIG_MIN_HIST_BARS)
+    return _optional(ctx, "net_share_issuance").where(ok)
+
+
 # ----------------------------------------------------------------------------------------------- registry
 def _cal(name: str) -> Feature:
     return lambda ctx: _calendar(ctx)[name]
@@ -1502,6 +1528,7 @@ EXTRA_FEATURES: dict[str, Feature] = {
     "gandalf_weak": _gandalf_weak,
     "ath_close": _ath_close,
     "hist_bars": _hist_bars,
+    "big_net_issuance": _big_net_issuance,
     "ccr_score": _ccr_score,
     "dollar_vol": lambda ctx: ctx.c * ctx.v,  # daily dollar volume (GKM 2001 volume measure); rank it with pctile_<n>_of_dollar_vol
 }
@@ -1583,6 +1610,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(rf"mkt_wk_above_{_N}"), _mkt_wk_above, "mkt_wk_above_10", None),
     (re.compile(r"wk_fresh"), _wk_fresh, "wk_fresh", None),
     (re.compile(rf"med_dv_{_N}"), _med_dv, "med_dv_63", None),
+    (re.compile(rf"rvar_{_N}"), _rvar, "rvar_22", None),
     (re.compile(r"wk_close"), lambda ctx: _wk(ctx, lambda g: g["close"]), "wk_close", None),
 ]
 

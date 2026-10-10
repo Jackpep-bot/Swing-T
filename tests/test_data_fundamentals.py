@@ -229,3 +229,70 @@ def test_ingest_caches_events_and_join_edgar_matches_direct_features() -> None:
 def test_join_edgar_is_a_no_op_without_edgar_tables() -> None:
     idx = panel_index(date(2026, 2, 23), date(2026, 2, 24))
     assert F.join_edgar(Store(), idx) is idx
+
+
+# ----------------------------------------------------------------------------------------------- share issuance
+def _share_events(rows: list[tuple[str, str, float]]) -> pd.DataFrame:
+    """(symbol, filed, cover-page shares) -> the `fundamental_events` columns the join reads."""
+    from swing_engine.data._common import session_ts
+    from swing_engine.data.calendar import next_trading_day
+
+    return pd.DataFrame([{"symbol": s, "filed": date.fromisoformat(f), "avail_ts": session_ts(next_trading_day(f)),
+                          "shares_outstanding": v} for s, f, v in rows])
+
+
+def _share_index(symbols: list[str], start: str = "2023-01-03", end: str = "2026-06-30") -> pd.DataFrame:
+    days = pd.DatetimeIndex(pd.to_datetime(trading_days(start, end))).tz_localize(TZ)
+    return pd.DataFrame([{"symbol": s, "ts": d, "close": 50.0} for s in symbols for d in days])
+
+
+def test_share_issuance_is_split_adjusted_and_lagged() -> None:
+    # BUY retires 10% of its shares in the 10-Q filed 2024-05-01; SPL does a 2:1 split (ex 2024-06-03) and nothing else
+    events = _share_events([("BUY", "2023-02-01", 100 * M), ("BUY", "2024-05-01", 90 * M),
+                            ("SPL", "2023-02-01", 100 * M), ("SPL", "2024-08-01", 200 * M)])
+    splits = pd.DataFrame({"symbol": ["SPL"], "ex_date": [date(2024, 6, 3)], "ratio": [2.0]})
+    index = _share_index(["BUY", "SPL"])
+    out = pd.concat([index, F.share_issuance_features(events, splits, index)], axis=1)
+    days = trading_days("2023-01-03", "2026-06-30")
+    at = lambda sym, d: out.loc[(out["symbol"] == sym) & (out["ts"].dt.date == d)].iloc[0]  # noqa: E731
+    usable = days.index(date(2024, 5, 2))  # first session after the filing
+    # the new count enters the numerator 126 sessions after it became usable, and not one session earlier
+    assert at("BUY", days[usable + 126])["net_share_issuance"] == pytest.approx(np.log(0.9))
+    assert at("BUY", days[usable + 125])["net_share_issuance"] == pytest.approx(0.0)
+    # 378 sessions after: both dates see the new count
+    assert at("BUY", days[usable + 378])["net_share_issuance"] == pytest.approx(0.0)
+    assert np.isnan(at("BUY", days[300])["net_share_issuance"])  # no count usable 378 sessions earlier
+    # the split is not an issuance, before or after the post-split filing is in the window
+    spl = out.loc[out["symbol"] == "SPL", "net_share_issuance"].dropna()
+    assert len(spl) > 100 and np.allclose(spl, 0.0)
+    # market cap = as-traded close x as-traded shares on both sides of the split (the store's close is adjusted)
+    before, after = at("SPL", date(2024, 5, 31)), at("SPL", date(2024, 6, 3))
+    assert before["close_as_traded"] == pytest.approx(100.0) and after["close_as_traded"] == pytest.approx(50.0)
+    assert before["mcap_pit"] == pytest.approx(100.0 * 100 * M) and after["mcap_pit"] == pytest.approx(50.0 * 200 * M)
+    # without the splits table the same filings look like a +100% issuance
+    raw = F.share_issuance_features(events, None, index)
+    assert raw.loc[index["symbol"] == "SPL", "net_share_issuance"].max() == pytest.approx(np.log(2.0))
+
+
+def test_share_issuance_guard_and_store_join() -> None:
+    # ERR: a filing-to-filing jump of +150% (a data error or an unrecorded split) voids the signal while it sits
+    # between the two dates; OK: +20% passes
+    events = _share_events([("ERR", "2023-02-01", 100 * M), ("ERR", "2024-05-01", 250 * M),
+                            ("OK", "2023-02-01", 100 * M), ("OK", "2024-05-01", 120 * M)])
+    index = _share_index(["ERR", "OK"])
+    feats = F.share_issuance_features(events, None, index)
+    err = feats.loc[index["symbol"] == "ERR", "net_share_issuance"].dropna()
+    assert len(err) > 0 and np.allclose(err, 0.0)  # only the dates where both counts are on the same side
+    ok = feats.loc[index["symbol"] == "OK", "net_share_issuance"]
+    assert ok.max() == pytest.approx(np.log(1.2))
+
+    store = Store(":memory:")
+    try:
+        assert F.join_share_issuance(store, index) is index  # no events table: unchanged
+        store.write_table(F.EVENTS_TABLE, events.assign(avail_ts=pd.to_datetime(events["avail_ts"])), F.EVENTS_KEYS)
+        joined = F.join_share_issuance(store, index)
+        assert list(joined.columns[-3:]) == F.SHARE_COLUMNS
+        np.testing.assert_allclose(joined["net_share_issuance"], feats["net_share_issuance"], equal_nan=True)
+        assert F.join_share_issuance(store, joined) is joined
+    finally:
+        store.close()

@@ -1,0 +1,14 @@
+# Book of the two SPY-timing strategies of the batch-2 group (docs/preregistration/2026-10-10-batch2.md):
+# fomc_cycle_even_weeks and volatility_managed_spy, each replayed ALONE. Fixed before any run.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_p3.duckdb
+universe:
+  static_symbols: [SPY]       # an ETF is not in the screened common-stock universe (include_etfs: false)
+risk:
+  risk_per_trade_pct: 20.0    # weight = 20% / (stop distance + 1%): volatility_managed_spy sets its stop from this
+  max_position_pct: 101.0     # the sizer divides by the limit (close + 1%): 101% = equity / close shares, then the
+                              # fill is cut to the cash on hand, so the position is never above 100% of equity
+  max_open_positions: 1
+execution:
+  max_new_orders_per_day: 1

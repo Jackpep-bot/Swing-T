@@ -249,7 +249,10 @@ def _with_market_series(panel: pd.DataFrame) -> pd.DataFrame:
     noise = lambda k: np.random.default_rng(k).normal(0.0, 0.01, seed.max() + 1)[seed]  # noqa: E731
     sym = panel["symbol"].astype(str).map(lambda s: sum(map(ord, s)))  # EDGAR-style per-symbol values (ccr_score)
     return panel.assign(vix_close=15.0 + 100.0 * np.abs(noise(1)), ff_mkt_rf=noise(2), ff_smb=noise(3),
-                        ff_hml=noise(4), ff_rf=0.0001, gross_prof=sym / 1000.0, shares_outstanding=1e6 * sym)
+                        ff_hml=noise(4), ff_rf=0.0001, gross_prof=sym / 1000.0, shares_outstanding=1e6 * sym,
+                        # data.fundamentals.join_share_issuance + store history (big_net_issuance)
+                        mcap_pit=1e6 * sym * panel["close"], close_as_traded=panel["close"],
+                        net_share_issuance=sym / 1e4, pre_panel_bars=600.0)
 
 
 @pytest.mark.parametrize("name", ALL_NAMES)
@@ -435,3 +438,28 @@ def test_weekly_features_use_completed_weeks_only():
     _close(_col(aaa, "wk_roc_1"), [np.nan] * 9 + [100.0] * 5 + [50.0])
     _close(_col(aaa, "wk_stoch_2_1"), [np.nan] * 9 + [100.0] * 6)  # (10 - 1) / (10 - 1), (15 - 6) / (15 - 6)
     _close(_col(aaa, "mkt_wk_above_2"), [np.nan] * 9 + [1.0] * 6)
+
+
+# ----------------------------------------------------------------------------------------------- batch 2
+def test_rvar_is_the_sum_of_squared_log_returns():
+    c = [100.0, 101.0, 99.0, 102.0, 102.0]
+    out = ex.ensure_extra(_bars(c, c, c), ["rvar_3"])
+    r2 = np.log(np.array(c[1:]) / np.array(c[:-1])) ** 2
+    _close(_col(out, "rvar_3"), [np.nan, np.nan, np.nan, r2[:3].sum(), r2[1:].sum()])
+
+
+def test_big_net_issuance_keeps_the_largest_names_with_price_and_history(monkeypatch):
+    monkeypatch.setattr(ex, "BIG_TOP_N", 2)
+    monkeypatch.setattr(ex, "BIG_MIN_HIST_BARS", 3)
+    c = [20.0] * 4
+    frames = []
+    for sym, mcap, px, nsi in (("AAA", 9e9, 20.0, -0.05), ("BBB", 8e9, 5.0, -0.10), ("CCC", 7e9, 20.0, 0.02)):
+        frames.append(_bars(c, c, c, symbol=sym).assign(mcap_pit=mcap, close_as_traded=px, net_share_issuance=nsi))
+    out = ex.ensure_extra(pd.concat(frames, ignore_index=True), ["big_net_issuance", "big_net_issuance_rank"])
+    last = out.groupby("symbol").tail(1).set_index("symbol")
+    # AAA and BBB are the two largest; BBB trades below $10; CCC is the third largest
+    _close(last["big_net_issuance"], [-0.05, np.nan, np.nan])
+    _close(last["big_net_issuance_rank"], [1.0, np.nan, np.nan])
+    _close(out.loc[out["symbol"] == "AAA", "big_net_issuance"], [np.nan, np.nan, -0.05, -0.05])  # < 3 bars of history
+    bare = ex.ensure_extra(_bars(c, c, c), ["big_net_issuance"])  # a panel without the join: silent
+    assert bare["big_net_issuance"].isna().all()

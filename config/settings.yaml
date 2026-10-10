@@ -194,6 +194,10 @@ strategies:                    # name -> {enabled, params}; names come from swin
   # pre-registered group of two (docs/preregistration/2026-10-10-two-picks.md): params are the module defaults; any change is a new trial
   high_volume_return_premium:         {enabled: false, min_reward_risk: 0.0}  # dollar volume rank >= 46/50 on a normal-return day (rank 16-35/50); hold 20 sessions
   momentum_volume_early_stage:        {enabled: false, min_reward_risk: 0.0}  # month end: top-decile 6-month return AND bottom-tercile EDGAR turnover; hold 126 sessions
+  # pre-registered batch 2 (docs/preregistration/2026-10-10-batch2.md): params are the module defaults; any change is a new trial
+  fomc_cycle_even_weeks:              {enabled: false, min_reward_risk: 0.0}  # SPY in even weeks of the scheduled FOMC cycle; book config/prereg_b2_spy.yaml
+  large_cap_net_repurchasers:         {enabled: false, min_reward_risk: 0.0}  # month end: 500 largest, buy bottom 10% of net share issuance, sell above 20%; replay only
+  volatility_managed_spy:             {enabled: false, min_reward_risk: 0.0}  # SPY at min(1, c / 22-day realized variance), monthly; book config/prereg_b2_spy.yaml; replay only
 
 monitor:
   feeds: [alpaca_news, alpaca_stocks, alpaca_account, edgar, nasdaq_halts]

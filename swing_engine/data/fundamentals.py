@@ -577,6 +577,107 @@ def join_edgar(store: Store, panel: pd.DataFrame) -> pd.DataFrame:
     return panel.assign(**{c: feats[c].to_numpy() for c in missing})
 
 
+# ===================================================================================== share issuance (batch 2)
+#: columns of `join_share_issuance` (docs/preregistration/2026-10-10-batch2.md, card large_cap_net_repurchasers)
+SHARE_COLUMNS: list[str] = ["mcap_pit", "close_as_traded", "net_share_issuance"]
+NSI_NEAR_SESSIONS = 126  # Chen-Zimmermann ShareIss1Y: shares at t-6 months ...
+NSI_FAR_SESSIONS = 378  # ... over shares at t-18 months
+NSI_MAX_STEP = 2.0  # card data-error guard: a filing-to-filing change above +100% ...
+NSI_MIN_STEP = 0.5  # ... or below -50% voids the signal
+SPLITS_TABLE = "splits"  # data.universe.SPLITS_TABLE: symbol, ex_date, ratio (= split_to / split_from)
+
+
+def _factor_after(splits: pd.DataFrame | None, symbol: pd.Series, day: pd.Series) -> np.ndarray:
+    """Per row: the product of ``ratio`` over the symbol's splits with ex_date strictly after ``day`` (1.0 when
+    none). A bar dated on the ex_date already trades post-split (data.universe.as_traded)."""
+    out = np.ones(len(symbol), dtype="float64")
+    if splits is None or len(splits) == 0 or len(symbol) == 0:
+        return out
+    sp = pd.DataFrame({"symbol": splits["symbol"].astype(str).str.upper(),
+                       "ex_date": pd.to_datetime(splits["ex_date"]).dt.tz_localize(None).dt.normalize().dt.as_unit("us"),
+                       "ratio": pd.to_numeric(splits["ratio"], errors="coerce")})
+    sp = sp.loc[sp["ratio"] > 0].drop_duplicates(["symbol", "ex_date"]).sort_values(["symbol", "ex_date"])
+    if sp.empty:
+        return out
+    log_ratio = np.log(sp["ratio"])
+    sp["after"] = np.exp(log_ratio.iloc[::-1].groupby(sp["symbol"].iloc[::-1], sort=False).cumsum().iloc[::-1])
+    left = pd.DataFrame({"symbol": symbol.astype(str).str.upper().to_numpy(),
+                         "day": pd.to_datetime(day).dt.tz_localize(None).dt.normalize().dt.as_unit("us").to_numpy(),
+                         "_row": np.arange(len(symbol))}).sort_values("day")
+    hit = pd.merge_asof(left, sp.sort_values("ex_date")[["symbol", "ex_date", "after"]], left_on="day",
+                        right_on="ex_date", by="symbol", direction="forward", allow_exact_matches=False)
+    out[hit["_row"].to_numpy()] = hit["after"].fillna(1.0).to_numpy()
+    return out
+
+
+def share_issuance_features(events: pd.DataFrame, splits: pd.DataFrame | None, index: pd.DataFrame) -> pd.DataFrame:
+    """SHARE_COLUMNS for the rows of ``index`` (symbol, ts, close), point-in-time.
+
+    Adjusted shares of a filing = its cover-page count x the product of the split ratios with ex_date after the
+    filed date, i.e. the count in the units of the store's split-adjusted bars. Then
+    ``mcap_pit`` = close x adjusted shares of the latest filing usable at the bar (= as-traded close x as-traded
+    shares: the later splits cancel), ``close_as_traded`` = close x the split ratios after the bar, and
+    ``net_share_issuance`` = ln(adjusted shares usable 126 sessions earlier / usable 378 sessions earlier) (later
+    splits cancel in the ratio, so only splits known by then enter). A filing is usable from the session after
+    its filed date (`fundamental_events.avail_ts`). NaN when either count is missing or a filing-to-filing change
+    of adjusted shares between the two dates is above +100% or below -50% (card guard)."""
+    out = pd.DataFrame(np.nan, index=index.index, columns=SHARE_COLUMNS)
+    if index.empty:
+        return out
+    sym = index["symbol"].astype(str).str.upper().reset_index(drop=True)
+    ts = _norm_ts(index["ts"]).reset_index(drop=True)
+    close = pd.to_numeric(index["close"], errors="coerce").reset_index(drop=True).astype("float64")
+    bar_day = ts.dt.tz_localize(None)
+    out["close_as_traded"] = (close * _factor_after(splits, sym, bar_day)).to_numpy()
+    ev = events.loc[events["shares_outstanding"] > 0, ["symbol", "filed", "avail_ts", "shares_outstanding"]] if len(events) else events
+    if ev is None or ev.empty:
+        return out
+    ev = ev.assign(symbol=ev["symbol"].astype(str).str.upper(), avail_ts=_norm_ts(ev["avail_ts"]))
+    ev["adj"] = ev["shares_outstanding"].astype("float64") * _factor_after(splits, ev["symbol"], pd.to_datetime(ev["filed"]))
+    ev = ev.sort_values(["symbol", "avail_ts"], kind="mergesort")
+    step = ev["adj"] / ev.groupby("symbol", sort=False)["adj"].shift(1)
+    bad = (step > NSI_MAX_STEP) | (step < NSI_MIN_STEP)
+    ev["n_bad"] = bad.groupby(ev["symbol"], sort=False).cumsum().astype("float64")
+    log.info("share_issuance_guard", flagged_filings=int(bad.sum()), flagged_symbols=int(ev.loc[bad, "symbol"].nunique()),
+             symbols=int(ev["symbol"].nunique()))
+    right = ev.sort_values("avail_ts")[["symbol", "avail_ts", "adj", "n_bad"]]
+
+    days = bar_day.dt.normalize()
+    sessions = trading_days(days.min().date() - timedelta(days=2 * NSI_FAR_SESSIONS), days.max().date())
+    pos = np.searchsorted(np.array(sessions, dtype="datetime64[D]"), days.to_numpy().astype("datetime64[D]"), side="right") - 1
+
+    session_stamps = pd.DatetimeIndex(pd.to_datetime(sessions)).tz_localize(TZ).as_unit("us")
+
+    def asof(lag: int) -> pd.DataFrame:
+        at = pd.Series(session_stamps[np.maximum(pos - lag, 0)]) if lag else ts
+        left = pd.DataFrame({"symbol": sym, "at": at, "_row": np.arange(len(sym))}).sort_values("at")
+        hit = pd.merge_asof(left, right, left_on="at", right_on="avail_ts", by="symbol")
+        return hit.sort_values("_row").reset_index(drop=True)
+
+    now, near, far = asof(0), asof(NSI_NEAR_SESSIONS), asof(NSI_FAR_SESSIONS)
+    out["mcap_pit"] = (close * now["adj"]).to_numpy()
+    nsi = np.log(near["adj"] / far["adj"]).where(near["n_bad"] == far["n_bad"])
+    out["net_share_issuance"] = nsi.to_numpy()
+    return out
+
+
+def join_share_issuance(store: Store, panel: pd.DataFrame) -> pd.DataFrame:
+    """``panel`` plus SHARE_COLUMNS from the cached `fundamental_events` table and the `splits` table. Unchanged
+    when the store has no events table or the panel already carries the columns. Without a splits table the
+    counts are used as filed (logged; every split then looks like an issuance)."""
+    has = getattr(store, "has_table", None)
+    if panel is None or panel.empty or all(c in panel.columns for c in SHARE_COLUMNS):
+        return panel
+    if not callable(has) or not has(EVENTS_TABLE):
+        return panel
+    events = store.read_table(EVENTS_TABLE)
+    splits = store.read_table(SPLITS_TABLE) if has(SPLITS_TABLE) else None
+    if splits is None or len(splits) == 0:
+        log.warning("share_issuance_no_splits_table")
+    feats = share_issuance_features(events, splits, panel)
+    return panel.assign(**{c: feats[c].to_numpy() for c in SHARE_COLUMNS})
+
+
 # ================================================================================================= ingest
 def _cik_map(tickers: pd.DataFrame) -> dict[str, str]:
     out: dict[str, str] = {}
@@ -683,6 +784,7 @@ __all__ = [
     "read_fundamentals", "earnings_dates_asof", "quarterly_values", "seasonal_surprise", "sue_asof",
     "revenue_surprise_asof", "gross_profitability_asof", "earnings_seasonality", "shares_outstanding_asof", "turnover_asof",
     "earnings_calendar_features", "fundamental_events", "fundamental_features", "edgar_panel_features",
-    "EVENTS_TABLE", "build_fundamental_events", "join_edgar",
+    "EVENTS_TABLE", "build_fundamental_events", "join_edgar", "SHARE_COLUMNS", "share_issuance_features",
+    "join_share_issuance",
     "run_edgar_ingest",
 ]
