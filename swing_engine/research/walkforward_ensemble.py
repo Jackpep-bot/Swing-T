@@ -19,6 +19,9 @@ MIN_T = 2.0
 EXCLUDED = ("ath_trend_following_wide_stop", "composite_cost_aware_rank", "earnings_seasonality",
             "high_volume_return_premium", "momentum_volume_early_stage")
 OUT = "docs/preregistration/2026-10-10-walkforward-ensemble-results.md"
+OUT_CELLS = "docs/preregistration/2026-10-10-walkforward-regime-cells-results.md"
+CELL_SEP = "|"
+CELL_MIN_SIGNALS = 200  # docs/preregistration/2026-10-10-walkforward-regime-cells.md
 
 
 def _window(frame: pd.DataFrame, i: int) -> tuple[pd.DataFrame, float]:
@@ -27,15 +30,22 @@ def _window(frame: pd.DataFrame, i: int) -> tuple[pd.DataFrame, float]:
     return frame.loc[(d >= w.start) & (d <= w.end)], (w.end - w.start).days / 365.25
 
 
-def select(shadow: pd.DataFrame) -> dict[str, dict[str, float]]:
+def by_regime(shadow: pd.DataFrame) -> pd.DataFrame:
+    """Relabel each signal's strategy as ``<strategy>|<regime>`` so the same selection works per regime cell."""
+    regime = shadow["regime"].fillna("unknown").astype(str)
+    return shadow.assign(strategy=shadow["strategy"].astype(str) + CELL_SEP + regime)
+
+
+def select(shadow: pd.DataFrame, min_signals: int = 0) -> dict[str, dict[str, float]]:
     """Base strategies with net R > 0 and block t >= MIN_T at HORIZON in the selection window (WINDOWS[1])."""
     sel, years = _window(shadow, 1)
     out = {}
     for name, g in sel.groupby("strategy"):
-        if name in EXCLUDED or "@" in name or name.endswith("_no_news"):
+        base_name = str(name).split(CELL_SEP)[0]
+        if base_name in EXCLUDED or "@" in base_name or base_name.endswith("_no_news"):
             continue
         s = edge_stats(g, HORIZON, years, 1)
-        if s["net_r"] > 0 and s["t"] >= MIN_T:
+        if s["net_r"] > 0 and s["t"] >= MIN_T and s["n"] >= min_signals:
             out[str(name)] = s
     return out
 
@@ -46,10 +56,13 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--settings", default="config/replay_r2.yaml")
     ap.add_argument("--store", action="append", default=[])
+    ap.add_argument("--by-regime", action="store_true", help="select (strategy, regime) cells instead of strategies")
     args = ap.parse_args(argv)
     base = ROOT / load_settings.__wrapped__(Path(args.settings)).data.store_path
     shadow = executable(with_costs(read_shadow([base, *(ROOT / s for s in args.store)]), base))
-    chosen = select(shadow)
+    if args.by_regime:
+        shadow = by_regime(shadow)
+    chosen = select(shadow, CELL_MIN_SIGNALS if args.by_regime else 0)
     pooled = shadow.loc[shadow["strategy"].isin(chosen)]
     lines = ["# Walk-forward ensemble: result", "",
              "Graded per docs/preregistration/2026-10-10-walkforward-ensemble.md (20-session horizon, n_trials = 1).", "",
@@ -65,7 +78,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         if i == 0 and chosen and s["net_r"] > 0 and s["t"] >= MIN_T:
             verdict = "PASS"
     lines += ["", f"## Verdict: {verdict}"]
-    (ROOT / OUT).write_text("\n".join(lines) + "\n")
+    (ROOT / (OUT_CELLS if args.by_regime else OUT)).write_text("\n".join(lines) + "\n")
     print("\n".join(lines))
 
 
