@@ -63,7 +63,7 @@ No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reali
 window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
 (docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
 
-Running unattended (2026-10-10 03:10 ET, Mac on AC), all detached with nohup:
+Running unattended (2026-10-10 03:40 ET, Mac on AC). Batch 2 is DONE and committed (net repurchasers PASS on its absolute rule with zero alpha vs SPY -> walk-forward next; FOMC and vol-managed SPY FAIL). The full re-run (b) is running with --lanes 2, log data/logs/research/full_rerun.log:
 a. Batch 2 pre-registered group (docs/preregistration/2026-10-10-batch2.md): research.prereg_run, log
    data/logs/research/prereg_b2.log, results -> docs/preregistration/2026-10-10-batch2-results.md (commit them and
    copy the table into the three cards' Empirical sections).
