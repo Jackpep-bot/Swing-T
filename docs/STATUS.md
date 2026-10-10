@@ -63,12 +63,19 @@ No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reali
 window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
 (docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
 
-Queue (2026-10-10 02:15 ET, Mac on AC):
-0. Batch 2 cards (FOMC cycle, large-cap buybacks, vol-managed SPY) are expected on origin branch
-   claude/batch2-cards under docs/proposals/swing-methods-2026-10/batch2/ (not there at 02:15). When present:
-   git fetch origin claude/batch2-cards; git checkout origin/claude/batch2-cards -- docs/proposals/swing-methods-2026-10/batch2
-   then pre-register as one group and run research.prereg_run. The signal-combination test is DONE (walk-forward
-   ensemble, FAIL).
+Running unattended (2026-10-10 03:10 ET, Mac on AC), all detached with nohup:
+a. Batch 2 pre-registered group (docs/preregistration/2026-10-10-batch2.md): research.prereg_run, log
+   data/logs/research/prereg_b2.log, results -> docs/preregistration/2026-10-10-batch2-results.md (commit them and
+   copy the table into the three cards' Empirical sections).
+b. scripts/after_b2_full_rerun.sh waits for (a), Telegrams the batch 2 table, then runs
+   `swing research run --windows short,long` on the live store (log data/logs/research/<run-id>.log) because the
+   splits table was nearly empty until 2026-10-10 (backfilled 14,707 splits since 2015): earlier boards screened the
+   universe on adjusted, not as-traded, prices. When it finishes: commit docs/leaderboard.md, the cards and
+   docs/reality_check.md; the old liquid-only boards (docs/leaderboard_liq*.md) predate the fix.
+c. Re-fetch origin/claude/batch2-cards after each group for more cards
+   (git checkout origin/claude/batch2-cards -- docs/proposals/swing-methods-2026-10/batch2).
+
+Queue:
 1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
    research-ingest -> pre-registration doc committed BEFORE any replay -> `python -m swing_engine.research.prereg_run`
    (parallel, 40GB budget, identical to serial) -> results into the cards.
