@@ -581,7 +581,7 @@ def test_backtest_logs_trial_and_prints_deflated_sharpe(store_file: Path, monkey
     assert seen["params"] == {"lookback": 7}
     assert seen["costs"] == 20
     assert seen["logged"] == ("fake_strat", {"lookback": 7}, 1.2)
-    assert seen["dsr_args"][:2] == (1.2, 7) and seen["dsr_args"][2] > 0
+    assert seen["dsr_args"][:2] == (1.2, 9) and seen["dsr_args"][2] > 0  # deflated by all trials
     assert "deflated sharpe" in result.output and "0.4321" in result.output
     assert "trials logged for this strategy" in result.output and "7" in result.output
     assert "9" in result.output  # total trials
@@ -926,3 +926,15 @@ def test_size_never_reads_numbers_from_reviews(workdir: Path, monkeypatch: pytes
     assert intent["stop"] == signal.stop and intent["target"] == signal.target
     assert intent["qty"] == int(EQUITY * 0.01 / signal.risk_per_share())
     assert intent["side"] == Side.LONG.value
+
+
+def test_dashboard_passes_settings_and_flags(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import swing_engine.dashboard as dash
+
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(dash, "serve", lambda **kw: seen.update(kw))
+    settings = tmp_path / "s.yaml"
+    settings.write_text("{}\n")
+    result = runner.invoke(cli.app, ["--settings", str(settings), "dashboard", "--port", "8801", "--demo"])
+    assert result.exit_code == 0, result.output
+    assert seen == {"settings_path": str(settings), "port": 8801, "demo": True, "open_browser": False}

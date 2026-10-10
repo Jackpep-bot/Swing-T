@@ -7,7 +7,12 @@ share -> 250 shares at the reference entry. The engine sizes on the worst-case f
 
 Caps applied, in order (the smallest wins): fixed-fractional risk, ``max_position_pct`` of equity, optional
 volatility target (``vol_target_annual_pct`` against ``signal.features["vol_21d"]``, annualized decimal), and
-the remaining room under ``max_sector_pct`` when a ``sector_map`` is supplied.
+the remaining room under ``max_sector_pct`` when a ``sector_map`` is supplied, and an optional Turtle unit
+(``turtle_unit_risk_pct`` against ``signal.features["turtle_n"]``).
+
+:func:`sizing_equity` is the equity callers should size on when the drawdown or book-vol rules are on: it shrinks
+account equity by ``drawdown_size_mult`` x drawdown (Turtle) and by the book vol-target scale (Barroso-Santa-Clara),
+so every cap above scales with it. Both are off (identity) by default.
 """
 from __future__ import annotations
 
@@ -16,10 +21,13 @@ import math
 import re
 from collections.abc import Iterable, Mapping
 
+import numpy as np
+import pandas as pd
 import structlog
 
 from swing_engine.core.config import RiskConfig
 from swing_engine.core.models import OrderIntent, Position, Side, Signal
+from swing_engine.features.indicators import atr
 from swing_engine.risk.limits import PCT, sector_exposure_dollars
 
 log = structlog.get_logger(__name__)
@@ -31,6 +39,10 @@ CLIENT_ORDER_ID_MAX_LEN = 48
 CLIENT_ORDER_ID_PREFIX = "swing"
 CLIENT_ORDER_ID_HASH_LEN = 8
 VOL_FEATURE = "vol_21d"
+TURTLE_N_FEATURE = "turtle_n"
+TURTLE_N_PERIOD = 20
+"""Turtle N = (19 x prior N + TR) / 20: Wilder smoothing of true range over 20 sessions."""
+TRADING_DAYS = 252
 _UNSAFE_ID_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 
 
@@ -39,6 +51,57 @@ def effective_equity(account_equity: float, risk_cfg: RiskConfig) -> float:
     if risk_cfg.account_equity_override is not None and risk_cfg.account_equity_override > 0:
         return float(risk_cfg.account_equity_override)
     return float(account_equity)
+
+
+def turtle_n(high: pd.Series, low: pd.Series, close: pd.Series, period: int = TURTLE_N_PERIOD) -> pd.Series:
+    """Turtle N (Faith): Wilder-smoothed true range, ``N = ((period - 1) x prior N + TR) / period``."""
+    return atr(high, low, close, period)
+
+
+def turtle_unit_shares(equity: float, n: float, unit_risk_pct: float, point_value: float = 1.0) -> int:
+    """Shares in one Turtle unit: ``equity x unit_risk_pct% / (N x point value)``; 0 when N is not positive."""
+    if not (n > 0 and point_value > 0 and equity > 0):
+        return 0
+    return math.floor(equity * unit_risk_pct / PCT / (n * point_value))
+
+
+def drawdown_scaled_equity(equity: float, peak_equity: float | None, mult: float | None) -> float:
+    """Equity reduced by ``mult`` x the drawdown from ``peak_equity`` (Turtle mult 2: -10% trades as -20%)."""
+    if not mult or not peak_equity or peak_equity <= 0:
+        return float(equity)
+    dd = max(0.0, 1.0 - equity / peak_equity)
+    return float(equity) * max(0.0, 1.0 - mult * dd)
+
+
+def book_vol_scale(book_returns: pd.Series | np.ndarray | None, risk_cfg: RiskConfig) -> float:
+    """Gross-exposure multiplier ``target / trailing realized annual vol``, capped at ``book_vol_max_scale``.
+
+    ``book_returns`` are daily book (equity) returns, oldest first; only the last ``book_vol_lookback_days`` are
+    used. Returns 1.0 when the rule is off or there are fewer than ``lookback`` returns / zero vol.
+    """
+    target = risk_cfg.book_vol_target_annual_pct
+    if target is None or book_returns is None:
+        return 1.0
+    lookback = risk_cfg.book_vol_lookback_days
+    rets = np.asarray(book_returns, dtype=float)[-lookback:]
+    rets = rets[np.isfinite(rets)]
+    if len(rets) < lookback:
+        return 1.0
+    vol = float(np.std(rets, ddof=1)) * math.sqrt(TRADING_DAYS)
+    if vol <= 0:
+        return 1.0
+    return min(risk_cfg.book_vol_max_scale, target / PCT / vol)
+
+
+def sizing_equity(
+    equity: float,
+    risk_cfg: RiskConfig,
+    peak_equity: float | None = None,
+    book_returns: pd.Series | np.ndarray | None = None,
+) -> float:
+    """Equity to size on: drawdown-scaled (``drawdown_size_mult``) times the book vol scale. Identity when off."""
+    scaled = drawdown_scaled_equity(equity, peak_equity, risk_cfg.drawdown_size_mult)
+    return scaled * book_vol_scale(book_returns, risk_cfg)
 
 
 def make_client_order_id(signal: Signal) -> str:
@@ -83,6 +146,10 @@ def _geometry_error(signal: Signal) -> str | None:
     return None
 
 
+#: float slack on the reward/risk floor (strategies._base.RR_TOLERANCE)
+RR_TOLERANCE = 1e-9
+
+
 def size_signal_detail(
     signal: Signal,
     equity: float,
@@ -107,9 +174,9 @@ def size_signal_detail(
     if rps <= 0:
         return None, "risk per share is zero"
     rr = reward_risk_for(signal)
-    if rr is None:
+    if rr is None and rr_floor > 0:
         return None, "reward_risk unknown (signal has neither reward_risk nor target)"
-    if rr < rr_floor:
+    if rr is not None and rr < rr_floor - RR_TOLERANCE:
         return None, f"reward_risk {rr:.2f} below min {rr_floor}"
     if any(p.symbol == signal.symbol for p in positions):
         return None, f"{signal.symbol} already has an open position"
@@ -133,6 +200,13 @@ def size_signal_detail(
         else:
             log.debug("vol_target_skipped", symbol=signal.symbol, reason=f"{VOL_FEATURE} missing")
 
+    if risk_cfg.turtle_unit_risk_pct is not None:
+        n = signal.features.get(TURTLE_N_FEATURE)
+        if n is not None and n > 0:
+            caps["unit"] = turtle_unit_shares(equity, float(n), risk_cfg.turtle_unit_risk_pct)
+        else:
+            log.debug("turtle_unit_skipped", symbol=signal.symbol, reason=f"{TURTLE_N_FEATURE} missing")
+
     if sector_map:
         sector = sector_map.get(signal.symbol)
         if sector is not None:
@@ -144,7 +218,7 @@ def size_signal_detail(
         binding = min(caps, key=caps.get)  # type: ignore[arg-type]
         return None, f"size rounds to zero (binding cap: {binding})"
 
-    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + f" rr={rr:.2f} rps={rps:.4f} rps_at_limit={rps_worst:.4f}"
+    notes = " ".join(f"{k}={v}" for k, v in caps.items()) + (f" rr={rr:.2f}" if rr is not None else " rr=rule-exit") + f" rps={rps:.4f} rps_at_limit={rps_worst:.4f}"
     intent = OrderIntent(
         symbol=signal.symbol,
         side=signal.side,
@@ -155,7 +229,10 @@ def size_signal_detail(
         strategy=signal.strategy,
         client_order_id=make_client_order_id(signal),
         risk_dollars=round(qty * rps_worst, PRICE_DECIMALS),
+        entry_type=signal.entry_type,
         notes=notes,
+        features=dict(signal.features or {}),
+        signal_as_of=signal.as_of,
     )
     return intent, "ok"
 

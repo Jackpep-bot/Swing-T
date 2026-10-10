@@ -8,6 +8,7 @@ import pytest
 
 from swing_engine.core import registry
 from swing_engine.core.models import Side, Signal
+from swing_engine.features.extra import ensure_extra, is_extra
 from swing_engine.strategies._base import PanelStrategy, RollingSpec
 from tests.fixtures.strategies.panel import add_features, last_date, make_bars, make_panel
 
@@ -44,7 +45,9 @@ def test_defaults_params_and_required_features(name):
     assert strat.name == name
     assert strat.default_params, "every threshold must be a default_params entry"
     assert "min_reward_risk" in strat.default_params
-    assert set(strat.required_features()) <= CONTRACT_COLUMNS
+    # contract columns plus on-demand `features.extra` columns the strategy declares in `extra_features`
+    assert set(strat.required_features()) <= CONTRACT_COLUMNS | set(strat.extra_features)
+    assert all(is_extra(n) for n in strat.extra_features), "extra_features must resolve in features.extra"
     assert "symbol" not in strat.required_features()
     override = cls({"min_reward_risk": 9.75})
     assert override.params["min_reward_risk"] == 9.75
@@ -54,6 +57,7 @@ def test_defaults_params_and_required_features(name):
 @pytest.mark.parametrize("name", sorted(STRATEGIES))
 def test_generator_panel_has_required_columns(name, panel):
     strat = registry.get("strategy", name)()
+    panel = ensure_extra(panel, strat.extra_features)
     missing = [c for c in strat.required_features() if c not in panel.columns]
     assert not missing
     tail = panel.groupby("symbol").tail(1)
@@ -149,3 +153,24 @@ def test_build_signal_rejects_bad_geometry():
     assert sig is not None and sig.reward_risk == pytest.approx(2.0) and sig.features == {"y": 2.0}
     open_ended = probe.build_signal(row, today, entry=100.0, stop=95.0, target=None, score=1.0)
     assert open_ended is not None and open_ended.target is None and open_ended.reward_risk is None
+
+
+def test_stop_closer_than_the_floor_is_rejected() -> None:
+    from datetime import date
+
+    from swing_engine.strategies._base import MIN_STOP_FRACTION, PanelStrategy
+
+    class Probe(PanelStrategy):
+        name = "probe"
+        default_params = {"min_reward_risk": 0.0}
+
+        def signals(self, panel, as_of):  # noqa: ANN001, ANN201 - not used
+            return []
+
+    row = pd.Series({"symbol": "AAA"})
+    s = Probe({})
+    assert s.build_signal(row, date(2026, 1, 2), entry=100.0, stop=100.0 * (1 - MIN_STOP_FRACTION / 2),
+                          target=None, score=1.0) is None
+    assert s.build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.0, target=None, score=1.0) is not None
+    assert Probe({"min_stop_pct": 0.0}).build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.99, target=None,
+                                                    score=1.0) is not None

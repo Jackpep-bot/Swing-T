@@ -192,7 +192,7 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path, contract: Cont
     assert [s.name for s in report.steps] == list(nightly.STEP_NAMES)
     assert statuses(report) == {
         "ingest": "ok", "float": "skip", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
-        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok", "weekly": "skip", "notify": "skip",
     }  # fmt: skip
     assert report.ok and report.failed == [] and report.dry_run and report.provider == "sample"
     assert "no broker" in report.step("positions").detail and "dry run" in report.step("execute").detail
@@ -381,14 +381,14 @@ def test_failures_are_isolated_and_the_report_is_still_written(tmp_path: Path) -
         report = run_nightly(settings, no_secrets(), AS_OF, "no_such_provider", EQUITY, True, store=store, journal_root=tmp_path)
     assert statuses(report) == {
         "ingest": "fail", "float": "skip", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
-        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok", "weekly": "skip", "notify": "skip",
     }  # fmt: skip
     assert "no_such_provider" in report.step("ingest").detail
     assert "no bars" in report.step("features").detail and "no signals" in report.step("size").detail
     assert report.failed == ["ingest", "features", "scan"] and not report.ok
     saved = json.loads(run_file(tmp_path, "nightly").read_text())
     assert [s["status"] for s in saved["steps"]] == [
-        "fail", "skip", "fail", "fail", "skip", "skip", "skip", "ok", "skip", "skip", "ok",
+        "fail", "skip", "fail", "fail", "skip", "skip", "skip", "ok", "skip", "skip", "ok", "skip", "skip",
     ]  # fmt: skip
 
 

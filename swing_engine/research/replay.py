@@ -20,8 +20,8 @@ their risk, and the position manager's exit semantics. Timeline for each NYSE se
    ``max_open_positions`` and ``execution.max_new_orders_per_day``.
 
 The feature panel is built once from store bars (features are causal, ``docs/feature-contract.md``) and each day
-sees only ``panel[ts <= D]``. Like the nightly, strategies, ``rs_63d_rank`` and breadth see only the point-in-time
-universe: the nightly's screen (``data.universe.build_universe`` on the store's ``symbols`` table, else
+sees only ``panel[ts <= D]``. Like the nightly, strategies, ``rs_63d_rank``, the strategies' ``<col>_rank`` extras
+and breadth see only the point-in-time universe: the nightly's screen (``data.universe.build_universe`` on the store's ``symbols`` table, else
 ``data.universe.liquidity_screen``; as-traded through the ``splits`` table) on bars dated on or before the session,
 refreshed every ``UNIVERSE_REFRESH_SESSIONS`` sessions, with the index ETFs kept out of the breadth population. Costs come from ``research.backtest.CostModel``; each run is logged as a trial
 (``research.trials``, feeds the deflated Sharpe of ``docs/gates.md``). Deterministic: same store, same settings,
@@ -66,7 +66,7 @@ from swing_engine.research.backtest import (
 from swing_engine.research.metrics import profit_factor, summarize
 from swing_engine.research.shadow import REPLAY_SHADOW_TABLE, grade_signals, record_signals, signal_key
 from swing_engine.research.trials import DEFAULT_TRIALS_PATH, log_trial
-from swing_engine.risk.sizing import size_signal_detail, strategy_min_reward_risk
+from swing_engine.risk.sizing import size_signal_detail, sizing_equity, strategy_min_reward_risk
 
 log = structlog.get_logger(__name__)
 
@@ -89,6 +89,12 @@ ALLOWED_SEP = ";"
 UNIVERSE_REFRESH_SESSIONS = 5
 #: Kept out of the breadth population (ops.nightly.INDEX_SYMBOLS; the playbook's market_symbol is added).
 INDEX_SYMBOLS: tuple[str, ...] = ("SPY", "QQQ", "IWM")
+#: Kept in the replay panel even when no universe screen admits them: the market proxy, index ETFs and the SPDR
+#: sector ETFs that market-relative and sector-rotation strategies read (faber_sector_rotation,
+#: industry_momentum_overlay).
+ALWAYS_KEEP: tuple[str, ...] = (
+    *INDEX_SYMBOLS, "XLB", "XLC", "XLE", "XLF", "XLI", "XLK", "XLP", "XLRE", "XLU", "XLV", "XLY",
+)
 SYMBOLS_TABLE = "symbols"  # data.universe.SYMBOLS_TABLE
 SPLITS_TABLE = "splits"  # data.universe.SPLITS_TABLE
 RS_RANK_COLUMN = "rs_63d_rank"  # features.patterns2: same-session percentile of the 63-bar return
@@ -166,8 +172,9 @@ def _as_date(value: date | datetime | str) -> date:
 
 
 def _enabled_names(settings: Settings) -> list[str]:
-    names = [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
-    return names or registry.names("strategy")
+    if not settings.strategies:  # no strategy config at all: every registered strategy
+        return registry.names("strategy")
+    return [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
 
 
 def _resolve_strategies(
@@ -191,15 +198,80 @@ def _session_days() -> Callable[[date, date], list[date]] | None:
     return trading_days
 
 
-def build_replay_panel(store: Any, start: date, end: date) -> pd.DataFrame:
-    """Store bars from ``start - WARMUP_CALENDAR_DAYS`` to ``end`` -> ``features.panel.build_panel`` (SPY as market)."""
+def warmup_days(strategies: Iterable[Any]) -> int:
+    """Calendar days of bars before ``start``: WARMUP_CALENDAR_DAYS, or the longest ``warmup_calendar_days`` a
+    strategy declares (a 756-bar regression is all NaN on a 400-day warm-up until three years into the window)."""
+    return max([WARMUP_CALENDAR_DAYS, *(int(getattr(s, "warmup_calendar_days", 0) or 0) for s in strategies)])
+
+
+def build_replay_panel(store: Any, start: date, end: date, settings: Settings | None = None,
+                       warmup: int = WARMUP_CALENDAR_DAYS) -> pd.DataFrame:
+    """Store bars from ``start - warmup`` days to ``end`` -> ``features.panel.build_panel`` (SPY as market).
+
+    With ``settings``, symbols no universe screen in ``start..end`` admits (``_screened_symbols_only``) are dropped
+    from the bars first: every panel feature is computed per symbol, so the kept rows are unchanged and the
+    feature build skips the ~80% of the store that is never scanned."""
     from swing_engine.features.panel import build_panel
 
-    bars = store.read_bars(None, start - timedelta(days=WARMUP_CALENDAR_DAYS), end)
+    first = start - timedelta(days=warmup)
+    bars = store.read_bars(None, first, end)
     if bars is None or bars.empty:
-        raise ValueError(f"no bars in the store between {start - timedelta(days=WARMUP_CALENDAR_DAYS)} and {end}")
+        raise ValueError(f"no bars in the store between {first} and {end}")
+    if settings is not None:
+        screened = _screened_symbols_only(_sessions_only(bars, first, end), settings, store, start, end)
+        if len(screened) < len(bars):
+            bars = bars.loc[bars["symbol"].isin(set(screened["symbol"]))]
     market = bars.loc[bars["symbol"] == MARKET_SYMBOL]
     return build_panel(bars, market if not market.empty else None)
+
+
+def _screened_symbols_only(
+    panel: pd.DataFrame, settings: Settings, store: Any, start: date, end: date
+) -> pd.DataFrame:
+    """Drop symbols that no universe screen in ``start..end`` admits (plus ALWAYS_KEEP), before the per-symbol
+    feature work. They are never scanned, held or counted in breadth, so results are unchanged; the full store
+    (~16,000 symbols, most of them illiquid) otherwise dominates replay memory and time."""
+    view = _PanelView(panel[[c for c in ("symbol", "ts", "open", "high", "low", "close", "volume") if c in panel]])
+    i0, i1 = view.index_range(start, end)
+    schedule = _UniverseSchedule(settings, store, view, list(range(i0, i1 + 1, UNIVERSE_REFRESH_SESSIONS)))
+    screened = set().union(*schedule.sets)
+    if not screened:  # nothing passes (hand-built test panels): keep everything, as before
+        return panel
+    keep = screened | set(ALWAYS_KEEP)
+    out = panel.loc[panel["symbol"].astype(str).isin(keep)]
+    log.info("replay.screened_symbols", kept=len(keep & set(panel["symbol"].astype(str))),
+             of=int(panel["symbol"].nunique()))
+    return out
+
+
+def _delisting_returns(store: Any, settings: Settings) -> dict[str, float]:
+    """``data.delisted.delisting_returns``: exit multipliers for held entity keys that delisted for performance."""
+    from swing_engine.data.delisted import delisting_returns
+
+    return delisting_returns(store, settings)
+
+
+def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
+    """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``), the split-adjusted share-count
+    columns (``join_share_issuance``) and the VIX / French factor columns
+    (``data.market_series.join_market_series``) when the store has them."""
+    if store is None:
+        return panel
+    from swing_engine.data.fundamentals import join_edgar, join_share_issuance
+    from swing_engine.data.market_series import join_market_series
+
+    return join_market_series(store, join_share_issuance(store, join_edgar(store, panel)))
+
+
+def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:
+    """Attach the strategies' ``extra_features`` (``features.extra``) once for the whole replay; the panel's SPY
+    rows serve as the market proxy. The base column of each ``<col>_rank`` extra is attached too, so
+    ``_rerank_extras`` can re-rank it among the screened universe."""
+    from swing_engine.features.extra import ensure_extra, rank_base, required_extras
+
+    names = required_extras(strategies)
+    bases = [b for b in map(rank_base, names) if b is not None]
+    return ensure_extra(panel, [*bases, *names])
 
 
 def _sessions_only(panel: pd.DataFrame, first: date, last: date) -> pd.DataFrame:
@@ -346,9 +418,28 @@ class _UniverseSchedule:
         return float(np.mean([len(s) for s in self.sets])) if self.sets else 0.0
 
 
+def _universe_rank(values: pd.Series, ts: pd.Series, member: pd.Series) -> pd.Series:
+    """Same-session percentile (``rank(pct=True)``) of ``values`` among the universe's rows. A row outside the
+    universe (never scanned, but a held name that left the screen still needs its exit rank) is placed among that
+    session's members as if it were added, like the nightly ranks held names with its screened panel."""
+    v = values.astype(float)
+    inside = v.where(member)
+    ranked = inside.groupby(ts, sort=False).rank(pct=True)
+    outside = ~member & v.notna()
+    if outside.any():
+        has = inside.notna()
+        pool = {k: np.sort(g.to_numpy()) for k, g in inside[has].groupby(ts[has], sort=False)}
+        empty = np.array([], dtype=float)
+        for k, idx in v[outside].groupby(ts[outside], sort=False).groups.items():
+            m, x = pool.get(k, empty), v[idx].to_numpy()
+            lo, hi = np.searchsorted(m, x, "left"), np.searchsorted(m, x, "right")
+            ranked.loc[idx] = (lo + (hi - lo + 2) / 2) / (len(m) + 1)  # average rank among ties, itself included
+    return ranked
+
+
 def _rerank_rs(frame: pd.DataFrame, member: pd.Series) -> None:
     """``rs_63d_rank`` among the universe's rows of each session (in place), as the nightly ranks its screened
-    panel; rows outside the universe get NaN (never scanned as the current row)."""
+    panel (``_universe_rank``)."""
     if RS_RANK_COLUMN not in frame.columns:
         return
     ret_col = f"ret_{RS_RETURN_BARS}d"
@@ -357,15 +448,26 @@ def _rerank_rs(frame: pd.DataFrame, member: pd.Series) -> None:
     else:
         close = frame["close"].astype(float)
         ret = close / close.groupby(frame["symbol"], sort=False).shift(RS_RETURN_BARS) - 1.0
-    ranked = ret.where(member).groupby(frame["ts"], sort=False).rank(pct=True)
-    frame[RS_RANK_COLUMN] = ranked.where(member)
+    frame[RS_RANK_COLUMN] = _universe_rank(ret, frame["ts"], member)
+
+
+def _rerank_extras(frame: pd.DataFrame, member: pd.Series, strategies: Any) -> None:
+    """The strategies' ``<col>_rank`` extras re-ranked among the universe's rows (in place); ``ensure_extra``
+    ranked them over every symbol in the store."""
+    from swing_engine.features.extra import rank_base, required_extras
+
+    for name in required_extras(strategies):
+        base = rank_base(name)
+        if base is not None and name in frame.columns and base in frame.columns:
+            frame[name] = _universe_rank(frame[base], frame["ts"], member)
 
 
 def _regime_label(state: Any) -> str | None:
     regime = getattr(state, "regime", None)
     if regime is None:
         return None
-    return str(getattr(regime, "value", regime))
+    overlays = getattr(state, "overlays", None) or []  # fired playbook overlays split reports: "choppy+q25_bearish"
+    return "+".join([str(getattr(regime, "value", regime)), *overlays])
 
 
 # ----------------------------------------------------------------------------------------------- per-symbol frames
@@ -427,7 +529,8 @@ def _manage(
     frame = rows.frame(pos.symbol, min(pos.entry_idx, i - lookback + 1), i)
     held = _Held(
         position=pos.to_position(), strategy=pos.strategy, entry_day=pos.entry_ts.date(),
-        initial_stop=pos.initial_stop, current_stop=pos.stop,
+        initial_stop=pos.initial_stop, current_stop=pos.stop, entry_features=pos.entry_features,
+        signal_as_of=pos.signal_as_of,
     )
     actions = _review_one(held, frame, strategies.get(pos.strategy), settings, day, None)
     for action in actions:
@@ -508,11 +611,19 @@ def run_replay(
         raise ValueError(f"end {end_d} is before start {start_d}")
     costs = costs or CostModel()
     strat_map = _resolve_strategies(settings, strategies)
+    screened_bars = panel is None and screen_universe
+    warmup = warmup_days(strat_map.values())
     if panel is None:
-        panel = build_replay_panel(store, start_d, end_d)
-    panel = _sessions_only(panel, start_d - timedelta(days=WARMUP_CALENDAR_DAYS), end_d)
+        panel = build_replay_panel(store, start_d, end_d, settings if screen_universe else None, warmup)
+    panel = _sessions_only(panel, start_d - timedelta(days=warmup), end_d)
+    if screen_universe and not screened_bars:
+        panel = _screened_symbols_only(panel, settings, store, start_d, end_d)
     panel = _with_patterns2(panel)
+    panel = _with_edgar(store, panel)
+    panel = _with_extras(panel, strat_map.values())
     view = _PanelView(panel)
+    panel = None  # view.frame is a sorted copy: let the unsorted one go
+    view.delist_mult = _delisting_returns(store, settings)
     i0, i1 = view.index_range(start_d, end_d)
     rows = _SymbolRows(view)
     regime_at = _RegimeLookup(None, view.frame)
@@ -521,6 +632,7 @@ def run_replay(
     if screen_universe:
         universe = _UniverseSchedule(settings, store, view, list(range(i0, i1 + 1, UNIVERSE_REFRESH_SESSIONS)))
         _rerank_rs(view.frame, universe.row_member)
+        _rerank_extras(view.frame, universe.row_member, strat_map.values())
         breadth_input = view.frame.loc[universe.row_member]
     router = _load_router()
     breadth_fn = _load_breadth() if router is not None else None
@@ -573,7 +685,7 @@ def run_replay(
             if math.isnan(raw):
                 if i > view.last_bar_idx[j]:
                     last = int(view.last_bar_idx[j])
-                    close(sym, ExitReason.DELISTED, positions[sym].last_close, view.dates[last])
+                    close(sym, ExitReason.DELISTED, view.delisted_exit(sym, positions[sym].last_close), view.dates[last])
                 continue  # data gap: the market order waits for the next bar
             close(sym, pending_exits[sym], raw, ts)
         n_filled = n_skip = 0
@@ -653,6 +765,10 @@ def run_replay(
             cands.sort(key=lambda s: (-s.score, s.strategy, s.symbol))
             open_list = [p.to_position() for p in positions.values()]
             busy = set(positions)
+            size_eq = eq
+            if risk_cfg.drawdown_size_mult or risk_cfg.book_vol_target_annual_pct is not None:
+                hist = np.array([row["equity"] for row in curve], dtype=float)
+                size_eq = sizing_equity(eq, risk_cfg, float(hist.max()), hist[1:] / hist[:-1] - 1.0)
             for sig in cands:
                 if len(pending_entries) >= max_new:
                     skipped["daily_order_cap"] += 1
@@ -663,7 +779,7 @@ def run_replay(
                 mult = min(max(allowed[sig.strategy], 0.0), FULL_RISK)
                 scaled = risk_cfg.model_copy(update={"risk_per_trade_pct": risk_cfg.risk_per_trade_pct * mult})
                 rr_floor = strategy_min_reward_risk(settings.strategies, sig.strategy)
-                intent, why = size_signal_detail(sig, eq, scaled, open_list, None, rr_floor)
+                intent, why = size_signal_detail(sig, size_eq, scaled, open_list, None, rr_floor)
                 if intent is None:
                     skipped[_skip_bucket(why)] += 1
                     continue
@@ -705,7 +821,7 @@ def run_replay(
 
     shadow_graded = 0
     if shadow_on:
-        shadow_graded = grade_signals(store, end_d, table=shadow_table)
+        shadow_graded = grade_signals(store, end_d, table=shadow_table, delist_returns=view.delist_mult)
 
     bt = BacktestResult(
         strategy=TRIAL_NAME, start=view.dates[i0].date(), end=view.dates[i1].date(), initial_equity=float(equity),

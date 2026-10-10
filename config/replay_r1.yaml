@@ -1,0 +1,3 @@
+extends: replay.yaml
+data:
+  store_path: data/live/replay_r1.duckdb

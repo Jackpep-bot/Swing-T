@@ -1,0 +1,5 @@
+# Store-repair working copy (docs/proposals/delisted-history-spike-2026-10.md): repair-store and ingest-delisted run here
+# before the result replaces data/live/market.duckdb.
+extends: live.yaml
+data:
+  store_path: data/live/market_repair.duckdb

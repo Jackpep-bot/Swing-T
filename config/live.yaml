@@ -1,7 +1,24 @@
-# Real-data settings: everything from settings.yaml, with the real-market store and event log.
+# Real-data settings: everything from settings.yaml, with the real-market store, its own runs/ (next to the store),
+# its own order ledger and limits state. Sample artifacts from before 2026-10-08 are in data/sample_archive/ and
+# state/sample_archive/. The kill switch (state/KILL) and data/journal are shared.
 # Use with: uv run swing --settings config/live.yaml <command>
 extends: settings.yaml
 data:
   bar_provider: massive
-  store_path: data/market.duckdb
-  event_log_path: data/market_events.sqlite
+  store_path: data/live/market.duckdb
+  event_log_path: data/live/market_events.sqlite
+risk:
+  limits_state_file: state/live/limits.json
+execution:
+  ledger_file: state/live/orders.sqlite
+agent:
+  llm_enabled: false             # free tiers only until the system proves itself: no Claude calls in nightly/monitor
+# 2026-10-08 leaderboard (docs/leaderboard.md): no strategy keeps a positive net edge after the multiple-testing
+# haircut in both replay windows, so per the standing brief none trades on paper. The five former paper strategies
+# stay in the shadow ledger; open positions are still managed (the position manager reviews disabled strategies).
+strategies:
+  sr_bounce:      {enabled: false, shadow_only: true}
+  sr_breakout:    {enabled: false, shadow_only: true}
+  pullback_trend: {enabled: false, shadow_only: true}
+  breakout_52w:   {enabled: false, shadow_only: true}
+  rsi2_meanrev:   {enabled: false, shadow_only: true, min_reward_risk: 0.0}

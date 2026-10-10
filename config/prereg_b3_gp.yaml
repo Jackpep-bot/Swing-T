@@ -1,0 +1,11 @@
+# Book of large_cap_gross_profitability in the batch-3 group (docs/preregistration/2026-10-10-batch3.md; card: equal
+# weight, max 60 names). Fixed before any run. Same store as config/prereg_b3.yaml.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_p3.duckdb
+risk:
+  risk_per_trade_pct: 0.5     # not binding below a 29% stop distance: the cap sizes
+  max_position_pct: 1.6667    # equal weight: 1 / 60
+  max_open_positions: 60
+execution:
+  max_new_orders_per_day: 60  # the first rebalance may fill every slot

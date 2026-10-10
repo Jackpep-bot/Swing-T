@@ -1,4 +1,4 @@
-# Project status: PAUSED (2026-10-07, by the user)
+# Project status: RUNNING (third session, 2026-10-08)
 
 ## Done (committed)
 - Rounds 1-4: data, features, 7 strategies + 5 research strategies (shadow-only), backtester, ranker, risk,
@@ -6,7 +6,7 @@
   doctor/nightly, outcomes, playbook router + market breadth, historical replay, shadow ledger. All review
   findings through round 4 fixed. 1,193 tests pass.
 - Settings files support `extends:`; config/live.yaml = settings.yaml + real-data store paths.
-- Real data: data/market.duckdb holds Massive grouped daily bars for every US ticker, 2024-10-07..2026-10-06
+- Real data: data/live/market.duckdb (moved 2026-10-08) holds Massive grouped daily bars for every US ticker, 2024-10-07..2026-10-06
   (501 sessions, 16,027 tickers, splits table). scripts/extend_history_alpaca.py adds Alpaca SIP split-adjusted
   daily bars 2016-01-04..2024-10-06 for 4,770 liquid names + index/sector ETFs (survivorship bias before
   2024-10-07; recorded in ingest_meta 'alpaca_extension'). DONE 2026-10-07: 7,354,836 bars for 4,326 symbols,
@@ -15,20 +15,80 @@
 - Claude Code add-ons (new sessions): ponytail plugin (enabled in ~/.claude/settings.json), graphify skill
   (`/graphify .`; CLI `graphify`), Anthropic Agent Skills already synced. OmniRoute NOT installed (gateway, not a
   plugin; user has not decided).
-- caffeinate was left running at the user's request; stop with `pkill caffeinate` when done.
+- caffeinate (-dims) is running at the user's request (2026-10-08); stop with `pkill caffeinate` when done.
 
-## Stopped mid-way (resume these)
-1. Dashboard (swing_engine/dashboard/, uncommitted): built, integrated, reviewed; the final fix pass was
-   interrupted. Resume: Workflow scriptPath .../workflows/scripts/swing-dashboard-*.js with
-   resumeFromRunId wf_5867e398-c24 (cached agents replay), or finish the fixes by hand; then
-   `uv run pytest tests/test_dashboard_*.py`, wire `swing dashboard`, and check every tab in a browser.
-2. Research layer (docs/research-raw/brands/*.json written; docs/catalog/ in progress): resume
-   swing-research-layer-*.js with resumeFromRunId wf_2011a74c-b99 (4 sweeps cached), then catalog -> cards ->
-   fact-check; then an implementation round for everything the catalog marks implement/approximate.
+## Done in the second session (branch claude/project-thread-jdz24e, PR https://github.com/Jackpep-bot/Swing-T/pull/1)
+- Dashboard committed; `swing dashboard`; all 8 tabs checked on config/live.yaml; review fixes (newest live ledger row,
+  SRI on the chart library). Monitor fix: Form 4 code A (grant) no longer counts as a buy.
+- Research layer: catalog (281 items) and 130 strategy cards in docs/strategies/ (each ends with a pending
+  `## Empirical (replay)` section). Partial fact-check table at the end of docs/catalog/CATALOG.md.
+- Signal/OrderIntent `entry_type` (open | stop | limit): backtest/replay (`research.backtest.entry_fill`) and the shadow
+  ledger fill stop/limit entries on the next session; the broker layer refuses non-open entries for now.
+- Replay 2024-10-07..2026-10-05 (11 strategies, router on): -20.2%, PF 0.78, Sharpe -1.01, 666 trades, costs $9.5k.
+  Shadow ledger gross R: breakout_52w +0.08, momentum_burst +0.07, rsi2 +0.05, sr_bounce +0.03; sr_breakout -0.13,
+  pullback_trend -0.06, holy_grail -0.07, power_gap -0.21; qullamaggie_flag (3) and episodic_pivot (2) barely fire
+  (suspect filters). (That JSON was overwritten by a 2026-10-08 timing run; the numbers above are the record.) `swing shadow report --replay`.
+- Work-in-progress committed (all off by default, existing 1,219 tests pass, NEW CODE NOT YET TESTED):
+  strategy hooks `engine_trail` / `trail_stop` (position manager + backtest), chandelier and extra exits,
+  14 new breadth columns, data/edgar.py earnings 8-K + companyfacts, data/fundamentals.py.
 
-## Next after that
-1. `uv run swing --settings config/live.yaml replay --start 2024-10-07 --end 2026-10-05` (survivorship-free
-   window) and `--start 2017-01-01 --end 2024-10-04` (longer, biased); per-strategy and per-regime results go
-   into each strategy's knowledge card as an Empirical section.
-2. First real nightly on Alpaca paper: `uv run swing --settings config/live.yaml nightly --broker alpaca --execute`.
-3. scripts/install-launchd.sh so nightly and monitor run on weekdays.
+## Done in the third session (2026-10-08, same branch / PR)
+- Tests for the trail hooks, the 14 breadth columns and EDGAR earnings/fundamentals; bugs fixed: Zweig thrust fired
+  twice per setup; a through-close strategy trail discarded a valid engine stop; chandelier on unsorted panels;
+  per-day NYSE size breakpoint; EDGAR acceptanceDateTime is UTC (checked on MSFT), floored at the filing date.
+- `swing ingest-edgar`; data.fundamentals.join_edgar adds sue, rev_surprise, gross_prof, shares_outstanding,
+  turnover, days_since_earnings, is_earnings_window, days_since_filing to replay / CLI / nightly panels (cached
+  `fundamental_events` table, rebuilt after each ingest).
+- Fact-check fixes applied (CMP 82bp is long-short alpha; 80-20 direction; NR7 period; IBS borrow per day; Kaufman gap
+  momentum formula; Ehlers caveat dropped).
+- Risk tools (all off by default): Turtle N units and unit limits, monthly loss stop, drawdown-scaled equity, book
+  vol scaling, rank hysteresis, Harvey-Liu haircut; deflated Sharpe now counts ALL trials; gates.md gate 2 spelled out.
+- features/market_school.py (distribution days, follow-through days) and playbook overlays (market_school_pressure /
+  correction, hill_bearish, mcclellan_negative, q25_bearish), all off by default, risk-reducing only.
+- features/extra.py: ~220 on-demand indicators (exact and parametric names); strategies declare `extra_features`.
+- 115 catalog strategies (docs/catalog decision implement -> shadow_only; implement_disabled_for_comparison ->
+  disabled). Skipped: williams_oops (same-day gap entry), connors_cvr3_vix (no VIX), stine_insider_superstock_weekly
+  (no float/PE). Review workflow: 54 confirmed defects fixed with regression tests; tests/test_strategies_all.py checks
+  every registered strategy for point-in-time behaviour.
+- `should_exit(row, bars_held, position)` gets a PositionContext (entry price, stops, best price, entry signal
+  features); 7 strategies gained their card exits; intents persist signal features for live exits.
+- Live/sample separation: config/live.yaml -> data/live/market.duckdb, state/live/orders.sqlite,
+  state/live/limits.json; sample artifacts archived in data/sample_archive/ and state/sample_archive/.
+  config/replay.yaml runs research replays on a copy (data/live/replay.duckdb).
+- install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
+- 2,229 tests pass.
+
+## Resume here (in order) - updated 2026-10-09 22:30 ET
+No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no
+window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
+(docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
+
+Running unattended (2026-10-10 09:00 ET, Mac on AC), detached with nohup:
+a. Full leaderboard re-run on the corrected universe: `swing research run` (run 20261010-033614, 2 lanes, log
+   data/logs/research/full_rerun.log); 2024-26 done, 2017-24 in progress. It rebuilds cards, leaderboard and
+   reality check and Telegrams the summary at the end. Then: commit docs/leaderboard.md, docs/strategies, docs/reality_check.md.
+b. scripts/after_rerun_b3.sh (started 13:00 ET, runs beside (a) within a 44GB budget) runs the batch 3 pre-registered group
+   (docs/preregistration/2026-10-10-batch3.md; results -> ...-batch3-results.md, Telegram), then re-replays
+   residual_momentum on 2024-26 (tag v2c-resmom, store replay_p3) because its earlier row had 3 graded signals
+   (replay warm-up was too short for its 756-bar fit; fixed with per-strategy warmup_calendar_days).
+c. 1R-exit family test (docs/preregistration/2026-10-10-exit-1r.md): regrade from existing ledgers into
+   data/live/regrade_1r.duckdb -> docs/leaderboard_t1r.md (a worker is running it).
+Done today: batch 2 (repurchasers PASS on its rule, zero alpha vs SPY, not enabled; FOMC and vol-managed SPY FAIL),
+regime-cell walk-forward FAIL, docs/attribution.md (most gross edge is market drift; targets almost never hit).
+Card branches: origin/claude/batch2-cards, origin/claude/batch3-cards (fetch for new files).
+
+Queue:
+1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
+   research-ingest -> pre-registration doc committed BEFORE any replay -> `python -m swing_engine.research.prereg_run`
+   (parallel, 40GB budget, identical to serial) -> results into the cards.
+2. New data sources need Jack's approval before building.
+3. Keep the Mac on AC power for long runs (it sleeps on battery / lid closed).
+
+## Research commands
+- Full research pass (every registered strategy, both windows, parallel lanes sized from free memory up to 40 GB,
+  cards + leaderboard + Telegram summary at the end; refuses on battery and while the live store is being written):
+  `nohup uv run swing --settings config/live.yaml research run --windows short,long > /dev/null 2>&1 &`
+  Progress `tail -f data/logs/research/<run-id>.log`; manifest `data/live/runs/research/<run-id>.json`.
+- Resume unfinished chunks: `uv run swing --settings config/live.yaml research run --resume latest`.
+- Cards + leaderboard again over the latest run's lane stores: `uv run swing --settings config/live.yaml research rebuild`.
+- The old scripts/lane_r*.sh and run_research_replays.sh are gone; replay_r1/r2.duckdb stay as the v2 record.

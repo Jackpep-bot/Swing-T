@@ -117,6 +117,8 @@ shadow_app = typer.Typer(help="Shadow ledger: forward outcomes of every signal, 
 app.add_typer(rank_app, name="rank")
 app.add_typer(monitor_app, name="monitor")
 app.add_typer(shadow_app, name="shadow")
+research_app = typer.Typer(help="Research replays of every strategy in parallel lanes, then cards + leaderboard.")
+app.add_typer(research_app, name="research")
 
 
 @dataclass
@@ -569,8 +571,22 @@ def _read_bars(
     return bars
 
 
-def _read_panel(store: Any, settings: Settings, start: date | None, end: date | None) -> pd.DataFrame:
-    """Cached `panel` table when present, else build it from bars on the fly."""
+def _with_extras(
+    panel: pd.DataFrame, settings: Settings, strategies: list[Any] | None, market: pd.DataFrame | None = None
+) -> pd.DataFrame:
+    """Attach the `extra_features` of ``strategies`` (names or instances; names are built with their settings
+    params, so non-default lengths resolve) that the panel lacks. Cached panels carry none."""
+    if not strategies:
+        return panel
+    ensure_extra, required_extras = _load("features.extra.ensure_extra"), _load("features.extra.required_extras")
+    objs = [_make_strategy(s, settings) if isinstance(s, str) else s for s in strategies]
+    return ensure_extra(panel, required_extras(objs), market)
+
+
+def _read_panel(
+    store: Any, settings: Settings, start: date | None, end: date | None, strategies: list[Any] | None = None
+) -> pd.DataFrame:
+    """Cached `panel` table when present, else build it from bars on the fly; plus ``strategies``' extras."""
     panel: pd.DataFrame | None = None
     try:
         panel = store.read_table(PANEL_TABLE)
@@ -583,6 +599,9 @@ def _read_panel(store: Any, settings: Settings, start: date | None, end: date | 
         bars = _read_bars(store, settings, None, start_d, end_d)
         build_panel = _load("features.panel.build_panel")
         panel = build_panel(bars, _market_slice(bars))
+    panel = _load("data.market_series.join_market_series")(store, panel)  # before extras: ff3_resid_mom reads it
+    panel = _with_extras(panel, settings, strategies)
+    panel = _load("data.fundamentals.join_edgar")(store, panel)
     panel = _slice_dates(panel, start, end)
     if panel.empty:
         _fail(f"panel has no rows for {start}..{end}", EXIT_NO_DATA)
@@ -640,9 +659,8 @@ def _strategy_params(settings: Settings, name: str) -> dict[str, Any]:
 
 
 def _enabled_strategies(settings: Settings) -> list[str]:
-    names = [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
-    if names:
-        return names
+    if settings.strategies:  # configured: exactly the enabled ones (all disabled = none, never all)
+        return [n for n, cfg in settings.strategies.items() if (cfg or {}).get("enabled", True)]
     known = _registry_names("strategy")
     return known if isinstance(known, list) else []
 
@@ -836,6 +854,125 @@ def ingest(
     _print_mapping(f"Ingest via {provider_name}", dict(result or {}))
 
 
+@app.command("ingest-edgar")
+def ingest_edgar(
+    ctx: typer.Context,
+    symbols: Annotated[
+        list[str] | None, typer.Option("--symbols", "-s", help="repeat or comma-separate; default every stored symbol")
+    ] = None,
+    limit: Annotated[int | None, typer.Option("--limit", help="fetch at most N CIKs this run")] = None,
+    refresh_days: Annotated[
+        int | None, typer.Option("--refresh-days", help="skip CIKs fetched OK within N days (default 7)")
+    ] = None,
+    eightk_only: Annotated[
+        bool, typer.Option("--8k-only", help="submissions only (8-K items, 13D, earnings dates); own resume table")
+    ] = False,
+) -> None:
+    """Fetch SEC 8-K earnings dates, all 8-K items, Schedule 13D and XBRL fundamentals (data.fundamentals)."""
+    settings = _state(ctx).settings
+    edgar = _edgar_client()
+    run_edgar_ingest = _load("data.fundamentals.run_edgar_ingest")
+    syms = _split_list(symbols)
+    store = _open_store(settings, must_exist=syms is None)  # the default universe is the stored bars
+    extra = {"refresh_days": refresh_days} if refresh_days is not None else {}
+    result = run_edgar_ingest(store, edgar, syms, limit=limit, progress=_ingest_progress, eightk_only=eightk_only, **extra)
+    _print_mapping("EDGAR ingest (ticker -> CIK)", dict(result or {}))
+
+
+def _edgar_client() -> Any:
+    agent = load_secrets().edgar_user_agent or ""
+    if "@" not in agent or agent == Secrets.model_fields["edgar_user_agent"].default:
+        _fail("set EDGAR_USER_AGENT in .env to 'name contact-email' (SEC fair-access policy); the placeholder is refused",
+              EXIT_REFUSED)
+    return _load("data.edgar.Edgar")(agent)
+
+
+@app.command("ingest-news")
+def ingest_news(
+    ctx: typer.Context,
+    start: Annotated[str | None, typer.Option("--start", help="first month (YYYY-MM-DD; default 2016-01-01)")] = None,
+    months: Annotated[int | None, typer.Option("--months", help="fetch at most N months this run")] = None,
+) -> None:
+    """Fetch Alpaca (Benzinga) news headline counts per symbol into `news_articles` (data.news; resumable)."""
+    secrets = load_secrets()
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    client = _load("data.news.AlpacaNews")(secrets.alpaca_api_key or "", secrets.alpaca_secret_key or "")
+    first = _parse_date(start, _load("data.news.NEWS_DEFAULT_START"))
+    result = _load("data.news.run_news_ingest")(store, client, start=first, months=months, progress=_ingest_progress)
+    _print_mapping("Alpaca news ingest (headline counts)", dict(result or {}))
+
+
+@app.command("ingest-insiders")
+def ingest_insiders(
+    ctx: typer.Context,
+    start_year: Annotated[int, typer.Option("--start-year", help="first year of quarterly Form 4 data sets")] = 2006,
+    quarters: Annotated[int | None, typer.Option("--quarters", help="fetch at most N quarters this run")] = None,
+) -> None:
+    """Fetch SEC Insider Transactions Data Sets (Form 4 P/S trades) into `insider_trades` (data.insiders)."""
+    settings = _state(ctx).settings
+    edgar = _edgar_client()
+    store = _open_store(settings, must_exist=False)
+    result = _load("data.insiders.run_insider_ingest")(
+        store, edgar, start_year=start_year, quarters=quarters, progress=_ingest_progress
+    )
+    _print_mapping("Insider ingest (Form 4 quarterly data sets)", dict(result or {}))
+
+
+@app.command("ingest-vix")
+def ingest_vix(ctx: typer.Context) -> None:
+    """Fetch Cboe VIX / VIX9D / VIX3M daily history (free, no key) into the `vix` table (data.market_series)."""
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    _print_mapping("Cboe VIX ingest", dict(_load("data.market_series.run_vix_ingest")(store) or {}))
+
+
+@app.command("ingest-french")
+def ingest_french(ctx: typer.Context) -> None:
+    """Fetch Kenneth French daily FF3 + momentum factors (free, no key) into `ff_factors` (data.market_series)."""
+    store = _open_store(_state(ctx).settings, must_exist=False)
+    _print_mapping("Ken French factors ingest", dict(_load("data.market_series.run_french_ingest")(store) or {}))
+
+
+@app.command("repair-store")
+def repair_store(
+    ctx: typer.Context,
+    apply: Annotated[bool, typer.Option("--apply/--dry-run", help="write the repair (default: dry run, no writes)")] = False,
+    undo: Annotated[str | None, typer.Option("--undo", help="reverse one applied run by its run_id")] = None,
+) -> None:
+    """Drop pre-2024-10-07 zero-volume filler and split ticker-reuse joins into TICKER~YYYYMMDD keys
+    (data.repair; every change logged in `repairs`). Run on a backup copy first."""
+    store = _open_store(_state(ctx).settings)
+    repair = importlib.import_module("swing_engine.data.repair")
+    if undo:
+        _print_mapping(f"Repair {undo} reverted", repair.undo_repair(store, undo))
+        return
+    result = repair.apply(store) if apply else repair.plan(store)
+    _print_frame("Zero-volume filler by symbol", result["filler"])
+    _print_frame("Ticker-reuse splits", result["splits"])
+    _print_mapping("Store repair" + (" APPLIED" if apply else " (dry run, nothing written)"),
+                   {k: v for k, v in result.items() if k not in ("filler", "splits")})
+
+
+@app.command("ingest-delisted")
+def ingest_delisted(
+    ctx: typer.Context,
+    refresh: Annotated[bool, typer.Option("--refresh", help="re-enumerate the candidates (Massive + Alpha Vantage)")] = False,
+    limit: Annotated[int | None, typer.Option("--limit", help="fetch at most N candidates this run")] = None,
+) -> None:
+    """Delisted 2017-2024 US common stocks: enumerate (Massive inactive tickers + AV dated delisted lists), fetch
+    Alpaca SIP bars, store under TICKER~YYYYMMDD keys with `listings` rows (data.delisted). Resumable."""
+    settings = _state(ctx).settings
+    secrets = load_secrets()
+    store = _open_store(settings)
+    alpaca = _make_provider("alpaca", settings, secrets)
+    alpaca.feed = "sip"  # historical SIP bars older than 15 minutes are free
+    massive = _make_provider("massive", settings, secrets) if secrets.massive_api_key else None
+    result = _load("data.delisted.run_delisted_ingest")(
+        store, alpaca, massive=massive, av_key=secrets.alphavantage_api_key, refresh=refresh, limit=limit,
+        progress=_ingest_progress,
+    )
+    _print_mapping("Delisted ingest", dict(result or {}))
+
+
 def _ingest_progress(line: str) -> None:
     """`run_ingest(progress=)` sink: estimate and every-N-sessions progress lines go to the console."""
     _console().print(escape(line))
@@ -920,7 +1057,7 @@ def scan(
     if not names:
         _fail("no strategies enabled in settings and none registered", EXIT_USAGE)
     store = _open_store(settings)
-    panel = _read_panel(store, settings, None, as_of_d)
+    panel = _read_panel(store, settings, None, as_of_d, names)
     full_panel, universe = panel, None
     listing = _store_listing(store)
     if listing is not None:  # screened, point-in-time universe (ETFs/OTC/delisted-before-as_of drop out)
@@ -968,7 +1105,13 @@ def _save_scan_routing(
 
 
 def _panel_from_provider(
-    name: str, settings: Settings, secrets: Secrets, symbols: list[str] | None, start: date, end: date
+    name: str,
+    settings: Settings,
+    secrets: Secrets,
+    symbols: list[str] | None,
+    start: date,
+    end: date,
+    strategies: list[Any] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame | None]:
     prov = _make_provider(name, settings, secrets)
     if symbols is None:
@@ -990,7 +1133,7 @@ def _panel_from_provider(
             log.info("market_bars_unavailable", provider=name, error=str(e))
             market = None
     build_panel = _load("features.panel.build_panel")
-    return build_panel(bars, market), market
+    return _with_extras(build_panel(bars, market), settings, strategies, market), market
 
 
 def _returns_moments(result: Any, metrics: dict[str, Any]) -> tuple[int, float, float]:
@@ -1056,14 +1199,16 @@ def backtest(
     overrides = _parse_params(param)
     strat = _make_strategy(strategy, settings, overrides)
     universe_at: Callable[[date], frozenset[str]] | None = None
+    delist_returns: dict[str, float] | None = None
 
     if provider:
         panel, market = _panel_from_provider(
-            provider, settings, secrets, _split_list(symbols), start_d, end_d
+            provider, settings, secrets, _split_list(symbols), start_d, end_d, [strat]
         )
     else:
         store = _open_store(settings)
-        panel = _read_panel(store, settings, start_d - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS), end_d)
+        delist_returns = _load("data.delisted.delisting_returns")(store, settings)
+        panel = _read_panel(store, settings, start_d - timedelta(days=PANEL_WARMUP_CALENDAR_DAYS), end_d, [strat])
         market = _market_slice(panel)  # before the universe screen drops the ETF
         wanted = _split_list(symbols)
         if wanted:
@@ -1097,7 +1242,7 @@ def backtest(
     )
     result = _call_supported(
         run_backtest, strat, panel, start_d, end_d, settings.risk, costs,
-        market=market, sizer=sizer, universe_at=universe_at,
+        market=market, sizer=sizer, universe_at=universe_at, delist_returns=delist_returns,
     )
     metrics = dict(summarize(result))
     if not no_log:
@@ -1105,7 +1250,8 @@ def backtest(
     n_trials = int(trial_count(strategy) or 0)
     n_obs, skew, kurt = _returns_moments(result, metrics)
     sharpe = float(metrics.get("sharpe") or 0.0)
-    deflated = deflated_sharpe(sharpe, max(n_trials, 1), n_obs, skew, kurt) if n_obs else None
+    n_trials_all = int(trial_count(None) or 0)  # gate 2: deflate by EVERY logged trial, not just this strategy's
+    deflated = deflated_sharpe(sharpe, max(n_trials_all, 1), n_obs, skew, kurt) if n_obs else None
 
     _print_mapping(
         f"Backtest {strategy} {start_d}..{end_d}",
@@ -1127,7 +1273,7 @@ def backtest(
             "sharpe": sharpe,
             "deflated sharpe": deflated,
             "trials logged for this strategy": n_trials,
-            "trials logged in total": int(trial_count(None) or 0),
+            "trials logged in total": n_trials_all,
             "n_obs / skew / kurtosis": f"{n_obs} / {skew:.3f} / {kurt:.3f}",
         },
     )
@@ -1220,7 +1366,7 @@ def _signals_for(settings: Settings, as_of: date, strategies: list[str] | None) 
         return sorted(signals, key=lambda s: s.score, reverse=True)  # cap keeps the best candidates
     names = strategies or _enabled_strategies(settings)
     store = _open_store(settings)
-    panel = _read_panel(store, settings, None, as_of)
+    panel = _read_panel(store, settings, None, as_of, names)
     return _run_scan(settings, panel, as_of, names)
 
 
@@ -1641,12 +1787,48 @@ def journal(
     fills = _load_json(_run_file(settings, "fills", as_of_d), [])
     write_entry = _load("agent.journal.write_entry")
     secrets = load_secrets()
-    narrative = bool(secrets.anthropic_api_key)  # tables only when no key; prose needs the API
+    narrative = bool(secrets.anthropic_api_key) and settings.agent.llm_enabled  # prose needs the API
     client = _anthropic_client(secrets, async_client=False) if narrative else None
     out = _call_supported(
         write_entry, as_of_d, signals, reviews, intents, fills, settings=settings, narrative=narrative, client=client
     )
     _console().print(str(out), markup=False)
+
+
+@app.command("notify-test")
+def notify_test(
+    dry_run: Annotated[bool, typer.Option("--dry-run", help="print the message instead of sending it")] = False,
+) -> None:
+    """Send a short Telegram message to TELEGRAM_CHAT_ID to confirm nightly / research reports will arrive."""
+    from swing_engine.ops import notify
+
+    title, body = notify.ping_message(datetime.now().strftime("%Y-%m-%d %H:%M"))
+    if dry_run:
+        _console().print(escape(f"{title}\n{body}"), highlight=False)
+        return
+    why = notify.deliver(title, body, secrets=load_secrets())
+    if why:
+        _fail(f"not delivered: {why}")
+    _console().print("sent")
+
+
+@app.command("weekly-report")
+def weekly_report(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+) -> None:
+    """Write data/journal/weekly-<ISO week>.md: paper trades, shadow ledger, drift, rule-based recommendations."""
+    settings = _state(ctx).settings
+    as_of_d = _parse_date(as_of, date.today())
+    path = _store_path(settings)
+    if not path.exists():
+        _fail(f"store {path} does not exist; run `swing ingest` first", EXIT_NO_DATA)
+    store = _load("data.store.Store")(str(path), read_only=True)
+    try:
+        out = _load("agent.weekly.write_report")(settings, as_of_d, store)
+    finally:
+        store.close()
+    _console().print(f"wrote {out}")
 
 
 @app.command()
@@ -1700,6 +1882,22 @@ STEP_STYLES = {"ok": "green", "fail": "bold red", "skip": "dim"}
 def _status_text(value: Any, styles: dict[str, str]) -> Text:
     key = str(getattr(value, "value", value))
     return Text(key, style=styles.get(key, ""))
+
+
+@app.command()
+def dashboard(
+    ctx: typer.Context,
+    port: Annotated[int, typer.Option("--port", min=0, max=65535, help="port on 127.0.0.1")] = 8765,
+    demo: Annotated[bool, typer.Option("--demo", help="serve deterministic fake data (no keys, no files)")] = False,
+    open_browser: Annotated[bool, typer.Option("--open", help="open the default browser")] = False,
+) -> None:
+    """Local read-only dashboard on http://127.0.0.1:<port>/ (swing_engine.dashboard; never places orders)."""
+    serve = _load("dashboard.serve")
+    path = _state(ctx).settings_path
+    try:
+        serve(settings_path=str(path) if path else None, port=port, demo=demo, open_browser=open_browser)
+    except OSError as exc:
+        _fail(f"could not start the dashboard on 127.0.0.1:{port}: {exc}")
 
 
 @app.command()
@@ -1958,6 +2156,9 @@ def replay(
         bool, typer.Option("--no-router", help="run every strategy every day at full risk (no playbook routing)")
     ] = False,
     equity: Annotated[float, typer.Option("--equity", help="starting equity")] = DEFAULT_REPLAY_EQUITY,
+    tag: Annotated[
+        str | None, typer.Option("--tag", help="suffix for the saved file (runs/replay/<start>_<end>_<tag>.json)")
+    ] = None,
     cost: Annotated[
         list[str] | None, typer.Option("--cost", help="CostModel field override k=v (repeatable)")
     ] = None,
@@ -2000,7 +2201,8 @@ def replay(
         **{attr: _jsonable(getattr(result, attr, None))
            for attr in ("by_strategy", "by_regime", "trades", "equity_curve", "daily")},
     }
-    path = _store_path(settings).parent / RUNS_DIRNAME / REPLAY_KIND / f"{start_d.isoformat()}_{end_d.isoformat()}.json"
+    stem = f"{start_d.isoformat()}_{end_d.isoformat()}" + (f"_{tag}" if tag else "")
+    path = _store_path(settings).parent / RUNS_DIRNAME / REPLAY_KIND / f"{stem}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, indent=2, default=str))
     _console().print(f"saved replay to {path}")
@@ -2058,6 +2260,46 @@ def monitor_outcomes(
         _console().print(f"no alert outcomes in the last {days} days")
         return
     _print_frame(f"Alert outcomes, last {days} days", pd.DataFrame(frame))
+
+
+@research_app.command("run")
+def research_run(
+    ctx: typer.Context,
+    windows: Annotated[str, typer.Option("--windows", help="comma-separated: short (2024-26), long (2017-24)")] = "short,long",
+    strategies: Annotated[
+        list[str] | None, typer.Option("--strategies", "-s", help="repeat or comma-separate (default: all registered)")
+    ] = None,
+    lanes: Annotated[str, typer.Option("--lanes", help="parallel replays, or auto (from free memory, <= 40 GB)")] = "auto",
+    resume: Annotated[str | None, typer.Option("--resume", help="run id (or latest): rerun its unfinished chunks")] = None,
+    allow_battery: Annotated[bool, typer.Option("--allow-battery", help="run on battery power")] = False,
+) -> None:
+    """Copy the --settings store (config/live.yaml: the live store) to one store per lane, replay every strategy in
+    chunks on both windows (`swing replay --no-router`), then rebuild the cards and docs/leaderboard.md. Progress:
+    data/logs/research/<run-id>.log; manifest: <store dir>/runs/research/<run-id>.json. Safe under nohup."""
+    st = _state(ctx)
+    if st.settings_path is None:
+        _fail("pass --settings (config/live.yaml): the lanes copy its store and extend it", EXIT_USAGE)
+    runner = importlib.import_module("swing_engine.research.runner")
+    try:
+        summary = runner.run(
+            st.settings_path, _store_path(st.settings), _store_path(st.settings).parent / RUNS_DIRNAME,
+            windows=_split_list([windows]) or [], strategies=_split_list(strategies), lanes=lanes, resume=resume,
+            allow_battery=allow_battery,
+        )
+    except (RuntimeError, ValueError, FileNotFoundError) as exc:
+        _fail(str(exc))
+    _print_mapping("Research run", summary)
+
+
+@research_app.command("rebuild")
+def research_rebuild(
+    ctx: typer.Context,
+    run_id: Annotated[str | None, typer.Option("--run-id", help="default: the latest run")] = None,
+) -> None:
+    """Cards + leaderboard over the lane stores of a `swing research run` (its manifest)."""
+    runner = importlib.import_module("swing_engine.research.runner")
+    manifest = runner.load_manifest(_store_path(_state(ctx).settings).parent / RUNS_DIRNAME, run_id)
+    _print_mapping("Research rebuild", runner.rebuild(manifest, runner.file_logger(manifest["run_id"])))
 
 
 if __name__ == "__main__":  # pragma: no cover

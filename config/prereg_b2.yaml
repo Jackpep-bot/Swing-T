@@ -1,0 +1,13 @@
+# Pre-registered batch-2 group (docs/preregistration/2026-10-10-batch2.md). Book limits fixed before any run.
+# This file is the book of large_cap_net_repurchasers (card: equal weight, max 50 names): 2% positions, 50 slots.
+# The two SPY-timing strategies run on config/prereg_b2_spy.yaml (research.prereg_run --benchmark-settings).
+# Store: a research copy of the repaired store, copied per job from data/live/replay_p3.duckdb by prereg_run.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_p3.duckdb
+risk:
+  risk_per_trade_pct: 0.5     # not binding below a 24% stop distance (3 x ATR63 of a top-500 stock): the cap sizes
+  max_position_pct: 2.0       # equal weight: 1 / 50
+  max_open_positions: 50
+execution:
+  max_new_orders_per_day: 50  # the first rebalance may buy the whole buy zone

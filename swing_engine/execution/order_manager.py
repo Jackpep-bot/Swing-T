@@ -19,7 +19,8 @@ from typing import Any, NoReturn
 import structlog
 
 from swing_engine.core.interfaces import Broker
-from swing_engine.core.models import OrderIntent, Side
+from swing_engine.core.models import EntryType, OrderIntent, Side
+from swing_engine.data.delisted import ENTITY_SEP
 from swing_engine.execution.ledger import DEFAULT_LEDGER_PATH, OrderLedger, OrderStatus, normalize_status
 from swing_engine.risk import killswitch
 from swing_engine.risk.killswitch import DEFAULT_KILL_SWITCH_FILE
@@ -50,6 +51,10 @@ def validate_intent(intent: OrderIntent) -> str | None:
         return "client_order_id is required"
     if intent.qty <= 0:
         return f"qty must be positive, got {intent.qty}"
+    if ENTITY_SEP in intent.symbol:  # data.delisted research key (TICKER~YYYYMMDD), not a tradable ticker
+        return f"{intent.symbol} is a delisted-entity research key, not a ticker"
+    if intent.entry_type != EntryType.OPEN:  # research-only until the broker adapter places stop/limit entries
+        return f"entry type {intent.entry_type.value} is not supported by the broker layer yet"
     if intent.stop <= 0:
         return "stop must be positive"
     if intent.entry_limit is not None and intent.entry_limit <= 0:

@@ -6,9 +6,9 @@ advance of 30%+ into the base; a cup at least 7 weeks long and 12-33% deep whose
 buy the close above the pivot (handle high / base high) on volume >= 1.4x the prior 50-day average, but not more
 than 5% above the pivot. Stop = the higher of the handle/base low and entry - 7% (O'Neil 7-8%); target +20%
 (IBD 20-25%). `max_hold_days` (40) is a plain time cap, NOT the IBD 8-week rule: doc 04's eight_week_rule (a +20%
-gain within ~15 bars means hold at least 40 bars and trail on a close below sma_50) is not implemented, because
-`should_exit(row, bars_held)` sees neither the entry price nor the path since entry; the fixed +20% target sells
-exactly the fast movers that rule would hold. A close below the 50-day on heavy volume is the failure exit
+gain within ~15 bars means hold at least 40 bars and trail on a close below sma_50) is not implemented: it needs
+when the +20% gain happened (path beyond `should_exit`'s position context) and a variant without the fixed +20%
+target, which sells exactly the fast movers that rule would hold. A close below the 50-day on heavy volume is the failure exit
 (methods.md 2f). Geometry comes from features/patterns2.py (`cup_with_handle`, `flat_base`).
 """
 from __future__ import annotations

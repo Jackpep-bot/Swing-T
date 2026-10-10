@@ -1,0 +1,113 @@
+"""Price Zone Oscillator (Khalil & Steckler, long): docs/strategies/price_zone_oscillator.md (thinkorswim PZO LE/LX).
+
+PZO(14) = 100 x EMA(signed close) / EMA(close) (features.extra `pzo_14`); ADX(14) > 18 = trending, direction from
+EMA(60). Long entries: uptrend (ADX > 18, close > EMA60): PZO crosses above -40, or crosses above +15 for the first
+time since it was last below 0 ("after crossing zero upward"); non-trend (ADX <= 18): PZO crosses above -40 or +15.
+ADX > 18 with close < EMA60 is a downtrend: no long. Exit (`should_exit`): PZO was above +60 and turns down (both
+modes); trend (ADX > 18): close < EMA60 with PZO < 0; non-trend (ADX <= 18 or NaN), the card's path rules from the
+position's `bars_held` and the `bars_since_ge_<level>_of_pzo_14` columns: after reaching +40 since entry (so it has
+dropped through +40), PZO < 0 with close < EMA60; or, after crossing +15 (on the signal bar or since), never reaching
++40 and falling below -5. Without a position context (a caller with no position facts) the non-trend rule falls back
+to row-based crosses: PZO down through 0 with close < EMA60, or down through -5. The path levels are the card's +15 /
++40 (module constants). Stop 2 x atr_14 (card).
+"""
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+import numpy as np
+import pandas as pd
+
+from swing_engine.core.models import PositionContext, Signal
+from swing_engine.core.registry import register
+from swing_engine.features.patterns2 import as_of_view
+
+from ._base import P_MIN_MARKET_TREND, P_MIN_RR, SYMBOL, TREND_DOWN, PanelStrategy, finite
+
+NAME = "price_zone_oscillator"
+PZO, PREV_PZO, EMA, ADX = "pzo_14", "prev_pzo_14", "ema_60", "adx_14"
+#: card non-trend LX path levels: "after crossing +15 upward" / "after dropping through +40", "fails to reach +40"
+PATH_CROSS, PATH_REACH = 15, 40
+SINCE_CROSS, SINCE_REACH = f"bars_since_ge_{PATH_CROSS}_of_{PZO}", f"bars_since_ge_{PATH_REACH}_of_{PZO}"
+
+
+@register("strategy", NAME)
+class PriceZoneOscillator(PanelStrategy):
+    name = NAME
+    description = "PZO(14) crosses -40 or +15 up in an ADX/EMA60 uptrend or a range; exit on +60 turn-down."
+    default_params: dict[str, Any] = {
+        "adx_trend": 18.0,  # card: ADX(14) > 18 = trending
+        "oversold": -40.0,  # card: long when PZO crosses -40 upward
+        "buy_level": 15.0,  # card: ... or crosses +15 upward (after crossing zero, in an uptrend)
+        "overbought": 60.0,  # card: exit when PZO is above +60 then turns down
+        "fail_level": -5.0,  # card: non-trend exit when PZO fails and falls below -5
+        "zero_lookback": 60,  # bars searched back for the last PZO < 0 (engine choice)
+        "stop_atr_mult": 2.0,  # card
+        "max_hold_days": 30,  # card
+        P_MIN_MARKET_TREND: TREND_DOWN,
+        P_MIN_RR: 0.0,  # card: no target
+    }
+    features_required = ["atr_14"]
+    extra_features = [PZO, PREV_PZO, EMA, ADX, SINCE_CROSS, SINCE_REACH]
+
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        pzo, prev, ema = row.get(PZO), row.get(PREV_PZO), row.get(EMA)
+        if not (finite(pzo) and finite(prev) and finite(ema)):
+            return False
+        pzo, prev = float(pzo), float(prev)
+        if prev > float(self.params["overbought"]) and pzo < prev:
+            return True  # +60 turn-down, both modes
+        close_below = float(row["close"]) < float(ema)
+        adx = row.get(ADX)
+        if finite(adx) and float(adx) > float(self.params["adx_trend"]):
+            return bool(close_below and pzo < 0)  # trend LX
+        fail = float(self.params["fail_level"])
+        if position is None:  # non-trend LX, row-based: PZO crosses down through 0 (close < EMA60) or through -5
+            return bool((prev >= 0 > pzo and close_below) or prev >= fail > pzo)
+        reach, cross = row.get(SINCE_REACH), row.get(SINCE_CROSS)
+        reached = finite(reach) and float(reach) < bars_held  # PZO >= +40 on a held bar
+        crossed = finite(cross) and float(cross) <= bars_held  # PZO >= +15 on the signal bar or a held bar
+        return bool((reached and pzo < 0 and close_below) or (crossed and not reached and pzo < fail))
+
+    def _entry(self, pzo: np.ndarray, trending: bool) -> str | None:
+        now, prev = pzo[-1], pzo[-2]
+        lo, up = float(self.params["oversold"]), float(self.params["buy_level"])
+        if prev <= lo < now:
+            return "cross_oversold"
+        if not prev <= up < now:
+            return None
+        if not trending:
+            return "cross_buy_level"
+        below = np.flatnonzero(pzo[:-1] < 0)
+        return "cross_buy_level_after_zero" if below.size and (pzo[below[-1] + 1 : -1] <= up).all() else None
+
+    def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
+        if not self.market_ok(regime):
+            return []
+        p = self.params
+        view = as_of_view(panel, as_of, ["high", "low", "close", *self.required_features()])
+        n = int(p["zero_lookback"])
+        out: list[Signal] = []
+        for _, row in view.current.iterrows():
+            if not all(finite(row[c]) for c in (PZO, PREV_PZO, EMA, ADX, "atr_14")):
+                continue
+            trending = float(row[ADX]) > float(p["adx_trend"])
+            if trending and float(row["close"]) <= float(row[EMA]):
+                continue  # downtrend mode: shorts only (not used)
+            pzo = view.window(str(row[SYMBOL]), [PZO])[PZO][-n:]
+            why = self._entry(pzo[np.isfinite(pzo)], trending) if np.isfinite(pzo[-2:]).all() else None
+            if why is None:
+                continue
+            close = float(row["close"])
+            sig = self.build_signal(
+                row, as_of, entry=close, stop=close - float(p["stop_atr_mult"]) * float(row["atr_14"]), target=None,
+                score=float(row[ADX]), features={PZO: row[PZO], ADX: row[ADX], EMA: row[EMA]},
+                notes=f"PZO {why} ({'trend' if trending else 'range'} mode), PZO {float(row[PZO]):.1f}",
+            )
+            if sig:
+                out.append(sig)
+        self.log_scan(as_of, len(view.current), len(out))
+        return out
