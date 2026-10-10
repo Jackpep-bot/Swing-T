@@ -95,9 +95,29 @@ Trailing 8-quarter average excess return (vs SPY) of the top quintile in the win
 - https://rpc.cfainstitute.org/research/cfa-digest/2017/06/being-surprised-by-the-unsurprising-earnings-seasonality-and-stock-returns-digest-summary
 
 ## Empirical (replay)
-Pre-registered group test (docs/preregistration/2026-10-09-three-picks.md, amendment 1), graded as a portfolio net of per-stock costs, n_trials = 3. **FAIL**: no positive haircut Sharpe in the 2024-26 window. Full table: docs/preregistration/2026-10-09-three-picks-results.md.
+_Generated 2026-10-09 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 136 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
-| strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
-|---|---|---|---|---|---|---|---|---|---|---|---|
-| earnings_seasonality | 2024 | 576 | -0.101 | -2.25 | -1.26 | -1.26 | 0.00 | 29.7% | 9 | -154% | -21.1% |
-| earnings_seasonality | 2017 | 2128 | +0.058 | 2.53 | 0.55 | 0.32 | 0.76 | 21.5% | 9 | 308% | +55.2% |
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 140 | 0 | 45% | -0.03 | -0.09 | 51% | +0.05 | -0.01 | 48% | +0.03 | -0.03 | 1.07 |
+| correction | 5 | 0 | 60% | -0.14 | -0.35 | 80% | +1.16 | +0.95 | 60% | +1.39 | +1.18 | 4.14 |
+| healthy_uptrend | 736 | 0 | 43% | -0.06 | -0.13 | 42% | -0.12 | -0.19 | 40% | -0.10 | -0.17 | 0.83 |
+| high_vol_selloff | 155 | 0 | 68% | +0.17 | +0.08 | 63% | +0.20 | +0.12 | 63% | +0.33 | +0.24 | 2.36 |
+| narrow_uptrend | 26 | 0 | 58% | +0.03 | -0.03 | 52% | +0.29 | +0.22 | 46% | +0.22 | +0.15 | 1.49 |
+| **all** | 1062 | 0 | 48% | -0.02 | -0.09 | 47% | -0.04 | -0.11 | 44% | -0.01 | -0.08 | 0.99 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 499 | 0 | 59% | +0.10 | +0.04 | 58% | +0.19 | +0.12 | 57% | +0.29 | +0.22 | 1.79 |
+| correction | 385 | 0 | 60% | +0.09 | +0.02 | 57% | +0.18 | +0.11 | 58% | +0.26 | +0.19 | 1.72 |
+| healthy_uptrend | 1798 | 2 | 51% | +0.02 | -0.05 | 50% | +0.05 | -0.02 | 46% | +0.06 | -0.01 | 1.11 |
+| high_vol_selloff | 662 | 0 | 55% | +0.03 | -0.05 | 51% | -0.01 | -0.09 | 53% | +0.09 | +0.01 | 1.23 |
+| narrow_uptrend | 374 | 0 | 62% | +0.10 | +0.03 | 59% | +0.21 | +0.14 | 56% | +0.26 | +0.19 | 1.71 |
+| **all** | 3718 | 2 | 55% | +0.05 | -0.02 | 53% | +0.09 | +0.02 | 51% | +0.13 | +0.06 | 1.31 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

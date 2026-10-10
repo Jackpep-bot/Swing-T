@@ -72,3 +72,31 @@ Tests: tests/test_strategy_event_filters.py.
 ## Sources
 - https://academicnewsletter.sufe.edu.cn/info/357702 (Chan 2003 abstract)
 - docs/strategies/connors_rsi2_variants.md, docs/leaderboard.md
+
+## Empirical (replay)
+_Generated 2026-10-09 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
+About 136 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 11649 | 62 | 50% | +0.02 | -0.08 | 47% | -0.02 | -0.13 | 45% | +0.05 | -0.05 | 1.10 |
+| correction | 897 | 1 | 48% | -0.03 | -0.15 | 69% | +0.35 | +0.23 | 71% | +0.86 | +0.74 | 4.78 |
+| healthy_uptrend | 29849 | 69 | 52% | +0.08 | -0.03 | 49% | +0.10 | -0.01 | 43% | +0.10 | -0.01 | 1.19 |
+| high_vol_selloff | 4096 | 25 | 51% | +0.05 | -0.06 | 53% | +0.18 | +0.07 | 41% | +0.08 | -0.02 | 1.15 |
+| narrow_uptrend | 5300 | 6 | 46% | -0.04 | -0.15 | 37% | -0.16 | -0.28 | 34% | -0.16 | -0.27 | 0.75 |
+| **all** | 51791 | 163 | 51% | +0.05 | -0.06 | 48% | +0.06 | -0.05 | 43% | +0.08 | -0.03 | 1.15 |
+
+Portfolio replay (net of costs, slots shared with its run): 562 trades, win 59%, avg +0.03R, PF 1.09, P&L $7,689 on $100k, avg hold 6.2 bars.
+
+### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 33503 | 62 | 59% | +0.14 | +0.04 | 58% | +0.26 | +0.15 | 52% | +0.33 | +0.23 | 1.76 |
+| correction | 13497 | 20 | 57% | +0.10 | -0.01 | 54% | +0.13 | +0.02 | 47% | +0.13 | +0.02 | 1.26 |
+| healthy_uptrend | 116290 | 340 | 49% | -0.01 | -0.11 | 47% | +0.00 | -0.10 | 41% | +0.03 | -0.08 | 1.06 |
+| high_vol_selloff | 26923 | 135 | 47% | -0.07 | -0.17 | 43% | -0.09 | -0.19 | 38% | -0.09 | -0.19 | 0.84 |
+| narrow_uptrend | 28170 | 46 | 56% | +0.09 | -0.01 | 53% | +0.13 | +0.02 | 47% | +0.16 | +0.06 | 1.33 |
+| **all** | 218383 | 603 | 52% | +0.03 | -0.08 | 49% | +0.06 | -0.05 | 44% | +0.09 | -0.02 | 1.17 |
+
+Portfolio replay (net of costs, slots shared with its run): 2316 trades, win 57%, avg +0.03R, PF 1.08, P&L $68,732 on $100k, avg hold 5.8 bars.
