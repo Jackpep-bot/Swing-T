@@ -227,6 +227,12 @@ def rebuild(manifest: dict[str, Any], log: Callable[[str], None]) -> dict[str, A
     log("rebuild over " + " ".join(lane["store"] for lane in lanes))
     cards.main(["--settings", first, *extra, "--tag", manifest["run_id"]])
     board, n_trials = leaderboard.main(["--settings", first, *extra])
+    try:
+        from swing_engine.research import reality_check
+
+        reality_check.main(["--settings", first, *extra])
+    except Exception as exc:  # noqa: BLE001 - an extra test must not fail a finished rebuild
+        log(f"reality check failed: {exc}")
     surv = leaderboard.survivors(board)
     summary = {"run_id": manifest["run_id"], "chunks": len(manifest["chunks"]),
                "failed": [c["tag"] for c in manifest["chunks"] if c["status"] != DONE],
