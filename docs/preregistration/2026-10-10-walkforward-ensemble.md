@@ -1,6 +1,6 @@
 # Pre-registration: walk-forward ensemble of the 2017-24 winners (2026-10-10)
 
-COMMIT: <to fill>
+COMMIT: ab4a11b
 
 One test, fixed before it is run. No replay is needed: it is graded on the existing replay shadow ledgers
 (data/live/replay_r1.duckdb, replay_r2.duckdb, replay_news.duckdb) with `research.leaderboard.edge_stats`.
