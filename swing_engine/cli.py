@@ -1866,6 +1866,29 @@ def weekly_report(
     _console().print(f"wrote {out}")
 
 
+@app.command("study")
+def study_cmd(
+    ctx: typer.Context,
+    as_of: Annotated[str | None, typer.Option("--as-of", help="YYYY-MM-DD (default: today)")] = None,
+    all_days: Annotated[bool, typer.Option("--all", help="one study per distinct as_of in the events table")] = False,
+) -> None:
+    """Write docs/studies/YYYY-MM-DD.md from the decision receipts: counts, fire lineage, refusals, outcomes."""
+    settings = _state(ctx).settings
+    path = _store_path(settings)
+    if not path.exists():
+        _fail(f"store {path} does not exist; run `swing ingest` first", EXIT_NO_DATA)
+    study = importlib.import_module("swing_engine.ops.study")
+    store = _load("data.store.Store")(str(path), read_only=True)
+    try:
+        days = study.study_days(store) if all_days else [_parse_date(as_of, date.today())]
+        for day in days:
+            _console().print(f"wrote {study.write_study(store, settings, day)}")
+    finally:
+        store.close()
+    if not days:
+        _console().print("no events yet: nothing to study")
+
+
 @app.command()
 def trials(
     ctx: typer.Context,

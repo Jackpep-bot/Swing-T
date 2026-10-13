@@ -5,7 +5,8 @@ playbook router -> allowed strategies) -> rank predict (when a model exists) -> 
 router's per-strategy multiplier scales risk_per_trade_pct) -> review (ANTHROPIC key, not dry-run) -> shadow
 (every signal into the shadow ledger, taken or not, and grading of matured ones) -> positions (exit decisions,
 when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal -> weekly (agent.weekly, last session of the ISO
-week only) -> notify (ops.notify: one Telegram message, plus the weekly report when written; never fails the run).
+week only) -> study (ops.study: the day's markdown study from the decision receipts; a problem is a skip) ->
+notify (ops.notify: one Telegram message, plus the weekly report when written; never fails the run).
 A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
@@ -99,7 +100,7 @@ ERROR_PREVIEW_CHARS = 200
 
 STEP_NAMES = (
     "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
-    "weekly", "notify",
+    "weekly", "study", "notify",
 )
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
@@ -1190,6 +1191,20 @@ def _step_weekly(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"weekly report written to {path}", {"path": path}
 
 
+def _step_study(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """ops.study's daily markdown study from the `events` table (no LLM call). Any problem is a skip, never a
+    failure: a study that cannot be written must not mark the nightly failed."""
+    try:
+        study = importlib.import_module("swing_engine.ops.study")
+        path = study.write_study(ctx.store, ctx.settings, ctx.as_of, ctx.journal_root)
+        data = {"path": study.relative_path(path), **study.counts(study.day_events(ctx.store, ctx.as_of))}
+    except Exception as e:  # noqa: BLE001
+        raise Skip(f"could not write the study: {_error_text(e)}") from e
+    ctx.report.files["study"] = str(path)
+    return (f"study written to {data['path']} ({data['fires']} fires, {data['refusals']} refusals, "
+            f"{data['outcomes']} outcomes)"), data
+
+
 def _step_notify(ctx: _Context) -> tuple[str, dict[str, Any]]:
     """One Telegram summary of this run (plus the weekly report when the weekly step wrote one). Data only, no LLM.
     Any problem is a skip, never a failure: a dead bot must not mark the nightly failed."""
@@ -1311,6 +1326,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("execute", _step_execute),
     ("journal", _step_journal),
     ("weekly", _step_weekly),
+    ("study", _step_study),
     ("notify", _step_notify),
 )
 

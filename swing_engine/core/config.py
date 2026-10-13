@@ -71,6 +71,7 @@ class DataConfig(BaseModel):
     store_path: str = "data/swing.duckdb"
     intraday_store_path: str = "data/intraday.duckdb"  # 1-minute bars (data.intraday), its own DuckDB file
     event_log_path: str = "data/events.sqlite"
+    studies_dir: str = "docs/studies"  # ops.study: one auto-written markdown study per session
     calendar: str = "NYSE"
     massive_calls_per_min: float | None = None  # paid Massive plans; None = Basic's 5/min (env MASSIVE_CALLS_PER_MIN wins)
     # exit return when a held delisted entity (`TICKER~YYYYMMDD`, data.delisted) stops trading for a performance reason:

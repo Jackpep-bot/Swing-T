@@ -100,6 +100,11 @@ def nightly_message(report: Any, shadow_top: Iterable[tuple[str, int, float]] = 
     if top:
         lines.append("top shadow graded today (net R/trade): "
                      + ", ".join(f"{s} {r:+.2f}R ({n})" for s, n, r in top))
+    study = report.step("study")
+    if study is not None and str(study.status) == "ok":
+        d = study.data
+        lines.append(f"study: {d.get('path')} ({d.get('fires', 0)} fires, {d.get('refusals', 0)} refusals, "
+                     f"{d.get('outcomes', 0)} outcomes)")
     journal = report.files.get("journal")
     if journal:
         lines.append(f"journal: {journal}")
