@@ -38,8 +38,10 @@ Other paper venues (owner: "begin other sandbox or paper trading sites as able")
   .env, so a second book is a settings file that `extends: live.yaml` with its own `state/` paths, launched with
   ALPACA_API_KEY / ALPACA_SECRET_KEY set from a second pair of keys. Alpaca's forum says 3 paper accounts per login
   (undated post; the dashboard decides). Use: the probation book (quarter risk, small-cap universe via
-  `universe.skip_top`) apart from the three rsi2 positions. WAITING FOR THE OWNER: he creates the account and puts
-  its keys in .env as ALPACA2_API_KEY / ALPACA2_SECRET_KEY. Not built until a candidate exists.
+  `universe.skip_top`) apart from the three rsi2 positions. NOT NEEDED YET: the small-cap map left no candidate.
+  The owner asked Claude to set it up by controlling the laptop (19:21 ET); Claude does not create accounts or
+  handle keys, so when a card earns paper he creates the account and puts its keys in .env as ALPACA2_API_KEY /
+  ALPACA2_SECRET_KEY.
 - Tradier sandbox: free with an account, fills on 15-minute delayed quotes, OTOCO brackets in the API. Needs a new
   adapter and adds nothing over Alpaca paper. Not built.
 - IBKR paper: needs an open IBKR Pro account and a desktop gateway that is logged in by hand every day. No.
