@@ -286,3 +286,17 @@ def test_limit_entry_fills_at_the_better_of_open_and_level():
     assert g.entry_price == 98.0
     assert grade_one(Side.LONG, STOP, TARGET, bars, (5,), entry_type="limit", entry_level=96.0).skip_reason \
         == "not_triggered"
+
+
+def test_limit_entry_gets_no_credit_for_the_fill_bars_high_before_the_fill():
+    from swing_engine.core.models import EntryType
+
+    def grade(fill_bar):
+        return grade_one(Side.LONG, STOP, 103.0, _bars([fill_bar, FLAT, FLAT]), (3,),
+                         entry_type=EntryType.LIMIT, entry_level=ENTRY).by_horizon[3]
+
+    out = grade((104.0, 105.0, 99.0, 100.5))  # opens above the target, fills at 100 on the way down
+    assert out.hit == Hit.TIME and out.result_r == pytest.approx(0.0)
+    assert out.mfe_r == pytest.approx(1.0 / 5.0)  # the later FLAT bars' high, not the fill bar's 105
+    out = grade((104.0, 105.0, 99.0, 104.0))  # closes above the target: reached after the fill
+    assert out.hit == Hit.TARGET and out.result_r == pytest.approx(3.0 / 5.0)

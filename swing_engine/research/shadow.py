@@ -266,6 +266,8 @@ def grade_one(
             out = Outcome(Hit.SKIPPED.value, exit_date=days[0])
             return Grade({h: out for h in hs}, days[0], entry, SKIP_NOT_TRIGGERED)
         entry = (max if (d > 0) == is_stop else min)(entry, lvl)
+    # a limit filled away from the open: that bar's open and best price may have come before the fill
+    late_fill = kind == EntryType.LIMIT and entry != float(o[0])
     has_target = target is not None and math.isfinite(float(target))
     tgt = float(target) if has_target else math.nan
     skip: str | None = None
@@ -288,6 +290,8 @@ def grade_one(
     max_h = hs[-1]
     for k in range(min(len(days), max_h)):
         ok, fk, ak, ck = float(o[k]), float(fav[k]), float(adv[k]), float(c[k])
+        if k == 0 and late_fill:
+            fk = d * max(d * entry, d * ck)  # only the close is known to follow the fill
         exit_px: float | None = None
         hit: Hit | None = None
         if k > 0 and d * (ok - stop) <= 0:

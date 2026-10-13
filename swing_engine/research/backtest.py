@@ -277,6 +277,7 @@ class OpenPosition:
     profitable_closes: int = 0  # closes beyond the entry fill since entry (extra_exit_rules)
     entry_features: dict[str, float] = field(default_factory=dict)  # the entry Signal.features
     signal_as_of: date | None = None  # the entry Signal.as_of
+    late_limit_fill: bool = False  # a limit entry filled away from the open: that bar's open and high came first
 
     @property
     def direction(self) -> int:
@@ -546,11 +547,11 @@ def _fill_entry(
     j = view.sym_pos.get(intent.symbol)
     if j is None:
         return None, cash, "unknown_symbol"
-    raw = view.value("open", i, j)
-    if math.isnan(raw):
+    open_ = view.value("open", i, j)
+    if math.isnan(open_):
         return None, cash, "no_bar"
     is_long = intent.side == Side.LONG
-    raw, why = entry_fill(signal, raw, view.value("high", i, j), view.value("low", i, j))
+    raw, why = entry_fill(signal, open_, view.value("high", i, j), view.value("low", i, j))
     if why:
         return None, cash, why
     through_stop = raw <= intent.stop if is_long else raw >= intent.stop
@@ -591,6 +592,7 @@ def _fill_entry(
         fees=fees,
         entry_features=dict(signal.features),
         signal_as_of=signal.as_of,
+        late_limit_fill=signal.entry_type == EntryType.LIMIT and raw != open_,
     )
     return pos, cash, None
 
@@ -613,7 +615,12 @@ def _check_exit(
     if (o <= pos.stop) if is_long else (o >= pos.stop):
         return ExitReason.STOP_GAP, o, day
     tgt = pos.target
-    if tgt is not None and ((o >= tgt) if is_long else (o <= tgt)):
+    # A limit bought under the open (sold above it, for shorts) was not held at that bar's open or at its best price,
+    # which may both have come before the fill. Only the close is known to follow it.
+    late = pos.late_limit_fill and i == pos.entry_idx
+    if late:
+        h, lo = (c, lo) if is_long else (h, c)
+    if not late and tgt is not None and ((o >= tgt) if is_long else (o <= tgt)):
         # the resting limit at the target fills at the open, before any intrabar move back to the stop
         return ExitReason.TARGET, o, day
     stop_hit = lo <= pos.stop if is_long else h >= pos.stop
@@ -669,6 +676,8 @@ def _mark_position(pos: OpenPosition, view: _PanelView, i: int, config: Backtest
     _, h, lo, c = view.bar(i, j)
     if math.isnan(c):
         return
+    if pos.late_limit_fill and i == pos.entry_idx:  # as in _check_exit: the bar's best price may predate the fill
+        h, lo = (c, lo) if pos.is_long else (h, c)
     pos.last_close = c
     pos.bars_held = i - pos.entry_idx + 1
     if pos.is_long:

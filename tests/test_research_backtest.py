@@ -396,3 +396,19 @@ def test_entry_fill_by_entry_type():
     assert entry_fill(sig(EntryType.STOP, 106.0), 101.0, 105.0, 99.0)[1] == "not_triggered"
     assert entry_fill(sig(EntryType.LIMIT, 100.0), 101.0, 105.0, 99.0) == (100.0, None)
     assert entry_fill(sig(EntryType.LIMIT, 98.0), 101.0, 105.0, 99.0)[1] == "not_triggered"
+
+
+def test_limit_entry_cannot_take_a_target_the_fill_bar_reached_before_the_fill():
+    from swing_engine.core.models import EntryType
+
+    def run(fill_bar):
+        sig = long_signal("AAA", DAYS[0].date(), 100.0, 95.0, 103.0).model_copy(update={"entry_type": EntryType.LIMIT})
+        return _run_one_from(ScriptedStrategy({sig.as_of: [sig]}), [FLAT, fill_bar, FLAT, FLAT]).trades.iloc[0]
+
+    # opens above the target, trades down to the limit, closes under the target: the open came before the fill
+    t = run((104.0, 105.0, 99.0, 100.5))
+    assert t["entry_ts"] == DAYS[1] and t["entry_price"] == pytest.approx(100.0 * (1 + SLIP_F))
+    assert t["exit_ts"] > DAYS[1] and t["exit_reason"] != "target"
+    # closes above the target: the target was reached after the fill and its resting limit fills
+    t = run((104.0, 105.0, 99.0, 104.0))
+    assert t["exit_ts"] == DAYS[1] and t["exit_reason"] == "target"
