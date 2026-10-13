@@ -955,6 +955,17 @@ def ingest_french(ctx: typer.Context) -> None:
     _print_mapping("Ken French factors ingest", dict(_load("data.market_series.run_french_ingest")(store) or {}))
 
 
+@app.command("ingest-dividends")
+def ingest_dividends(ctx: typer.Context) -> None:
+    """Fetch Alpaca's cash dividends (free corporate-actions feed, every symbol, 2016 on) into `dividends`
+    (data.dividends; resumable per month, the current month is refetched)."""
+    secrets = load_secrets()
+    store = _open_store(_state(ctx).settings)
+    client = _load("data.dividends.AlpacaDividends")(secrets.alpaca_api_key or "", secrets.alpaca_secret_key or "")
+    result = _load("data.dividends.run_dividend_ingest")(store, client, progress=_ingest_progress)
+    _print_mapping("Alpaca dividends ingest", dict(result or {}))
+
+
 @app.command("repair-store")
 def repair_store(
     ctx: typer.Context,

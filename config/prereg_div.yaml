@@ -1,0 +1,12 @@
+# Book of dividend_month_premium (docs/preregistration/2026-10-13-dividend-month.md). Fixed before any run.
+# Store: a research copy of the repaired live store with dividend-back-adjusted (total-return) bars, built by
+# data.dividends.total_return_adjust; prereg_run copies it per job. Never point this at the live store.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_tr.duckdb
+risk:
+  risk_per_trade_pct: 0.5     # not binding below a 24% stop distance (3 x ATR63 of a liquid stock): the cap sizes
+  max_position_pct: 2.0       # equal weight: 1 / 50
+  max_open_positions: 50
+execution:
+  max_new_orders_per_day: 50  # the first rebalance may fill every slot
