@@ -9,10 +9,24 @@ ANNUAL=russell_recon_deletion_rebound,russell_recon_addition_frontrun,tax_loss_l
 OUT=docs/preregistration/2026-10-13-batch5-results.md
 BOOKS=()
 for s in ${(s:,:)SLUGS}; do BOOKS+=(--book $s=config/prereg_b5_$s.yaml); done
-COMMON=(--settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --benchmark SPY --job-gb 2024=14,2017=30 $BOOKS)
+COMMON=(--settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --benchmark SPY --job-gb 2024=6,2017=30 $BOOKS)
+# 2024=6: a 2024-26 replay on this 6,400-name screen held 3.4 GB after 28 minutes (2026-10-13), so 7 run at once.
+# Slugs of $1 with no finished and no running replay for the window starting in year $2: a restart of this script
+# never repeats a replay (each one logs a trial).
+todo() {
+  local out=() s
+  for s in ${(s:,:)1}; do
+    local done_=(data/live/runs/replay/$2-*_prereg-b5-$s.json(N))
+    (( $#done_ )) && continue
+    pgrep -f -- "--start $2-.* --tag prereg-b5-$s\$" > /dev/null || out+=($s)
+  done
+  echo ${(j:,:)out}
+}
+drain() { while pgrep -f -- "--tag prereg-b5-" > /dev/null; do sleep 30; done }  # replays an earlier start left running
 while pgrep -f run_smallcap_map.sh > /dev/null; do sleep 60; done
 echo "start $(date '+%F %H:%M')"
-uv run python -m swing_engine.research.prereg_run $COMMON --slugs $SLUGS --alpha-slugs $SLUGS --window-years 2024 --out $OUT
+uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo $SLUGS 2024)" --alpha-slugs $SLUGS --window-years 2024 --out $OUT --no-eval
+drain
 LONG=$(uv run python - <<PY
 import json
 from pathlib import Path
@@ -43,7 +57,8 @@ print(",".join(keep))
 PY
 )
 echo "2017-24 window for: $LONG"
-uv run python -m swing_engine.research.prereg_run $COMMON --slugs $LONG --alpha-slugs $LONG --window-years 2017 --no-eval
+uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo $LONG 2017)" --alpha-slugs $LONG --window-years 2017 --no-eval
+drain
 uv run python -m swing_engine.research.prereg_eval --settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --slugs $SLUGS --benchmark SPY --alpha-slugs $SLUGS --out $OUT
 uv run python -m swing_engine.research.prereg_eval --settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --slugs $SLUGS --benchmark IWM --alpha-slugs $SLUGS --out ${OUT%.md}-iwm.md
 uv run python -m swing_engine.research.income_view --settings config/live.yaml

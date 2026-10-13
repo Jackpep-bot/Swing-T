@@ -13,12 +13,21 @@ all). So there is no probation candidate, no reason to widen the nightly's unive
 (4 copies of the store) hold the ledgers; delete them with the other old copies when the owner says so.
 
 ## Running
-`scripts/on_power.sh scripts/run_batch5.sh` (PID 66425, log data/logs/research/batch5.log), started 18:56 ET:
-replays the 15 batch-5 cards on 2024-26 (3 at a time, logs data/logs/research/pr_prereg-b5-*.log, empty until a
-replay ends), then 2017-24 for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
+Owner 19:23 ET: "push all tasks forward and increase a thread of research into new swing strategies constantly
+scraping and comparing data internally". The coordinator runs a cloud research thread that cards new strategies;
+each batch arrives as a branch and commit. For each: merge the cards, code them (add-strategy skill), commit a
+pre-registration BEFORE any replay, then `prereg_run` as batch 5 (copy scripts/run_batch5.sh).
+`scripts/on_power.sh scripts/run_batch5.sh` (PID 72028, log data/logs/research/batch5.log). Started 18:56 ET at 3
+replays at a time; restarted 19:25 ET at 7 at a time (`--job-gb 2024=6`: a replay held 3.4 GB) without losing the
+three that were running. The script now skips any replay that is finished or still running (`todo`), so starting
+it again is safe. It replays the 15 batch-5 cards on 2024-26 (logs data/logs/research/pr_prereg-b5-*.log, empty
+until a replay ends), then 2017-24 (one at a time, 30 GB budget, not measured yet: raise it once the first one
+shows its real size) for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
 (docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
-verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13). Expect most of a day.
-Rerun is safe only for replays that did not finish (each replay logs a trial); check the logs first.
+verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13).
+Afterwards delete data/live/pr_prereg-b5-{russell_recon_deletion_rebound,russell_recon_addition_frontrun,
+tax_loss_loser_rebound}_2024.{duckdb,yaml}: their runner was replaced mid-replay, so nothing removes them.
+Do not run `swing ingest` on the live store while batch 5 runs: every replay starts by copying it.
 `scripts/on_power.sh` (owner: "start them I will plug in soon") starts a job on AC or on a battery at or above 25%
 (`BATT_FLOOR`), pauses it in place (SIGSTOP, Telegram notice) under that, and continues it on AC.
 If it is gone after a restart, start it again with nohup (see the script's header).
