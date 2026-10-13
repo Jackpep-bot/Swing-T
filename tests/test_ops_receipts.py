@@ -447,3 +447,31 @@ def test_alpaca_closed_orders_is_a_listing_only() -> None:
     request = client.get_orders.call_args.args[0]
     assert out[0]["legs"] == [{"id": "2"}] and request.status == QueryOrderStatus.CLOSED and request.nested is True
     assert [c[0] for c in client.method_calls] == ["get_orders"]  # nothing but the listing reached the client
+
+
+def test_manual_paper_submissions_get_the_same_fire_as_the_autopilot() -> None:
+    st = {"engine_sig": "abc", "source": receipts.SOURCE_LIVE, "run_id": "r"}
+    intent = OrderIntent(strategy="sr_bounce", symbol="AAA", side=Side.LONG, qty=10, entry_limit=10.0, stop=9.5,
+                         target=11.0, risk_dollars=5.0, client_order_id="swing-sr_bounce-AAA-20261006-long", signal_as_of=date(2026, 10, 6))
+    results = [{"client_order_id": intent.client_order_id, "status": "accepted", "broker_order_id": "b1"},
+               {"client_order_id": "unknown", "status": "accepted"}]
+    rows = receipts.manual_events(results, [intent], "jane", "alpaca", date(2026, 10, 7), **st)
+    assert len(rows) == 1 and rows[0]["kind"] == receipts.FIRE and rows[0]["as_of"] == date(2026, 10, 6)
+    assert rows[0]["event_id"] == receipts.event_id(receipts.FIRE, "sr_bounce", "AAA", "broker", intent.client_order_id)
+    failed = receipts.manual_events([{"client_order_id": intent.client_order_id, "status": "error",
+                                      "reason": "kill switch tripped"}], [intent], "jane", "alpaca", date(2026, 10, 7), **st)
+    assert (failed[0]["kind"], failed[0]["step"]) == (receipts.REFUSAL, "kill_switch")
+
+
+def test_outcomes_link_to_the_decision_they_grade() -> None:
+    st = {"engine_sig": "abc", "source": receipts.SOURCE_LIVE, "run_id": "r"}
+    day = date(2026, 10, 6)
+    fire = receipts.make_event(receipts.FIRE, "scan", "shadow-only signal", day + timedelta(days=1), "s", "AAA", {}, **st)
+    refusal = receipts.make_event(receipts.REFUSAL, "sizing", "too small", day, "s", "AAA", {}, **st)
+    other = receipts.make_event(receipts.FIRE, "scan", "shadow-only signal", day, "s", "BBB", {}, **st)
+    graded = receipts.make_event(receipts.OUTCOME, "stop", "stop_hit", day + timedelta(days=9), "s", "AAA",
+                                 {"signal_as_of": day, "horizon": 5}, key=f"{day}|5d", **st)
+    late = receipts.make_event(receipts.OUTCOME, "stop", "stop_hit", day + timedelta(days=30), "s", "AAA",
+                               {"signal_as_of": day + timedelta(days=20), "horizon": 5}, key="late|5d", **st)
+    links = receipts.link_outcomes([fire, refusal, other, graded, late])
+    assert links == {graded["event_id"]: fire["event_id"]}  # the fire wins over the refusal; `late` has no decision

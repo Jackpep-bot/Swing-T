@@ -1682,6 +1682,14 @@ def paper(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(results, indent=2, default=str))
     _console().print(f"saved {len(results)} submission results to {path}")
+    if _store_path(settings).exists():  # decision receipts; a store locked by another writer only costs them
+        try:
+            with _open_store(settings) as store:
+                rec = importlib.import_module("swing_engine.ops.receipts")
+                rec.write_events(store, rec.manual_events(results, intents, approver, broker, as_of_d,
+                                                          **rec.stamp(settings)))
+        except Exception as e:  # noqa: BLE001
+            _console().print(f"decision receipts not recorded (store unavailable: {type(e).__name__})")
     if reconcile:
         _print_any("Reconcile", manager.reconcile())
 

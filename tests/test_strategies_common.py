@@ -174,3 +174,16 @@ def test_stop_closer_than_the_floor_is_rejected() -> None:
     assert s.build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.0, target=None, score=1.0) is not None
     assert Probe({"min_stop_pct": 0.0}).build_signal(row, date(2026, 1, 2), entry=100.0, stop=99.99, target=None,
                                                     score=1.0) is not None
+
+
+def test_build_signal_records_why_a_setup_was_dropped_only_when_asked():
+    probe, row, today = _Probe({"min_reward_risk": 2.0}), pd.Series({"symbol": "AAA"}), date(2026, 10, 1)
+    assert probe.build_signal(row, today, entry=100.0, stop=99.9, target=110.0, score=1.0) is None
+    assert probe.rejections is None  # replays: nothing is kept
+    probe.rejections = []
+    for stop, target in ((99.9, 110.0), (95.0, 105.0), (101.0, 110.0), (95.0, 99.0)):
+        assert probe.build_signal(row, today, entry=100.0, stop=stop, target=target, score=1.0) is None
+    assert [r["step"] for r in probe.rejections] == ["min_stop", "reward_risk", "geometry", "geometry"]
+    assert probe.rejections[0]["symbol"] == "AAA" and "0.25% floor" in probe.rejections[0]["reason"]
+    assert probe.build_signal(row, today, entry=100.0, stop=95.0, target=110.0, score=1.0) is not None
+    assert len(probe.rejections) == 4

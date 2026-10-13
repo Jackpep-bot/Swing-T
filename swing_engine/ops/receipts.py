@@ -251,6 +251,55 @@ def autopilot_recorder(
     return record
 
 
+def manual_events(results: Iterable[Mapping[str, Any]], intents: Iterable[Any], approved_by: str, broker: str,
+                  as_of: date, **st: str) -> list[dict[str, Any]]:
+    """Events for `swing paper --from-intents` (one ``OrderManager.submit`` per saved intent, no autopilot): a
+    fire per submitted order and a refusal per one that raised, with the same keys ``autopilot_events`` uses, so
+    an order has one fire whichever path sent it."""
+    by_cid = {i.client_order_id: i for i in intents}
+    rows: list[dict[str, Any]] = []
+    for r in results:
+        cid = str(r.get("client_order_id") or "")
+        intent = by_cid.get(cid)
+        if intent is None:
+            continue
+        day = getattr(intent, "signal_as_of", None) or as_of
+        payload = {"mode": "manual", "approved_by": approved_by, "broker": broker, "intent": intent,
+                   "client_order_id": cid, "order": {k: r.get(k) for k in ("broker_order_id", "status")}}
+        if str(r.get("status")) == "error":
+            reason = str(r.get("reason") or "submit failed")
+            rows.append(make_event(REFUSAL, step_for(reason, "broker"), reason, day, intent.strategy, intent.symbol,
+                                   payload, key=f"{cid}|{as_of.isoformat()}", **st))
+        else:
+            rows.append(make_event(FIRE, "broker", "submitted", day, intent.strategy, intent.symbol, payload,
+                                   key=cid, **st))
+    return rows
+
+
+def link_outcomes(events: Iterable[Mapping[str, Any]]) -> dict[str, str]:
+    """``outcome event_id -> event_id`` of the fire or refusal it grades: same strategy and symbol, decided on the
+    outcome's ``payload.signal_as_of`` or up to ``SIGNAL_DAY_SLACK_DAYS`` after it (a pre-open run stamps the run
+    date); a fire wins over a refusal, then the nearest day. ``payload`` may be a dict or its JSON string."""
+    decided: dict[tuple[str, str], list[tuple[date, int, str]]] = {}
+    outcomes: list[tuple[str, tuple[str, str], date]] = []
+    for e in events:
+        key, day = (str(e.get("strategy")), str(e.get("symbol"))), _day(e.get("as_of"))
+        if e.get("kind") in (FIRE, REFUSAL) and day is not None:
+            decided.setdefault(key, []).append((day, 0 if e["kind"] == FIRE else 1, str(e["event_id"])))
+        elif e.get("kind") == OUTCOME:
+            p = e.get("payload") or {}
+            signal_day = _day((json.loads(p) if isinstance(p, str) else p).get("signal_as_of"))
+            if signal_day is not None:
+                outcomes.append((str(e["event_id"]), key, signal_day))
+    links: dict[str, str] = {}
+    for oid, key, signal_day in outcomes:
+        near = [(kind, (d - signal_day).days, eid) for d, kind, eid in decided.get(key, ())
+                if 0 <= (d - signal_day).days <= SIGNAL_DAY_SLACK_DAYS]
+        if near:
+            links[oid] = min(near)[2]
+    return links
+
+
 # ----------------------------------------------------------------------------------------------- outcomes
 def _day(value: Any) -> date | None:
     if value is None or (not isinstance(value, str) and pd.isna(value)):

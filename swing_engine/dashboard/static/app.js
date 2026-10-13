@@ -1358,7 +1358,7 @@
         const st = markerStyle(m.kind);
         const label = String(m.kind || "").toLowerCase() === "entry" ? "Buy" : String(m.kind || "").toLowerCase() === "exit" ? "Sell" : "Signal";
         const px = toNum(m.price);
-        return { time: time, position: st.position, shape: st.shape, color: st.color, text: label === "Sell" && px !== null ? label + " " + fmtNum(px, 2) : label };
+        return { time: time, position: st.position, shape: st.shape, color: st.color, text: label === "Sell" && px !== null ? label + " " + fmtNum(px, 2) : label, k: label };
       }).filter(Boolean).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
       entry.baseMarkers = ms;
       drawChartLayers(); // sets the markers: these plus the visible layers'
@@ -1497,6 +1497,7 @@
     swings: "--c-spy", breaks: "--c-account", mss: "--c-sma50", ob: "--c-target", fvg: "--c-sma20", sessions: "--c-entry", rejections: "--c-trail",
   };
   const MARKER_SHAPES = { seen: "circle", refusals: "square", sessions: "square" };
+  const BASE_MARKER_OF = { taken: "Signal", seen: "Signal", refusals: "Signal", entries: "Buy", exits: "Sell" };
   const BAND_TONES = { ok: "--pos-soft", warn: "--warn-soft", bad: "--neg-soft" };
   function layerColor(key) { return cssVar(LAYER_COLORS[key] || "--c-entry"); }
   function showInspector(prefix, payload, obj, others) {
@@ -1559,7 +1560,13 @@
       entry.overlay.push(s);
       lines += 1;
     };
-    const markers = (entry.baseMarkers || []).slice();
+    // The older Buy / Sell / Signal markers say the same thing as a receipt marker on that bar: draw the receipt's.
+    const covered = new Set();
+    for (const o of Array.isArray(payload.objects) ? payload.objects : []) {
+      const k = o && o.shape === "marker" && vis.has(o.layer) ? BASE_MARKER_OF[o.layer] : null;
+      if (k && o.t >= times[0]) covered.add(k + "|" + times[idx(o.t)]);
+    }
+    const markers = (entry.baseMarkers || []).filter((m) => !covered.has(m.k + "|" + m.time));
     const layerMarkers = [];
     const bands = new Array(times.length).fill(null);
     const boxes = [];
@@ -2371,9 +2378,32 @@
     });
     $("#vc-meta").textContent = fmtInt(strategies.length) + " strategies · " + fmtInt(structure.reduce((n, e) => n + (e.kinds || []).length, 0)) + " event kinds";
     body.innerHTML = renderMarkdown(md.join("\n")); // safe: renderMarkdown escapes all HTML first
+    filterVocabulary();
+  }
+  /** Show only the entries (a `###` / `####` heading and what follows it) whose text contains the filter box's words. */
+  function filterVocabulary() {
+    const words = String($("#vc-filter").value || "").toLowerCase().split(/\s+/).filter(Boolean);
+    let block = [], shown = 0, total = 0;
+    const flush = () => {
+      if (!block.length) return;
+      const text = block.map((n) => n.textContent).join(" ").toLowerCase();
+      const on = words.every((w) => text.includes(w));
+      block.forEach((n) => { n.hidden = !on; });
+      total += 1; shown += on ? 1 : 0;
+      block = [];
+    };
+    for (const node of Array.from($("#vocab-body").children)) {
+      const tag = node.tagName;
+      if (tag === "H2") { flush(); node.hidden = false; continue; }
+      if (tag === "H3" || tag === "H4") { flush(); if (tag === "H3" && !node.querySelector("code")) { node.hidden = false; continue; } } // a section title, not an entry
+      if (block.length || tag === "H3" || tag === "H4") block.push(node);
+    }
+    flush();
+    $("#vc-count").textContent = words.length ? fmtInt(shown) + " of " + fmtInt(total) + " entries" : "";
   }
 
   function initJournalControls() {
+    $("#vc-filter").addEventListener("input", filterVocabulary);
     $("#st-date").addEventListener("change", (ev) => setHash("studies", ev.target.value));
     $("#jr-date").addEventListener("change", (ev) => setHash("journal", ev.target.value));
     $("#jr-prev").addEventListener("click", () => { const i = state.journalDates.indexOf(state.journalDate); if (i >= 0 && i < state.journalDates.length - 1) setHash("journal", state.journalDates[i + 1]); });
@@ -2627,10 +2657,20 @@
         if (first) { loadEquity(); loadRegime(); loadCoverage(); }
         break;
       case "charts": {
-        const sym = cleanSymbol(arg);
+        const deep = /^intraday\/([A-Za-z]{1,5}(?:-[A-Za-z]{3})?)(?:\/(\d{4}-\d{2}-\d{2}))?(?:\/(\d{1,2}[mh]))?$/.exec(arg || ""); // #charts/intraday/SPY/2026-06-03/5m
+        const sym = deep ? null : cleanSymbol(arg);
         if (sym && sym !== state.chartSymbol) { state.chartSymbol = sym; loadChart(); }
         else if (first) loadChart();
-        if (first) { loadOrders(); loadIntraday(); }
+        if (first) loadOrders();
+        if (deep) {
+          const pick = (id, attr, key, want) => $$(id + " button").forEach((b) => { if (b.dataset[attr] === want) state[key] = want; });
+          pick("#in-symbols", "symbol", "intraSymbol", deep[1].toUpperCase());
+          if (deep[3]) pick("#in-tf", "tf", "intraTf", deep[3]);
+          state.intraDay = deep[2] || null;
+          $$("#in-symbols button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.symbol === state.intraSymbol)));
+          $$("#in-tf button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.tf === state.intraTf)));
+          loadIntraday().then(() => { const box = $("#in-chart"); if (box) box.scrollIntoView({ block: "center" }); });
+        } else if (first) loadIntraday();
         break;
       }
       case "signals": {

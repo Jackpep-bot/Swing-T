@@ -1,4 +1,66 @@
-# Project status: IDLE, video-model P0 and P1 first pass done (2026-10-13)
+# Project status: IDLE, queue of 2026-10-13 worked through; decisions wait for the owner (2026-10-13 11:10 ET)
+
+## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, stacked on PR 1's branch)
+No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,564 tests pass.
+
+Waiting for the owner (nothing else is blocked):
+1. **Apply the renamed-ticker merge to the live store?** `swing --settings config/live.yaml repair-store --duplicates`
+   (dry run), then `--apply`. Copy data/live/market.duckdb first. It was NOT applied: a session may not change the
+   live store without the owner's word. Until then BNY, EMBJ and 61 other renamed tickers have a hole or another
+   company's bars in their live history, and research ledgers are cleaned at read time instead.
+2. **Dividend data?** `dividend_month_premium` (project file research/strategies/) is the only candidate card never
+   replayed; it needs ex-dividend dates (Alpaca corporate actions, free) and total-return grading. New data source,
+   so it waits for a yes.
+3. Delete old lane store copies in data/live (replay*.duckdb, market_prerepair.duckdb, regrade_1r.duckdb: about
+   25 GB)? Keep research_20261010-033614_l0/l1 (the current board reads them) and replay_p3 (pre-reg base).
+4. Plan P2 (always-on host, intraday paper executor): still the owner's decision. Not started.
+
+Done this session, in queue order:
+- **Residual momentum 2024-26** merged from the v2c-resmom re-replay (rows copied into lane 1's ledger, noted in the
+  run manifest): 2,556 signals, net +0.056R at 20d, -0.088R against SPY, t -1.69. Batch 3's verdict is about
+  `large_cap_residual_momentum` and does not change.
+- **Renamed tickers.** Not two pairs but 373 duplicate series: 63 renames inside the Massive window (BK/BNY, ERJ/EMBJ,
+  MMC/MRSH, FI/FISV ...) and 310 `TICKER~date` delisted keys whose ticker was renamed or reused (some hold the wrong
+  company: P~20190301 is Pure Storage, not Pandora). `data.repair.find_duplicates / merge_duplicates`, exact undo,
+  tests. `research.cards.drop_renamed` removes the doubled signals from existing ledgers when they are read:
+  384,311 of 17.8M rows (2.15%), largest change in net R 0.049, no haircut-Sharpe sign flips, no survivors either way.
+  Known limit: a ticker handed from one company to another (Barrick GOLD -> B) is not re-homed; needs a ticker-change feed.
+- **SPY-relative grading is the leaderboard default** (also cards `vs SPY` column and the reality check):
+  net R minus SPY's R over the same holding span, beta 1. `--absolute` for the old yardstick. 846 new looks logged
+  (4,099 trials before intraday round 2). No survivors. docs/leaderboard_liq*.md and _t1r.md are still absolute.
+- **Next card batch**: the card branches hold nothing unreplayed. A new search (docs/proposals/swing-methods-2026-10/
+  batch4/) checked 15 ideas, kept 1 (`month_end_rebalancing_avoidance_spy`) and shows it cannot reach the alpha-t rule
+  in a 2-year window even if the paper is right. NOT pre-registered or run: a test that cannot pass only spends a trial.
+- **Intraday round 2** (docs/preregistration/2026-10-13-intraday-round2*.md, `research/intraday_momentum.py`,
+  4 trials, 4,103 total): `noise_area_momentum` (Zarattini-Aziz-Barbon 2024) FAIL, `first_half_hour_momentum`
+  (Gao et al. 2018) FAIL. The noise-area rule has the paper's gross edge in 2016-23 (+2.9 bp a trade) but +0.9 bp
+  after 1 bp a side, and +0.8 bp gross after publication. Round-1 cards were not touched.
+- **Day clock**: the intraday chart now builds ETF structure from regular-hours bars like the replay (it used
+  extended hours, so PDH/PDL differed). Chain trades (entry, path, stop, target) and refused setups are chart layers
+  with their receipt; `chains_dir` on the dashboard data class.
+- **Receipts**: strategy filter drops (min_stop, reward_risk, geometry) become refusals in the nightly (capped at
+  100 per strategy per night: check the volume after the first run); `swing paper --from-intents` writes fires /
+  refusals; `receipts.link_outcomes` ties an outcome to its fire or refusal (dashboard inspector shows
+  `decision_event_id`). Only 1 backfilled refusal has step `unknown`, so no re-backfill was written.
+- **Dashboard**: vocabulary filter box; deep link `#charts/intraday/SPY/2026-06-03/5m`; a zone's later events are
+  listed in its box's receipt instead of drawn; the old Buy / Sell / Signal markers give way to a receipt marker on
+  the same bar.
+- **Bug found and fixed (paper)**: Alpaca's open-orders listing leaves out a filled bracket's `held` stop leg, so the
+  position manager saw no stop and tried to arm a second one every night (4 errors on 10-12 and 10-13; harmless,
+  the broker refused). `AlpacaBroker.open_orders` now lists the filled parent with both legs; breakeven and trail
+  can find the stop again. Three paper positions are open from 2026-10-08 (BNS, PFG, DNTH; rsi2_meanrev), each
+  with its stop and target at the broker.
+
+Seen, not fixed:
+- The 2026-10-13 nightly's ingest step failed (no network at 06:40 ET: DNS error), so the store ends 2026-10-09.
+  The next nightly's ingest catches up; or run `swing --settings config/live.yaml ingest` by hand.
+- Card front matter says `status: enabled` for the first five strategies; config/live.yaml enables none. The
+  Vocabulary page shows the card's word.
+- Rename merge does not touch `panel` (nightly rebuilds it) or the event tables keyed by the old ticker.
+
+Next, when the owner has answered: apply the store merge, then `swing research run` on the repaired store only if a
+new candidate needs it (the read-time dedupe already gives the corrected board). After a yes on dividends: ingest,
+total-return grading, pre-register `dividend_month_premium`.
 
 ## Done (committed)
 - Rounds 1-4: data, features, 7 strategies + 5 research strategies (shadow-only), backtester, ranker, risk,
@@ -82,24 +144,7 @@ Also done 2026-10-13: zones drawn as filled boxes (app.js series primitive); bro
 
 No jobs are running. Mac is on power (owner, 10:21 ET). Dashboard preview may be up on port 8765.
 
-Queue for the next session, in order (owner 2026-10-13: "complete all workflows, every facet"; 44 GB budget, max two
-long-window replays at once; pre-register before any new replay; commit and push each piece):
-1. Merge residual_momentum's v2c-resmom 2024-26 re-replay (store replay_p3) into the cards and leaderboard; its first
-   2024-26 result was invalid (warm-up too short). Then regrade batch 3 results doc if the verdict changes.
-2. Duplicate rows under renamed tickers (BK/BNY, ERJ/EMBJ): dedupe in the universe, re-check affected board rows.
-3. SPY-relative grading as the default yardstick on the leaderboard (alpha, not absolute R).
-4. Fetch card branches `claude/batch2-cards` / `claude/batch3-cards` for any candidates not yet replayed; pre-register
-   the next batch, run with `research.prereg_run`.
-5. Intraday lane, round 2 (new pre-registration, new trials; never retune the three failed cards on the same windows):
-   the first run showed gross R about zero and BTC costs near 1.9R per trade, and the full chains under 200 trades.
-   Check `intraday_chains.py` and the dashboard use the same day clock for PDH/PDL. Add fires/refusals from
-   `data/research/intraday_chains/*.parquet` as "trades / setups seen" layers on the intraday chart.
-6. Receipts not yet hooked: in-strategy filters (min_stop), `swing paper --from-intents`; outcome events do not link
-   to their fire; backfilled refusals have step `unknown` (runs/nightly JSON has the sizer reasons).
-7. Dashboard polish: collapse a zone's lifecycle events into one box; filter box on Vocabulary; deep link to an
-   intraday symbol/day; old daily markers duplicate the new layers.
-8. Clean up lane store copies in data/live by hand (ask before deleting).
-- Plan P2 (always-on host, intraday paper executor) WAITS for the owner's decision. Do not start it.
+The queue that stood here was worked through in the fourth session: see the top section.
 
 ## Older resume notes (superseded by the section above) - updated 2026-10-09 22:30 ET
 No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no

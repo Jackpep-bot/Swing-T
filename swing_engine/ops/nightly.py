@@ -839,11 +839,16 @@ def _run_strategies(
     for name in names:
         try:
             strategy = registry.get("strategy", name)(_strategy_params(ctx.settings, name))
+            strategy.rejections = []  # setups the strategy's own filters drop (strategies._base.build_signal)
             found = list(strategy.signals(panel, ctx.as_of, regime))
         except Exception as e:
             failures[name] = _error_text(e)
             log.error("strategy_failed", strategy=name, error=failures[name])
             continue
+        for r in strategy.rejections or []:
+            facts = {k: v for k, v in r.items() if k not in ("symbol", "as_of", "step", "reason")}
+            _emit(ctx, receipts.REFUSAL, r["step"], r["reason"], name, r["symbol"], {"signal": facts, "filter": "strategy"},
+                  as_of=r["as_of"])
         per_strategy[name] = len(found)
         signals.extend(found)
     return signals, per_strategy, failures

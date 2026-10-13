@@ -43,6 +43,7 @@ P_MIN_TREND = "min_trend_state"
 #: 0.0002% stops grading at 1e10 R). research.cards / research.leaderboard apply the same floor to old ledgers.
 P_MIN_STOP_PCT = "min_stop_pct"
 MIN_STOP_FRACTION = 0.0025
+MAX_REJECTIONS = 100  # dropped setups remembered per strategy and scan (PanelStrategy.rejections)
 P_MIN_MARKET_TREND = "min_market_trend_state"
 
 
@@ -99,6 +100,13 @@ class PanelStrategy(Strategy):
     #: Calendar days of bars the replay must load before its first session when the default warm-up (400 days,
     #: research.replay.WARMUP_CALENDAR_DAYS) is shorter than the strategy's longest window; 0 = the default.
     warmup_calendar_days: int = 0
+    #: A list here makes `build_signal` record each setup it drops and why (the nightly turns them into refusal
+    #: receipts). None, the default, records nothing: replays call `build_signal` millions of times.
+    rejections: list[dict[str, Any]] | None = None
+
+    def _reject(self, row: pd.Series, as_of: date, step: str, reason: str, **facts: Any) -> None:
+        if self.rejections is not None and len(self.rejections) < MAX_REJECTIONS:
+            self.rejections.append({"symbol": str(row[SYMBOL]), "as_of": as_of, "step": step, "reason": reason, **facts})
 
     def required_features(self) -> list[str]:
         return list(dict.fromkeys([*self.features_required, *self.extra_features]))
@@ -184,19 +192,28 @@ class PanelStrategy(Strategy):
         reward_risk >= params[min_reward_risk].
         """
         if not (_finite(entry) and _finite(stop)) or float(stop) >= float(entry):
+            self._reject(row, as_of, "geometry", "stop is not below the entry", entry=entry, stop=stop)
             return None
         entry_f, stop_f = float(entry), float(stop)
         risk = entry_f - stop_f
-        if risk < entry_f * float(self.params.get(P_MIN_STOP_PCT, MIN_STOP_FRACTION)):
+        min_stop = float(self.params.get(P_MIN_STOP_PCT, MIN_STOP_FRACTION))
+        if risk < entry_f * min_stop:
+            self._reject(row, as_of, "min_stop", f"stop distance {risk / entry_f:.4%} is under the {min_stop:.2%} floor",
+                         entry=entry_f, stop=stop_f, min_stop_fraction=min_stop)
             return None
         target_f: float | None = None
         reward_risk: float | None = None
         if target is not None:
             if not _finite(target) or float(target) <= entry_f:
+                self._reject(row, as_of, "geometry", "target is not above the entry", entry=entry_f, stop=stop_f,
+                             target=target)
                 return None
             target_f = float(target)
             reward_risk = (target_f - entry_f) / risk
-            if reward_risk < float(self.params.get(P_MIN_RR, 0.0)) - RR_TOLERANCE:
+            min_rr = float(self.params.get(P_MIN_RR, 0.0))
+            if reward_risk < min_rr - RR_TOLERANCE:
+                self._reject(row, as_of, "reward_risk", f"reward_risk {reward_risk:.2f} is under the strategy's {min_rr:g}",
+                             entry=entry_f, stop=stop_f, target=target_f, min_reward_risk=min_rr)
                 return None
         feats = {k: float(v) for k, v in (features or {}).items() if _finite(v)}
         return Signal(

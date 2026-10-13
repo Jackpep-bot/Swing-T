@@ -50,6 +50,8 @@ INTRADAY_LAYERS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
 INTRADAY_TFS = ("2m", "5m", "15m", "30m", "1h", "4h")
 INTRADAY_DEFAULT_TF = "5m"
 ZONE_KINDS = frozenset({"ob_confirmed", "fvg_formed", "fvg_inverted"})
+#: what later happened to a zone: listed in the zone's receipt instead of drawn, when the zone's box is on the chart
+ZONE_LIFECYCLE_KINDS = frozenset({"ob_mitigated", "ob_invalidated", "ob_expired", "ob_consumed"})
 LINE_KINDS = frozenset({"pool_formed", "pool_swept", "sweep", "inducement", "structure_break", "mss", "mss_failed"})
 WARMUP_EXTRA_BARS = 50  # on top of the extractor's longest look-back (see intraday_window)
 ETF_MINUTES_PER_DAY = 16 * 60  # Alpaca's extended session, 04:00-20:00 New York
@@ -95,7 +97,11 @@ def swing_objects(events: Iterable[Mapping[str, Any]]) -> tuple[list[dict[str, A
     or "no fill") and one ``exits`` marker per distinct (exit date, hit); exit -> an ``exits`` marker. Notes are
     not drawn.
     """
+    from swing_engine.ops.receipts import link_outcomes
+
     rows = [dict(e) for e in events]
+    for oid, decision in link_outcomes(rows).items():
+        next(e for e in rows if str(e["event_id"]) == oid)["decision_event_id"] = decision
     receipts = {str(e["event_id"]): e for e in rows}
     ends: dict[tuple[str, str], str] = {}
     for e in rows:
@@ -322,8 +328,13 @@ def intraday_payload(symbol: str, day: date, tf: str, bars: Any, *, engine_sig: 
         zone_end = {(z.event_id, z.kind): z.ts_to for z in zones.itertuples()}
         layer_of = {kind: key for key, _label, kinds, _d in INTRADAY_LAYERS for kind in kinds}
         events = events[(events["ts_event"] >= lo) & (events["ts_event"] < hi)]
+        boxes: dict[str, str] = {}  # zone event_id -> the receipt of its box
         for n, e in enumerate(events.to_dict("records")):
             kind, eid = e["kind"], f"{e['event_id']}:{e['kind']}:{n}"  # lifecycle events share an anchor: n keeps ids unique
+            if kind in ZONE_LIFECYCLE_KINDS and e["event_id"] in boxes:
+                receipts[boxes[e["event_id"]]].setdefault("lifecycle", []).append(
+                    {"kind": kind, "ts_event": iso(e["ts_event"]), "level": _f(e["level"], 6)})
+                continue
             level, zl, zh = _f(e["level"]), _f(e["zone_low"]), _f(e["zone_high"])
             t_event, t_anchor = wall(e["ts_event"]), wall(e["ts_anchor"])
             receipts[eid] = {**{k: e[k] for k in ("event_id", "kind", "symbol", "timeframe", "direction", "label",
@@ -335,6 +346,7 @@ def intraday_payload(symbol: str, day: date, tf: str, bars: Any, *, engine_sig: 
             common = {"direction": e["direction"], "text": text}
             layer = layer_of.get(kind, "swings")
             if kind in ZONE_KINDS and zl is not None and zh is not None:
+                boxes.setdefault(e["event_id"], eid)
                 objects.append(_obj(eid, layer, "zone", t_event, eid, t2=wall(zone_end.get((e["event_id"], kind))),
                                     price=zl, price2=zh, **common))
             elif kind == "zigzag" and level is not None:
