@@ -902,6 +902,29 @@ def ingest_news(
     _print_mapping("Alpaca news ingest (headline counts)", dict(result or {}))
 
 
+@app.command("ingest-intraday")
+def ingest_intraday(
+    ctx: typer.Context,
+    symbols: Annotated[
+        list[str] | None, typer.Option("--symbols", "-s", help="repeat or comma-separate; default SPY QQQ IWM GLD BTC/USD")
+    ] = None,
+    start: Annotated[str | None, typer.Option("--start", help="first month (YYYY-MM; default 2016-01)")] = None,
+    months: Annotated[int | None, typer.Option("--months", help="fetch at most N months per symbol this run")] = None,
+) -> None:
+    """Fetch Alpaca 1-minute bars into `bars_1m` in the intraday store (data.intraday; resumable per symbol-month)."""
+    secrets = load_secrets()
+    path = _resolve(_state(ctx).settings.data.intraday_store_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    store = _load("data.store.Store")(str(path))
+    client = _load("data.intraday.AlpacaMinuteBars")(secrets.alpaca_api_key or "", secrets.alpaca_secret_key or "")
+    first = _parse_date(f"{start}-01" if start else None, _load("data.intraday.STOCK_FIRST_DAY"))
+    wanted = [s for item in symbols or [] for s in item.split(",") if s.strip()] or None
+    result = _load("data.intraday.run_intraday_ingest")(
+        store, client, symbols=wanted, start=first, months=months, progress=_ingest_progress
+    )
+    _print_mapping(f"Alpaca 1-minute bars ingest ({path.name})", dict(result or {}))
+
+
 @app.command("ingest-insiders")
 def ingest_insiders(
     ctx: typer.Context,

@@ -6,6 +6,7 @@ extends: settings.yaml
 data:
   bar_provider: massive
   store_path: data/live/market.duckdb
+  intraday_store_path: data/live/intraday.duckdb
   event_log_path: data/live/market_events.sqlite
 risk:
   limits_state_file: state/live/limits.json

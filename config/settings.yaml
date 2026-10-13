@@ -3,6 +3,7 @@ data:
   bar_provider: massive        # massive | eodhd | alpaca | sample
   history_years: 5
   store_path: data/swing.duckdb
+  intraday_store_path: data/intraday.duckdb  # 1-minute bars (swing ingest-intraday)
   event_log_path: data/events.sqlite
   calendar: NYSE
   massive_calls_per_min: null  # paid Massive plan only (e.g. 100); null = Basic's 5/min. Env MASSIVE_CALLS_PER_MIN wins

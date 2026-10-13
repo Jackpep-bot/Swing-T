@@ -69,6 +69,7 @@ class DataConfig(BaseModel):
     bar_provider: str = "massive"  # massive | eodhd | alpaca | sample
     history_years: int = 5
     store_path: str = "data/swing.duckdb"
+    intraday_store_path: str = "data/intraday.duckdb"  # 1-minute bars (data.intraday), its own DuckDB file
     event_log_path: str = "data/events.sqlite"
     calendar: str = "NYSE"
     massive_calls_per_min: float | None = None  # paid Massive plans; None = Basic's 5/min (env MASSIVE_CALLS_PER_MIN wins)

@@ -31,6 +31,13 @@
   year-to-date in 10-Qs; only Q1 is a true quarter, so no OCF feature yet. Q4 is derived as annual minus Q1-Q3.
   8-K/A amendments are ignored; earnings released only by press release without an Item 2.02 8-K are missed.
 
+## Intraday minute bars (Alpaca free plan, checked with real calls 2026-10-13)
+- Stocks `v2/stocks/bars` 1Min, `feed=sip`: free back to 2016-01-01 for SPY, QQQ, IWM, GLD (the API's own floor), pre/post included (04:00-20:00 ET). Only limit: nothing younger than 15 minutes. `feed=iex` has no 2016 data, so SIP is used and there is no IEX bias.
+- `adjustment=split` works on minute bars (checked on AAPL's 2020 split); adjustment is as of the fetch, so re-ingest a symbol after it splits.
+- Crypto `v1beta3/crypto/us/bars` BTC/USD: from 2021-01-01, no key needed. Alpaca-venue prints only (about 1 BTC a minute), not a consolidated tape: thin volume, highs/lows can miss moves elsewhere.
+- 200 calls/min on both; 10,000 bars a page max; minutes with no trade have no bar. Full history is about 9-10M rows, ~1,400 calls.
+- Code: `swing_engine/data/intraday.py`, `swing ingest-intraday`, store `data/live/intraday.duckdb` (`data.intraday_store_path`).
+
 ## Backtest / ML stack
 - vectorbt 1.1.1 (Python 3.11-3.14) for vectorized sweeps + rolling/expanding walk-forward; plain pandas engine as fallback.
 - backtrader unmaintained (last release 2023-04). zipline-reloaded/backtesting.py research-only. Lumibot 4.6.4 if event-driven live parity on Alpaca is wanted.
