@@ -543,7 +543,26 @@ def _step_ingest(ctx: _Context) -> tuple[str, dict[str, Any]]:
         f"{written:,} bars for {result.get('symbols_with_bars', '?')} of {result.get('symbols_requested', '?')} "
         f"symbols via {ctx.provider}" + (f"; {len(errors)} chunk errors" if errors else "")
     )
+    note = _refresh_dividends(ctx)
+    if note:
+        data["dividends"] = note
+        detail += f"; dividends: {note}"
     return detail, data
+
+
+def _refresh_dividends(ctx: _Context) -> str | None:
+    """Refetch the current month of cash dividends when the store already has the table (`swing ingest-dividends`
+    made it) and Alpaca keys exist. Never fails the ingest step; None when it does not apply."""
+    key, secret = getattr(ctx.secrets, "alpaca_api_key", None), getattr(ctx.secrets, "alpaca_secret_key", None)
+    try:
+        if ctx.dry_run or not (key and secret) or not ctx.store.has_table(_load("data.dividends.TABLE")):
+            return None
+        client = _load("data.dividends.AlpacaDividends")(key, secret)
+        res = _load("data.dividends.run_dividend_ingest")(ctx.store, client, today=ctx.as_of)
+        return f"{res['rows']} rows in {res['months']} months" + (f", {res['failed']} failed" if res["failed"] else "")
+    except Exception as e:  # noqa: BLE001
+        log.error("dividend_refresh_failed", error=_error_text(e))
+        return f"refresh failed ({type(e).__name__})"
 
 
 def _store_symbols_table(store: Any) -> pd.DataFrame | None:
@@ -703,6 +722,11 @@ def _step_features(ctx: _Context) -> tuple[str, dict[str, Any]]:
     panel = _load("data.market_series.join_market_series")(ctx.store, build_panel(bars, market))  # VIX, ff_* first
     panel = ensure_extra(panel, required_extras(active), market)  # enabled + shadow-only extras
     panel = _load("data.fundamentals.join_edgar")(ctx.store, panel)
+    for join in ("data.fundamentals.join_share_issuance", "data.dividends.join_dividends"):
+        try:  # inputs of the monthly books tracked in the shadow ledger; each is a no-op without its table
+            panel = _load(join)(ctx.store, panel)
+        except Exception as e:  # noqa: BLE001 - an optional join must not cost the night its panel
+            log.error("optional_join_failed", join=join, error=_error_text(e))
     ctx.store.write_table(PANEL_TABLE, panel, PANEL_KEYS)
     ctx.panel = panel
     try:

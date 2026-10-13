@@ -11,6 +11,20 @@
   gives) go to a forward test only. Owner was asked (13:00 ET) whether the best candidates may trade on paper at a
   quarter of normal risk; no answer yet, so until then they are shadow-only.
 
+Owner, 13:14 ET: "keep running". Done since:
+- **Income view** (docs/income_view.md, `research/income_view.py`): the 11 portfolios already replayed, read the way
+  he defined winning. Steadiest: dividend_month_premium (7.9% and 6.2% a year, 63% and 68% of months up, deepest
+  drops 12% and 9%, about half invested), volatility_managed_spy, large_cap_gross_profitability,
+  large_cap_net_repurchasers. All are long stock in rising markets and none beat SPY; a selection made after the fact.
+- **Forward tracking, no orders**: dividend_month_premium, large_cap_net_repurchasers and
+  large_cap_gross_profitability are `shadow_only` in config/live.yaml. The nightly now joins their inputs
+  (`join_share_issuance`, `join_dividends`; a failed join is logged, never fatal) and refetches the current month
+  of dividends in its ingest step. First signals: the October month end. Checked read-only on real data for
+  2026-09-30 (40, 25 and 46 signals).
+- NOT built: paper trading of a 50-name monthly book. The live sizer has one set of limits (8 positions, 5 new
+  orders a day); a book needs per-strategy limits there and in the autopilot's daily cap. Build it when a book
+  earns it in the shadow ledger, or on the owner's word.
+
 Owner's answers, 2026-10-13 12:53 ET (his words are in the thread; summary):
 - **Paper probation: yes**, about a quarter of normal risk. Built: `strategies.<name>: {enabled: false, probation: true}`
   is scanned and sized at `risk.probation_risk_mult` (0.25) in every regime, and `execution.autopilot` drops such
