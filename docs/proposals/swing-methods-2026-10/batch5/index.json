@@ -1,0 +1,168 @@
+{
+  "batch": "batch5",
+  "generated": "2026-10-13",
+  "kept": 16,
+  "rejected": 33,
+  "cards": [
+    {
+      "slug": "russell_recon_deletion_rebound",
+      "source": "Cai & Houge; Dimensional (index-reconstitution research)",
+      "universe": "proxy Russell 2000 deletions (total-cap rank 1,200-2,900 last year, >= 3,200 this year)",
+      "holding_period": "20 sessions after recon day",
+      "data_needed": "daily bars, EDGAR shares (mcap_pit), splits, 8-K items",
+      "rule": "Buy stocks forced out of the Russell 2000 at the open after recon day; hold 20 sessions.",
+      "card": "russell_recon_deletion_rebound.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "russell_recon_addition_frontrun",
+      "source": "Madhavan 2003 (FAJ); Petajisto 2011",
+      "universe": "proxy Russell 2000 additions (rank > 3,100 last year, 1,300-2,800 this year)",
+      "holding_period": "rank day+1 open to recon-day close (~40 sessions)",
+      "data_needed": "daily bars, EDGAR shares (mcap_pit)",
+      "rule": "Buy predicted microcap-to-R2000 additions after rank day; sell at the recon-day close.",
+      "card": "russell_recon_addition_frontrun.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "tax_loss_loser_rebound",
+      "source": "Ritter 1988; Lynch, Puckett & Yan 2014; Kozlowski & Lytle 2023",
+      "universe": "SMALLMID, YTD <= -40%, worst 30",
+      "holding_period": "10th-last December session to 10th January session (~15)",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Buy the 30 worst YTD small/mid caps ten sessions before year end; sell after ten January sessions.",
+      "card": "tax_loss_loser_rebound.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "ceo_cfo_buy_5day",
+      "source": "Wang, Shin & Francis 2012 (JFQA); Hossain 2010; Knewtson & Nofsinger",
+      "universe": "SMALLMID",
+      "holding_period": "5 sessions",
+      "data_needed": "daily bars, Form 4 (officer_title, cmp_labels), earnings dates",
+      "rule": "Buy two sessions after a CEO/CFO open-market purchase >= $25k is filed; hold five sessions.",
+      "card": "ceo_cfo_buy_5day.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "pre_earnings_runup_winners",
+      "source": "Aboody, Lehavy & Trueman 2010 (RAST)",
+      "universe": "all store stocks >= $5, med_dv_63 >= $1M, top 1% 12-month return",
+      "holding_period": "days -4..-1 before expected report",
+      "data_needed": "daily bars, point-in-time expected earnings dates",
+      "rule": "Buy top-1% 12-month winners four sessions before the expected report; sell the session before it.",
+      "card": "pre_earnings_runup_winners.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "double_surprise_smallmid",
+      "source": "Jegadeesh & Livnat 2006 (JAE)",
+      "universe": "SMALLMID, close >= $5",
+      "holding_period": "63 sessions",
+      "data_needed": "daily bars, EDGAR sue and rev_surprise",
+      "rule": "Buy when both the earnings and revenue surprise of a new filing are in the top quintile; hold 63 sessions.",
+      "card": "double_surprise_smallmid.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "shareholder_yield_smallmid",
+      "source": "Boudoukh, Michaely, Richardson & Roberts 2007; Meb Faber / Cambria SYLD",
+      "universe": "SMALLMID, TTM operating cash flow > 0",
+      "holding_period": "monthly, buy top 10% hold top 20%",
+      "data_needed": "daily bars, dividends, EDGAR shares and OCF",
+      "rule": "Hold the small/mid caps with the highest dividend plus net buyback yield, monthly with a 10/20% band.",
+      "card": "shareholder_yield_smallmid.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "clenow_stocks_on_the_move_midcap",
+      "source": "Andreas Clenow, Stocks on the Move (2015)",
+      "universe": "mcap_pit ranks 501-1,500, close >= $5, med_dv_63 >= $2M",
+      "holding_period": "weekly rebalance, weeks to months",
+      "data_needed": "daily bars",
+      "rule": "Weekly, hold the top 20% by 90-day regression slope x R^2 above the 100-day with no 15% gap; buy only when SPY > 200-day; ATR sizing.",
+      "card": "clenow_stocks_on_the_move_midcap.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "piotroski_fscore8_small_value",
+      "source": "Joseph Piotroski 2000 (JAR); AAII F-score screen",
+      "universe": "SMALLMID, top 30% book-to-market",
+      "holding_period": "63-126 sessions",
+      "data_needed": "daily bars, EDGAR EPS, revenue, gross profit, OCF, assets, equity, shares",
+      "rule": "Monthly, buy cheap small/mid caps scoring >= 7 of 8 buildable Piotroski signals; sell below 6 or after 126 sessions.",
+      "card": "piotroski_fscore8_small_value.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "code33_trend_template",
+      "source": "Mark Minervini (Code 33, Trend Template)",
+      "universe": "SMALLMID",
+      "holding_period": "to 63 sessions",
+      "data_needed": "daily bars, EDGAR quarterly EPS, revenue, shares, rs_rating_ibd",
+      "rule": "Buy when three quarters of accelerating EPS, sales and margin coincide with the trend template; exit below the 50-day.",
+      "card": "code33_trend_template.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "pocket_pivot_morales_kacher",
+      "source": "Gil Morales & Chris Kacher (O'Neil disciples)",
+      "universe": "SMALLMID",
+      "holding_period": "to 63 sessions",
+      "data_needed": "daily bars",
+      "rule": "Buy an up day whose volume beats every down day of the last 10, off the 10-day line in a stock above its 50-day; sell on the 7-week 10-day violation.",
+      "card": "pocket_pivot_morales_kacher.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "green_line_breakout_wish",
+      "source": "Dr. Eric Wish (Wishing Wealth blog)",
+      "universe": "SMALLMID, >= 504 sessions history",
+      "holding_period": "to 126 sessions",
+      "data_needed": "daily bars",
+      "rule": "Buy the first close above an all-time high untouched for 3+ months; sell on a close back below it.",
+      "card": "green_line_breakout_wish.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "bensdorp_mr_selloff",
+      "source": "Laurens Bensdorp, Automated Stock Trading Systems (2020)",
+      "universe": "close >= $1, 50-day avg volume >= 1M, ATR%(10) >= 5",
+      "holding_period": "1-3 sessions",
+      "data_needed": "daily bars",
+      "rule": "After a 12.5% three-day drop above the 150-day, limit buy 7% under the close; 4% target, 3-day exit.",
+      "card": "bensdorp_mr_selloff.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "bensdorp_adx_reversal",
+      "source": "Laurens Bensdorp, Automated Stock Trading Systems (2020)",
+      "universe": "avg volume >= 500k, dollar volume >= $2.5M, ATR%(10) >= 4",
+      "holding_period": "1-6 sessions",
+      "data_needed": "daily bars",
+      "rule": "With ADX(7) > 45, close >= SMA100 + ATR and RSI(3) <= 50, limit buy 4% under the close; 1.2 ATR target, 6-day exit.",
+      "card": "bensdorp_adx_reversal.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "sykes_first_green_day",
+      "source": "Timothy Sykes",
+      "universe": "close $1-$20, med_dv_63 >= $1M, mcap <= $2B",
+      "holding_period": "1-2 sessions",
+      "data_needed": "daily bars",
+      "rule": "After a stock doubles then falls 30% over 3+ red days, buy the first strong green close; sell the next close.",
+      "card": "sykes_first_green_day.md",
+      "kind": "strategy"
+    },
+    {
+      "slug": "event_avoid_filters",
+      "source": "Kim, Klein & Rosenfeld 2008; Lerman & Livnat 2010; Field & Hanka 2001",
+      "universe": "any (applied to existing long strategies)",
+      "holding_period": "n/a (filter)",
+      "data_needed": "splits, 8-K items, first bar date",
+      "rule": "Refuse longs after a reverse split (1y), 8-K 1.03/3.01 (126 sessions), 5.02 (63), or near a likely IPO lockup expiry.",
+      "card": "event_avoid_filters.md",
+      "kind": "filter"
+    }
+  ]
+}
