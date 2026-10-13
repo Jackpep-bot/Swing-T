@@ -401,7 +401,7 @@ class _UniverseSchedule:
                 stats = liquidity_screen(window, cfg, day, splits)
                 passed = stats.loc[stats["passes"].astype(bool)]
                 passed = passed.sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])
-                names = passed["symbol"].astype(str).head(cfg.max_symbols).tolist()
+                names = passed["symbol"].astype(str).iloc[cfg.skip_top:cfg.skip_top + cfg.max_symbols].tolist()
             self.sets.append(frozenset(str(n) for n in names))
         member = np.zeros((len(self.sets), len(view.symbols)), dtype=bool)
         for k, names in enumerate(self.sets):
@@ -787,8 +787,10 @@ def run_replay(
                         receipt(receipts.REFUSAL, "router", "strategy not allowed by the playbook in this regime", day,
                                 sig.strategy, sig.symbol, signal=sig, regime=label)
             cands.sort(key=lambda s: (-s.score, s.strategy, s.symbol))
-            open_list = [p.to_position() for p in positions.values()]
-            busy = set(positions)
+            # positions due out at the next open are sold before that open's entries fill (step 1)
+            leaving = set(pending_exits) if settings.execution.reuse_exiting_slots else set()
+            open_list = [p.to_position() for sym, p in positions.items() if sym not in leaving]
+            busy = set(positions) - leaving
             size_eq = eq
             if risk_cfg.drawdown_size_mult or risk_cfg.book_vol_target_annual_pct is not None:
                 hist = np.array([row["equity"] for row in curve], dtype=float)

@@ -2361,6 +2361,9 @@ def research_run(
     lanes: Annotated[str, typer.Option("--lanes", help="parallel replays, or auto (from free memory, <= 40 GB)")] = "auto",
     resume: Annotated[str | None, typer.Option("--resume", help="run id (or latest): rerun its unfinished chunks")] = None,
     allow_battery: Annotated[bool, typer.Option("--allow-battery", help="run on battery power")] = False,
+    rebuild: Annotated[
+        bool, typer.Option("--rebuild/--no-rebuild", help="rebuild cards and docs/leaderboard.md from this run when done")
+    ] = True,
 ) -> None:
     """Copy the --settings store (config/live.yaml: the live store) to one store per lane, replay every strategy in
     chunks on both windows (`swing replay --no-router`), then rebuild the cards and docs/leaderboard.md. Progress:
@@ -2373,7 +2376,7 @@ def research_run(
         summary = runner.run(
             st.settings_path, _store_path(st.settings), _store_path(st.settings).parent / RUNS_DIRNAME,
             windows=_split_list([windows]) or [], strategies=_split_list(strategies), lanes=lanes, resume=resume,
-            allow_battery=allow_battery,
+            allow_battery=allow_battery, rebuild_after=rebuild,
         )
     except (RuntimeError, ValueError, FileNotFoundError) as exc:
         _fail(str(exc))

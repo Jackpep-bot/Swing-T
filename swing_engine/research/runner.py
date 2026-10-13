@@ -263,8 +263,11 @@ def run(
     allow_battery: bool = False,
     size: int = CHUNK_SIZE,
     runner: Runner = subprocess.run,
+    rebuild_after: bool = True,
 ) -> dict[str, Any]:
-    """`swing research run`: plan (or resume ``resume`` = run id / "latest"), copy stores, replay, rebuild, notify."""
+    """`swing research run`: plan (or resume ``resume`` = run id / "latest"), copy stores, replay, rebuild, notify.
+    ``rebuild_after=False`` stops after the replays: a run on another universe must not overwrite the cards and
+    docs/leaderboard.md of the main one."""
     if not allow_battery and on_battery():
         raise RuntimeError("on battery power: the Mac sleeps mid-run; plug in or pass --allow-battery")
     if resume:
@@ -283,6 +286,9 @@ def run(
     prepare_lanes(manifest, log)
     save_manifest(manifest, runs_root)
     run_chunks(manifest, runs_root, log, runner)
+    if not rebuild_after:
+        return {"run_id": manifest["run_id"], "chunks": len(manifest["chunks"]),
+                "failed": [c["tag"] for c in manifest["chunks"] if c["status"] != DONE], "rebuilt": False}
     return rebuild(manifest, log)
 
 

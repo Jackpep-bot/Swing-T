@@ -62,6 +62,7 @@ class UniverseConfig(BaseModel):
     exclude_otc: bool = True
     include_etfs: bool = False
     max_symbols: int = 1500
+    skip_top: int = Field(default=0, ge=0)  # research: leave out the N most liquid names that pass (a small-cap universe)
     static_symbols: list[str] = Field(default_factory=list)
 
 
@@ -111,6 +112,10 @@ class ExecutionConfig(BaseModel):
     auto_submit_paper: bool = True
     auto_submit_live: bool = False
     max_new_orders_per_day: int = Field(default=5, ge=0)
+    #: Replay only. True: a position already due to be sold at the next open does not hold a slot (or block its own
+    #: symbol) when that open's entries are sized, so a monthly rotation can refill the whole book. False (the
+    #: default, and what the live nightly does: it sizes before it decides exits) kept such books about half invested.
+    reuse_exiting_slots: bool = False
     require_review_approval: bool = True  # enforced only when reviews exist for the day
     cancel_unfilled_entries_after_sessions: int = Field(default=1, ge=1)
     breakeven_after_r: float | None = 1.0  # stop -> entry once the close is this many R in profit (None = off)

@@ -476,3 +476,25 @@ def test_record_events_is_opt_in_and_matches_the_replay_counts(tmp_path):
     refusals = events.loc[events["kind"] == "refusal"]
     assert len(refusals) == sum(res.summary["skip_reasons"].values()) and set(refusals["step"]) <= {
         "daily_cap", "slot", "reward_risk", "sizing", "fill"}
+
+
+def test_reuse_exiting_slots_lets_a_rotation_refill_the_book(tmp_path):
+    """One slot. B signals on the session A's time stop decides to sell A at the next open."""
+    store, planted, panel = _planted_store(0.0)
+    days = sorted({t.date() for t in panel["ts"]})
+    base = _replay(store, planted, tmp_path, record_shadow=False).trades
+    a = base.loc[base["exit_reason"] == "time"].iloc[0]
+    first_leg = {(str(a["symbol"]), a["signal_date"])}
+    decided = days[days.index(a["exit_ts"].date()) - 1]  # the close on which A's exit was queued
+
+    def run(schedule: set, reuse: bool):
+        settings = _settings(max_open_positions=1)
+        settings.execution.reuse_exiting_slots = reuse
+        return _replay(store, schedule, tmp_path, settings=settings, record_shadow=False)
+
+    others = [s for s in sorted(panel["symbol"].unique()) if s != a["symbol"]][:6]
+    on = next(r for r in (run(first_leg | {(s, decided)}, True) for s in others) if len(r.trades) == 2)  # B's open fills
+    b = on.trades.iloc[1]
+    assert b["entry_ts"] == a["exit_ts"] and on.equity_curve["n_positions"].max() == 1  # bought at the open A left
+    off = run(first_leg | {(str(b["symbol"]), decided)}, False)
+    assert list(off.trades["symbol"]) == [a["symbol"]] and off.summary["skip_reasons"] == {"no_free_slot": 1}

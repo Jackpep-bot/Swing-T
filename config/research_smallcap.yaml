@@ -1,0 +1,10 @@
+# Small-cap universe for the exploratory map (docs/preregistration/2026-10-13-smallcap-map.md). Every test before
+# it screened the 1,500 most liquid names; this one leaves those out and takes the next 2,500.
+# Research replays only (`swing research run --no-rebuild` copies the store per lane); never used by the nightly.
+extends: live.yaml
+universe:
+  min_price: 3.0
+  min_avg_dollar_volume: 1000000
+  min_avg_volume: 100000
+  skip_top: 1500
+  max_symbols: 2500
