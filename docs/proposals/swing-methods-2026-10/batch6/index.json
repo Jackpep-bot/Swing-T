@@ -1,0 +1,63 @@
+{
+  "batch": "batch6",
+  "generated": "2026-10-13",
+  "kept": 5,
+  "rejected": 10,
+  "cards": [
+    {
+      "slug": "industry_leader_lag_smallmid",
+      "source": "Hou, \"Industry information diffusion and the lead-lag effect in stock returns\", RFS 20(4) 2007; Cohen & Lou, \"Complicated firms\", JFE 2012",
+      "universe": "SMALLMID followers, top-500 leaders",
+      "holding_period": "5 sessions, weekly",
+      "data_needed": "daily bars, SIC from EDGAR submissions, 8-K items",
+      "rule": "Buy small/mid stocks lagging their SIC2 industry leaders after a strong leader week; hold a week.",
+      "card": "industry_leader_lag_smallmid.md",
+      "kind": "strategy",
+      "evidence_grade": "D"
+    },
+    {
+      "slug": "large_shock_no_news_reversal",
+      "source": "Savor, \"Stock returns after major price shocks: the impact of information\", JFE 106(3) 2012; Chan, \"Stock price reaction to news and no-news: drift and reversal after headlines\", JFE 70(2) 2003",
+      "universe": "1,500 most liquid",
+      "holding_period": "10 sessions",
+      "data_needed": "daily bars, Alpaca news flag, 8-K items, earnings dates",
+      "rule": "Buy the open after a 3-sigma, -5% market-adjusted one-day drop with no news/8-K/earnings; sell 10 sessions later.",
+      "card": "large_shock_no_news_reversal.md",
+      "kind": "strategy",
+      "evidence_grade": "C"
+    },
+    {
+      "slug": "residual_reversal_ff3_etf",
+      "source": "Blitz, Huij, Lansdorp & Verbeek, \"Short-term residual reversal\", Journal of Financial Markets 16(3) 2013",
+      "universe": "500 largest by mcap_pit",
+      "holding_period": "21 sessions, monthly",
+      "data_needed": "daily bars, IWM/IWD/IWF bars, 8-K items",
+      "rule": "Buy the 50 worst one-month factor-neutral residual losers; hold a month.",
+      "card": "residual_reversal_ff3_etf.md",
+      "kind": "strategy",
+      "evidence_grade": "C"
+    },
+    {
+      "slug": "vrp_svxy_dual_signal",
+      "source": "QuantConnect research note \"Harvesting the volatility risk premium with a dual VIX signal\" (2026); Simon & Campasano, \"The VIX futures basis: evidence and trading strategies\", J. Derivatives 2014",
+      "universe": "SPY + SVXY",
+      "holding_period": "1-30 sessions",
+      "data_needed": "SPY/SVXY bars, vix table (VIX, VIX3M)",
+      "rule": "Hold SVXY at VIX/100 beside SPY when VIX < VIX3M and VIX > 10d realised vol; half when below realised; none in backwardation.",
+      "card": "vrp_svxy_dual_signal.md",
+      "kind": "strategy",
+      "evidence_grade": "C"
+    },
+    {
+      "slug": "within_industry_reversal_no_news",
+      "source": "Da, Liu & Schaumburg, \"A Closer Look at the Short-Term Return Reversal\", Management Science 60(3) 2014; Savor, \"Stock returns after major price shocks: the impact of information\", JFE 106(3) 2012",
+      "universe": "1,000 largest by mcap_pit",
+      "holding_period": "21 sessions, monthly",
+      "data_needed": "daily bars, SIC from EDGAR submissions, 8-K items, Alpaca news flag",
+      "rule": "Buy the 50 worst losers vs their SIC2 industry with no earnings or news; hold a month.",
+      "card": "within_industry_reversal_no_news.md",
+      "kind": "strategy",
+      "evidence_grade": "C"
+    }
+  ]
+}
