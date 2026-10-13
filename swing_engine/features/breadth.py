@@ -21,6 +21,30 @@ Columns (index ``session``: naive New York midnight ``Timestamp`` per session, a
     new_lows       symbols whose low equals or undercuts their 52-week low (``low <= low_52w``)
     n_symbols      symbols with a finite close on the session (the breadth population)
 
+Regime-tool columns (docs/catalog/catalog.json ``regime_tools``; docs/methods.md "Regime tools"). The A/D family
+counts the panel's own symbols (a universe A/D, not the official NYSE tape), so absolute thresholds taken from NYSE
+data need recalibration on the engine universe (doc 06, pitfall 9)::
+
+    advances       symbols with close > prev_close (both finite)            advance_decline_line
+    declines       symbols with close < prev_close (both finite)            advance_decline_line
+    ad_line        running sum of advances - declines from the first session in the frame (McEwan's cumulative
+                   A/D; its level depends on where the frame starts, only its shape and slope are comparable)
+    ad_pct_ema10   Hill's AD Percent: 10-session EMA of 100 * (advances - declines) / symbols with a finite change
+                   (bullish > +30, bearish < -30; doc 06 C)                                   hill_breadth_model
+    zbt_ema10      Zweig: 10-session EMA of advances / (advances + declines) (doc 06 A)     zweig_breadth_thrust
+    zbt_thrust     1 on the session zbt_ema10 first closes above 0.615 within 10 sessions of a close below 0.40
+    mcclellan_osc  EMA19(advances - declines) - EMA39(advances - declines)                  mcclellan_oscillator
+    mcclellan_sum  running sum of mcclellan_osc from its first value (Summation Index without the 1,000 offset)
+    up25q_count    symbols whose close is >= 25% above their close 63 sessions earlier      stockbee_primary_q25
+    down25q_count  symbols whose close is >= 25% below their close 63 sessions earlier
+    q25_ratio      up25q_count / max(down25q_count, 1); NaN when both are zero (Stockbee primary: > 1 bullish)
+    pct_new_highs  100 * new_highs / symbols with a warm 52-week window (NaN when none is warm)  hill_breadth_model
+    pct_new_lows   100 * new_lows / the same population
+    hl_pct         pct_new_highs - pct_new_lows (Hill's High-Low Percent: bullish > +10, bearish < -10)
+
+EMAs are ``ewm(span=n, adjust=False)`` (alpha = 2 / (n + 1)), NaN until ``n`` sessions with a defined input; every
+column on session ``T`` still reads only rows dated on or before ``T``.
+
 The population is whatever the panel holds: build it from the point-in-time universe (delisted names included,
 doc 06 pitfall 4) and pass ``exclude=("SPY",)`` to keep the index ETF out of a stock breadth reading.
 
@@ -75,6 +99,19 @@ RATIO_WINDOW = 10
 RATIO_MIN_DENOMINATOR = 1.0
 PCT_SCALE = 100.0
 SESSION_INDEX = "session"
+#: Zweig Breadth Thrust (doc 06 A): 10-day EMA of A/(A+D); setup below 0.40, signal above 0.615 within 10 sessions.
+ZBT_EMA_SPAN = 10
+ZBT_SETUP_BELOW = 0.40
+ZBT_SIGNAL_ABOVE = 0.615
+ZBT_WINDOW = 10
+#: Hill AD Percent smoothing (doc 06 C): 10-day EMA.
+AD_PCT_EMA_SPAN = 10
+#: McClellan Oscillator: EMA19 - EMA39 of net advances (smoothing constants 0.10 / 0.05).
+MCCLELLAN_FAST_SPAN = 19
+MCCLELLAN_SLOW_SPAN = 39
+#: Stockbee primary indicator (doc 06 D): up / down 25% or more in a quarter (63 sessions).
+Q25_WINDOW = 63
+Q25_MOVE = 0.25
 
 BREADTH_COLUMNS: tuple[str, ...] = (
     "pct_above_50",
@@ -85,16 +122,34 @@ BREADTH_COLUMNS: tuple[str, ...] = (
     "new_highs",
     "new_lows",
     "n_symbols",
+    "advances",
+    "declines",
+    "ad_line",
+    "ad_pct_ema10",
+    "zbt_ema10",
+    "zbt_thrust",
+    "mcclellan_osc",
+    "mcclellan_sum",
+    "up25q_count",
+    "down25q_count",
+    "q25_ratio",
+    "pct_new_highs",
+    "pct_new_lows",
+    "hl_pct",
 )
 _COUNT_COLUMNS: tuple[str, ...] = ("up4_count", "down4_count", "new_highs", "new_lows", "n_symbols")
+_EXTRA_COUNT_COLUMNS: tuple[str, ...] = ("advances", "declines", "up25q_count", "down25q_count")
+_INT_COLUMNS: tuple[str, ...] = (*_COUNT_COLUMNS, *_EXTRA_COUNT_COLUMNS, "ad_line", "zbt_thrust")
 _SESSION = "_session"
+_N_CHANGED = "_n_changed"
+_N_HL_WARM = "_n_hl_warm"
 
 
 def empty_breadth() -> pd.DataFrame:
     """A zero-row breadth frame with the contract columns and dtypes."""
     idx = pd.DatetimeIndex([], name=SESSION_INDEX)
     out = pd.DataFrame({c: pd.Series(dtype="float64") for c in BREADTH_COLUMNS}, index=idx)
-    return out.astype({c: "int64" for c in _COUNT_COLUMNS})
+    return out.astype({c: "int64" for c in _INT_COLUMNS})
 
 
 def ratio_10d(up_count: pd.Series, down_count: pd.Series, window: int = RATIO_WINDOW) -> pd.Series:
@@ -105,6 +160,45 @@ def ratio_10d(up_count: pd.Series, down_count: pd.Series, window: int = RATIO_WI
     down = down_count.astype("float64").rolling(window, min_periods=window).sum()
     ratio = up / down.clip(lower=RATIO_MIN_DENOMINATOR)
     return ratio.where((up + down) > 0)
+
+
+def ema(x: pd.Series, span: int) -> pd.Series:
+    """``ewm(span, adjust=False)`` mean (alpha = 2 / (span + 1)), NaN until ``span`` defined inputs."""
+    return x.astype("float64").ewm(span=span, adjust=False, min_periods=span).mean()
+
+
+def zbt_thrust(
+    ema10: pd.Series,
+    setup_below: float = ZBT_SETUP_BELOW,
+    signal_above: float = ZBT_SIGNAL_ABOVE,
+    window: int = ZBT_WINDOW,
+) -> pd.Series:
+    """Zweig Breadth Thrust event (doc 06 A): 1 on session ``t`` when ``ema10[t] > signal_above``,
+    ``ema10[t-1] <= signal_above`` (the first close above) and some session in ``t-window .. t-1`` closed below
+    ``setup_below`` after the last session above ``signal_above`` (one signal per setup; a recovery slower than
+    ``window`` sessions does not count); else 0. Causal."""
+    x = ema10.astype("float64").to_numpy()
+    out = np.zeros(len(x), dtype="int64")
+    last_setup = last_above = -(10**9)
+    for t, v in enumerate(x):
+        if v > signal_above:
+            if last_above != t - 1 and last_setup > last_above and t - last_setup <= window:
+                out[t] = 1
+            last_above = t
+        elif v < setup_below:
+            last_setup = t
+    return pd.Series(out, index=ema10.index)
+
+
+def mcclellan(net_advances: pd.Series) -> tuple[pd.Series, pd.Series]:
+    """``(oscillator, summation)``: EMA19(net) - EMA39(net) and its running sum from its first defined value."""
+    osc = ema(net_advances, MCCLELLAN_FAST_SPAN) - ema(net_advances, MCCLELLAN_SLOW_SPAN)
+    return osc, osc.cumsum()
+
+
+def _pct_of(count: pd.Series, population: pd.Series) -> pd.Series:
+    pop = population.astype("float64")
+    return (count.astype("float64") / pop * PCT_SCALE).where(pop > 0)
 
 
 def split_factor_per_row(df: pd.DataFrame, splits: pd.DataFrame | None) -> pd.Series:
@@ -176,6 +270,12 @@ def _per_row_flags(df: pd.DataFrame, splits: pd.DataFrame | None = None) -> pd.D
     down4 = (change <= DOWN4_CLOSE_RATIO) & vol_ok
     new_high = high_52w.notna() & (high >= high_52w)
     new_low = low_52w.notna() & (low <= low_52w)
+    changed = has_close & prev_close.notna()
+    ret_q = (
+        df[f"ret_{Q25_WINDOW}d"].astype("float64")
+        if f"ret_{Q25_WINDOW}d" in df.columns
+        else close / shift_per_symbol(close, key, Q25_WINDOW) - 1.0
+    )
     return pd.DataFrame(
         {
             _SESSION: session_key(df[TS_COL]),
@@ -186,6 +286,12 @@ def _per_row_flags(df: pd.DataFrame, splits: pd.DataFrame | None = None) -> pd.D
             "new_highs": new_high.astype("int64"),
             "new_lows": new_low.astype("int64"),
             "n_symbols": has_close.astype("int64"),
+            "advances": (changed & (close > prev_close)).astype("int64"),
+            "declines": (changed & (close < prev_close)).astype("int64"),
+            "up25q_count": (ret_q >= Q25_MOVE).astype("int64"),
+            "down25q_count": (ret_q <= -Q25_MOVE).astype("int64"),
+            _N_CHANGED: changed.astype("int64"),
+            _N_HL_WARM: (high_52w.notna() & low_52w.notna()).astype("int64"),
         },
         index=df.index,
     )
@@ -214,9 +320,12 @@ def market_breadth(
     flags = _per_row_flags(df, splits)
     grouped = flags.groupby(_SESSION, sort=True)
     out = grouped[["pct_above_50", "pct_above_200"]].mean()
-    counts = grouped[list(_COUNT_COLUMNS)].sum().astype("int64")
+    sums = [*_COUNT_COLUMNS, *_EXTRA_COUNT_COLUMNS, _N_CHANGED, _N_HL_WARM]
+    counts = grouped[sums].sum().astype("int64")
     out = out.join(counts)
     out["ratio_10d"] = ratio_10d(out["up4_count"], out["down4_count"])
+    _add_regime_tools(out)
+    out = out.drop(columns=[_N_CHANGED, _N_HL_WARM])
     out.index = pd.DatetimeIndex(out.index, name=SESSION_INDEX)
     out = out[list(BREADTH_COLUMNS)]
     log.debug(
@@ -226,6 +335,23 @@ def market_breadth(
         excluded=sorted(drop),
     )
     return out
+
+
+def _add_regime_tools(out: pd.DataFrame) -> None:
+    """A/D line, AD Percent, Zweig, McClellan, Stockbee 25%-quarter and Hill high-low columns, in place."""
+    adv, dec = out["advances"].astype("float64"), out["declines"].astype("float64")
+    n_changed = out[_N_CHANGED]
+    net = (adv - dec).where(n_changed > 0)  # the first session has no prior close: undefined, not zero
+    out["ad_line"] = (out["advances"] - out["declines"]).cumsum().astype("int64")
+    out["ad_pct_ema10"] = ema(_pct_of(adv - dec, n_changed), AD_PCT_EMA_SPAN)
+    out["zbt_ema10"] = ema((adv / (adv + dec)).where((adv + dec) > 0), ZBT_EMA_SPAN)
+    out["zbt_thrust"] = zbt_thrust(out["zbt_ema10"])
+    out["mcclellan_osc"], out["mcclellan_sum"] = mcclellan(net)
+    up_q, down_q = out["up25q_count"].astype("float64"), out["down25q_count"].astype("float64")
+    out["q25_ratio"] = (up_q / down_q.clip(lower=RATIO_MIN_DENOMINATOR)).where((up_q + down_q) > 0)
+    out["pct_new_highs"] = _pct_of(out["new_highs"], out[_N_HL_WARM])
+    out["pct_new_lows"] = _pct_of(out["new_lows"], out[_N_HL_WARM])
+    out["hl_pct"] = out["pct_new_highs"] - out["pct_new_lows"]
 
 
 def breadth_as_of(breadth: pd.DataFrame | None, as_of: object) -> pd.Series | None:
@@ -255,8 +381,11 @@ __all__ = [
     "BREADTH_COLUMNS",
     "RATIO_WINDOW",
     "breadth_as_of",
+    "ema",
     "empty_breadth",
     "market_breadth",
+    "mcclellan",
     "ratio_10d",
     "split_factor_per_row",
+    "zbt_thrust",
 ]

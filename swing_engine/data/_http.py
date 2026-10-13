@@ -184,6 +184,18 @@ class Http:
             if hit is not None:
                 log.debug("http_cache_hit", url=url, key=cache_key)
                 return hit
+        text = self._get(url, params=params, headers=headers).text
+        if cache_key is not None:
+            self.cache.put(cache_key, text, cache_suffix)
+        return text
+
+    def get_bytes(self, url: str, *, params: Mapping[str, Any] | None = None) -> bytes:
+        """Raw body (zip archives); rate limit and retries as `get_text`, no cache."""
+        return self._get(url, params=params).content
+
+    def _get(
+        self, url: str, *, params: Mapping[str, Any] | None = None, headers: Mapping[str, str] | None = None
+    ) -> httpx.Response:
         merged = {**self.headers, **(headers or {})}
         for attempt in range(self.retries + 1):
             if self.bucket is not None:
@@ -198,10 +210,7 @@ class Http:
                 continue
             if response.is_error:
                 raise status_error(response)  # raise_for_status() would embed the query string (API key)
-            text = response.text
-            if cache_key is not None:
-                self.cache.put(cache_key, text, cache_suffix)
-            return text
+            return response
         raise RuntimeError("unreachable: retry loop exhausted without a response")  # pragma: no cover
 
     def get_json(

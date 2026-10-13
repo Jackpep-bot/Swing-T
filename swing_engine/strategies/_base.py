@@ -10,11 +10,12 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Any, NamedTuple
 
+import numpy as np
 import pandas as pd
 import structlog
 
 from swing_engine.core.interfaces import Strategy
-from swing_engine.core.models import Side, Signal
+from swing_engine.core.models import PositionContext, Side, Signal
 
 log = structlog.get_logger(__name__)
 
@@ -34,7 +35,14 @@ TREND_DOWN = -1
 
 #: Parameter names shared by every strategy (each strategy still lists them in `default_params`).
 P_MIN_RR = "min_reward_risk"
+#: float slack on the reward/risk floor: a target placed at exactly N R must pass a floor of N
+RR_TOLERANCE = 1e-9
 P_MIN_TREND = "min_trend_state"
+#: Stop distance floor as a fraction of entry, every strategy (param `min_stop_pct` overrides): a stop tighter than
+#: the spread plus a few bp of slippage is not executable, and its R is noise (replay 2026-10-08 found signals with
+#: 0.0002% stops grading at 1e10 R). research.cards / research.leaderboard apply the same floor to old ledgers.
+P_MIN_STOP_PCT = "min_stop_pct"
+MIN_STOP_FRACTION = 0.0025
 P_MIN_MARKET_TREND = "min_market_trend_state"
 
 
@@ -78,11 +86,22 @@ class PanelStrategy(Strategy):
     description = ""
     #: panel columns the strategy reads beyond the bar columns; validated before scanning
     features_required: list[str] = []
+    #: on-demand columns from `features.extra` (e.g. "ema_8", "psar", "tom_day"); the panel builders attach them
+    #: via `ensure_extra(panel, required_extras(...))` before scanning
+    extra_features: list[str] = []
     #: bar columns copied from the previous bar as `prior_<col>`
     prior_columns: list[str] = ["open", "high", "low", "close", "volume"]
+    #: False opts out of the engine-wide breakeven-at-+1R / N-day-low trail overlay (settings.execution) in
+    #: replay and the live position manager, and of `BacktestConfig.trailing` in `run_backtest`. A
+    #: `params["engine_trail"]` value wins over this attribute. Cards: docs/strategies/qullamaggie_flag.md,
+    #: episodic_pivot.md (the overlay cuts the winners those methods depend on).
+    engine_trail: bool = True
+    #: Calendar days of bars the replay must load before its first session when the default warm-up (400 days,
+    #: research.replay.WARMUP_CALENDAR_DAYS) is shorter than the strategy's longest window; 0 = the default.
+    warmup_calendar_days: int = 0
 
     def required_features(self) -> list[str]:
-        return list(self.features_required)
+        return list(dict.fromkeys([*self.features_required, *self.extra_features]))
 
     # ----------------------------------------------------------------------------- regime gate
     def market_ok(self, regime: dict[str, Any] | None) -> bool:
@@ -108,37 +127,43 @@ class PanelStrategy(Strategy):
         as-of session (delisted, halted, missing data) are dropped rather than scanned on stale data.
         Raises KeyError when a required column is missing so a mis-built panel fails loudly.
         """
+        rolling = list(rolling)
         req = list(BAR_COLUMNS) + list(required if required is not None else self.features_required)
         missing = [c for c in req if c not in panel.columns]
         if missing:
             raise KeyError(f"{self.name}: panel is missing required columns {missing}")
+        # an empty result still carries the prior_*/rolling columns so callers can index them
+        empty_cols = list(dict.fromkeys([*panel.columns, *(f"{PRIOR_PREFIX}{c}" for c in self.prior_columns),
+                                         *(s.out for s in rolling)]))
         if panel.empty:
-            return panel.iloc[0:0]
+            return panel.iloc[0:0].reindex(columns=empty_cols)
 
         day = _local_day(panel[TS])
-        cutoff = pd.Timestamp(as_of)
-        sub = panel.loc[day <= cutoff]
-        if sub.empty:
-            return sub
-        sub = sub.sort_values([SYMBOL, TS], kind="stable")
-        day = _local_day(sub[TS])
+        mask = (day <= pd.Timestamp(as_of)).to_numpy()
+        if not mask.any():
+            return panel.iloc[0:0].reindex(columns=empty_cols)
+        # Order, prior_* and rolling helpers on the few columns they read; only the as-of rows of the full panel
+        # are copied (copying every column of a 300-session slice per strategy per day dominated replay time).
+        cols = list(dict.fromkeys([SYMBOL, TS, *self.prior_columns, *(s.column for s in rolling)]))
+        sub = panel.loc[mask, cols].assign(_day=day[mask].to_numpy(), _pos=np.flatnonzero(mask))
+        sub = sub.sort_values([SYMBOL, TS], kind="stable").reset_index(drop=True)
         grp = sub.groupby(SYMBOL, sort=False)
 
         extra: dict[str, pd.Series] = {}
         for col in self.prior_columns:
             extra[f"{PRIOR_PREFIX}{col}"] = grp[col].shift(1)
         for spec in rolling:
-            series = grp[spec.column].transform(
-                lambda s, spec=spec: getattr(s.rolling(spec.window, min_periods=spec.window), spec.fn)()
-            )
+            # groupby().rolling restarts its window at each symbol, the same arithmetic as a per-symbol rolling
+            roll = grp[spec.column].rolling(spec.window, min_periods=spec.window)
+            series = getattr(roll, spec.fn)().droplevel(0).sort_index()
             if spec.prior:
                 series = series.groupby(sub[SYMBOL], sort=False).shift(1)
             extra[spec.out] = series
-        sub = sub.assign(**extra, _day=day)
 
         session = sub["_day"].max()
-        cur = sub.loc[sub["_day"] == session].groupby(SYMBOL, sort=False).tail(1)
-        return cur.drop(columns="_day")
+        last = sub.loc[sub["_day"] == session].groupby(SYMBOL, sort=False).tail(1).index
+        cur = panel.iloc[sub["_pos"].to_numpy()[last]]
+        return cur.assign(**{k: v.to_numpy()[last] for k, v in extra.items()})
 
     # ----------------------------------------------------------------------------- signal builder
     def build_signal(
@@ -162,6 +187,8 @@ class PanelStrategy(Strategy):
             return None
         entry_f, stop_f = float(entry), float(stop)
         risk = entry_f - stop_f
+        if risk < entry_f * float(self.params.get(P_MIN_STOP_PCT, MIN_STOP_FRACTION)):
+            return None
         target_f: float | None = None
         reward_risk: float | None = None
         if target is not None:
@@ -169,7 +196,7 @@ class PanelStrategy(Strategy):
                 return None
             target_f = float(target)
             reward_risk = (target_f - entry_f) / risk
-            if reward_risk < float(self.params.get(P_MIN_RR, 0.0)):
+            if reward_risk < float(self.params.get(P_MIN_RR, 0.0)) - RR_TOLERANCE:
                 return None
         feats = {k: float(v) for k, v in (features or {}).items() if _finite(v)}
         return Signal(
@@ -198,13 +225,27 @@ class PanelStrategy(Strategy):
             return math.nan
         return float(row["volume"]) / float(avg)
 
-    def should_exit(self, row: pd.Series, bars_held: int) -> bool:
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
         """Rule-based exit hook for strategies whose exit is not a fixed stop/target (default: never).
 
         `row` is the panel row of the held symbol on the evaluation day; `bars_held` counts sessions since
-        entry. Backtest/execution may call this in addition to stop/target handling.
+        entry. Backtest/execution may call this in addition to stop/target handling. `position` (entry fill,
+        stops, best price since entry, the entry signal's features and date) is passed by the engines when an
+        override declares the third parameter; it is None from a caller without position facts, and a field
+        the engine cannot recover is None (live: no entry features), so a rule that needs one must not fire.
         """
         return False
+
+    def trail_stop(self, row: pd.Series) -> float | None:
+        """Indicator trailing stop for a held position (supertrend, PSAR, chandelier, swing low), or None.
+
+        `row` is the held symbol's panel row at the close. The engine ratchets the stop to this level (never
+        loosens it, never through the close), live from the next session, in `run_backtest`, replay and the
+        position manager alike. Default: no strategy trail.
+        """
+        return None
+
+    trail_stop.default_hook = True  # type: ignore[attr-defined]  # engines skip the per-day row lookup
 
     def log_scan(self, as_of: date, n_rows: int, n_signals: int) -> None:
         log.debug("strategy.scan", strategy=self.name, as_of=str(as_of), rows=n_rows, signals=n_signals)
@@ -213,3 +254,15 @@ class PanelStrategy(Strategy):
 def finite(x: Any) -> bool:
     """Public alias used by strategy modules."""
     return _finite(x)
+
+
+def entry_feature(position: PositionContext | None, key: str) -> float | None:
+    """The entry signal's ``features[key]`` as a float, or None (no position context, or the feature is unknown)."""
+    value = None if position is None else position.entry_features.get(key)
+    return float(value) if _finite(value) else None
+
+
+def entry_price(position: PositionContext | None) -> float | None:
+    """The position's entry fill, or None when the caller passed no context."""
+    value = None if position is None else position.entry_price
+    return float(value) if _finite(value) else None

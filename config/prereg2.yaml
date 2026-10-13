@@ -1,0 +1,12 @@
+# Pre-registered two-pick group (docs/preregistration/2026-10-10-two-picks.md). Book limits fixed before any run:
+# the same book as config/prereg3.yaml (neither card names a book size). Store: a research copy of the repaired
+# live store.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_p2.duckdb
+risk:
+  risk_per_trade_pct: 0.5
+  max_position_pct: 5.0
+  max_open_positions: 30
+execution:
+  max_new_orders_per_day: 10

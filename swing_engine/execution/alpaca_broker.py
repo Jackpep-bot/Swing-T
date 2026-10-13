@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Iterable, Mapping
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -35,6 +36,7 @@ from swing_engine.core.registry import register
 from swing_engine.risk.limits import PCT
 
 try:
+    from alpaca.common.enums import Sort
     from alpaca.common.exceptions import APIError
     from alpaca.trading.client import TradingClient
     from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
@@ -66,6 +68,7 @@ SETTLED_STATUSES = frozenset({"canceled", "filled", "expired", "rejected", "repl
 CANCEL_SETTLE_POLLS = 10  # cancels are asynchronous; legs hold the shares until they are really gone
 CANCEL_SETTLE_INTERVAL_S = 0.5
 NO_POSITION = "no_position"
+ORDERS_PAGE_LIMIT = 500  # GET /v2/orders maximum page size
 REARM_PREFIX = "rearm"  # client ids of re-armed protective stops (not swing-*: never read as a strategy entry)
 
 
@@ -200,6 +203,22 @@ class AlpacaBroker(Broker):
     def open_orders(self) -> list[dict[str, Any]]:
         request = GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
         return [_to_dict(o) for o in self.client.get_orders(request)]
+
+    def closed_orders(self, since: date) -> list[dict[str, Any]]:
+        """Read-only: every closed order submitted on or after ``since`` (UTC midnight), oldest first, with
+        nested bracket legs (GET /v2/orders status=closed nested=true; a filled stop / target leg shows up in its
+        parent's ``legs`` with its own id, ``filled_at`` and ``filled_avg_price``)."""
+        after = datetime(since.year, since.month, since.day, tzinfo=UTC)
+        out: list[dict[str, Any]] = []
+        while True:
+            request = GetOrdersRequest(status=QueryOrderStatus.CLOSED, nested=True, after=after,
+                                       limit=ORDERS_PAGE_LIMIT, direction=Sort.ASC)
+            page = [_to_dict(o) for o in self.client.get_orders(request)]
+            out.extend(page)
+            last = datetime.fromisoformat(str(page[-1]["submitted_at"])) if page and page[-1].get("submitted_at") else None
+            if len(page) < ORDERS_PAGE_LIMIT or last is None or last <= after:
+                return out
+            after = last
 
     def cancel(self, order_id: str) -> None:
         self.client.cancel_order_by_id(order_id)

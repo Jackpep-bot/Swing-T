@@ -1,0 +1,1358 @@
+{
+  "group": "charting, screening and rating platforms",
+  "generated": "2026-10-07",
+  "notes": "Rules paraphrased; exact where taken from vendor docs. Blocked/unfetchable: investors.com, zacks.com, barchart.com (JS). Morningstar omitted (star/fair-value ratings are long-horizon valuation, not swing-relevant).",
+  "count": 82,
+  "items": [
+    {
+      "name": "TradingView Technical Ratings",
+      "brand_or_source": "TradingView",
+      "category": "rating",
+      "rules_or_formula": "26 sub-signals, each -1/0/+1. MA group (15): SMA and EMA 10/20/30/50/100/200, Hull MA 9, VWMA 20 -> +1 if MA < price, -1 if MA > price; Ichimoku 9/26/52 -> +1 if SpanA>SpanB AND Base>SpanA AND Conversion>Base AND price>Conversion (mirror for -1). Oscillator group (11): RSI14 buy if <30 and rising, sell if >70 and falling; Stoch 14,3,3 buy if %K<20,%D<20,%K>%D (sell mirror at 80); CCI20 buy if <-100 and rising, sell if >100 and falling; ADX 14,14 buy if +DI>-DI, ADX>20 and ADX rising, sell if +DI<-DI, ADX>20 and ADX falling; Awesome Osc buy on zero cross up or two bars above 0 then turns up (mirror); Momentum10 buy if rising, sell if falling; MACD 12,26,9 buy if MACD>signal; StochRSI 3,3,14,14 buy only in downtrend with K,D<20 and K>D, sell only in uptrend with K,D>80 and K<D; Williams %R14 buy if <-80 and rising, sell if >-20 and falling; Bull Bear Power 13 buy in uptrend if BearPower<0 and rising, sell in downtrend if BullPower>0 and falling; Ultimate Osc 7,14,28 buy if >70, sell if <30 (as documented). MA rating = mean of MA signals; Osc rating = mean of oscillator signals; Overall = mean(MA rating, Osc rating) in [-1,1]. Labels: >0.5 Strong Buy; 0.1..0.5 Buy; -0.1..0.1 Neutral; -0.5..-0.1 Sell; < -0.5 Strong Sell. The doc does not state how 'uptrend/downtrend' is defined for StochRSI and BBP filters (check built-in Pine source).",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "No published out-of-sample validation by TradingView; it is an equal-weight vote of classic indicators. Contrarian oscillator votes and trend MA votes partly cancel.",
+      "evidence_grade": "none",
+      "holding_period": "Any (timeframe-dependent; daily rating ~days-weeks)",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000614331-technical-ratings/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "TradingView Technical Ratings Strategy (built-in)",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Built-in strategy that trades signals from the Technical Ratings summary (enters on rating-based buy/sell states). Exact entry thresholds/options not retrieved; check built-in Pine source.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "None published.",
+      "evidence_grade": "none",
+      "holding_period": "Days-weeks on daily bars",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "TradingView built-in: BarUpDn Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Long when bar closes up (close>open) and opened above prior close; short when close<open and open<prior close. Defaults recalled from Pine source.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Bollinger Bands Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "BB(20,2). When close crosses above lower band place buy stop at lower band; when close crosses below upper band place sell stop at upper band (mean-reversion entries). Defaults recalled from Pine source.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Bollinger Bands Strategy Directed",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Same as Bollinger Bands Strategy but restricted to one direction (long-only or short-only input).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Channel BreakOut Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Length 5: buy stop at highest high(5)+1 tick, sell stop at lowest low(5)-1 tick (Donchian-style stop-and-reverse). Default length recalled from Pine source.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Consecutive Up/Down Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Long after N consecutive higher closes, short after M consecutive lower closes (defaults 3 and 3, recalled).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Greedy Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Gap-based pyramiding strategy (adds on gaps in trend direction). Exact rules not retrieved.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: InSide Bar Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Inside bar = high<prior high and low>prior low; enter long if inside bar closed up, short if closed down.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: OutSide Bar Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Outside bar = high>prior high and low<prior low; enter long if it closed up, short if closed down.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Keltner Channels Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "KC(20, mult 2, EMA basis, ATR/true-range width). On cross above upper band place buy stop at that bar's high; on cross below lower band place sell stop at its low (breakout). Defaults recalled.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: MACD Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "MACD 12,26,9: long when histogram crosses above 0, short when crosses below 0.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Momentum Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "mom0 = close - close[12]; mom1 = mom0 - mom0[1]. Long stop at high+tick when mom0>0 and mom1>0; short stop at low-tick when both <0. Length 12 recalled.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Parabolic SAR Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "SAR(start 0.02, increment 0.02, max 0.2); stop-and-reverse orders placed at the SAR level.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Pivot Extension Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Pivot highs/lows (left 4, right 2 bars, recalled): enter counter-trend at confirmed pivot extremes.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Pivot Reversal Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Pivot highs/lows (left 4, right 2, recalled): buy stop at last pivot high + tick, sell stop at last pivot low - tick (stop-and-reverse breakout).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Price Channel Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Length 20: buy stop at highest high(20), sell stop at lowest low(20) (Donchian breakout).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: RSI Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "RSI(14): long when RSI crosses above 30, short when RSI crosses below 70.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Stochastic Slow Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Stoch(14,3,3): long when %K crosses above %D while %K<20; short when %K crosses below %D while %K>80.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Supertrend Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Supertrend(ATR 10, factor 3): long when direction flips up, short when it flips down (stop-and-reverse).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TradingView built-in: Volty Expan Close Strategy",
+      "brand_or_source": "TradingView",
+      "category": "strategy",
+      "rules_or_formula": "Bands = close +/- ATR(length)*mult from previous bar (defaults length 5, mult 0.75 recalled; TV doc does not state defaults). Long if price exceeds prior upper band; short if below prior lower band.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Demonstration strategies shipped with TradingView; no published performance evidence.",
+      "evidence_grade": "none",
+      "holding_period": "Bar-count dependent; on daily bars typically 2-20 days (stop-and-reverse ones stay in market)",
+      "sources": [
+        "https://www.tradingview.com/support/folders/43000587406-built-in-strategies/",
+        "https://ru.tradingview.com/support/solutions/43000599890"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Squeeze Momentum Indicator [LazyBear] (TTM Squeeze variant)",
+      "brand_or_source": "TradingView community (LazyBear), after John Carter's TTM Squeeze",
+      "category": "indicator",
+      "rules_or_formula": "BB(20, 2.0 stdev) and KC(20, 1.5 x true range, SMA basis). sqzOn = lowerBB>lowerKC AND upperBB<upperKC; sqzOff = lowerBB<lowerKC AND upperBB>upperKC; else noSqz. Momentum val = linreg( close - avg( avg(highest(high,20), lowest(low,20)), sma(close,20) ), 20, 0 ). Histogram colors: lime (>0 rising), green (>0 falling), red (<0 falling), maroon (<0 rising). Author usage: wait for first sqzOff (gray) after sqzOn (black) and trade in direction of momentum sign; exit when momentum changes (color turns). Carter's original uses simple momentum instead of linreg.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Popular; no peer-reviewed evidence. Volatility-contraction-then-expansion is a well-known stylized fact (vol clustering) but direction edge unproven.",
+      "evidence_grade": "D",
+      "holding_period": "Days to a few weeks on daily bars",
+      "sources": [
+        "https://www.tradingview.com/script/nqQ1DT5a-Squeeze-Momentum-Indicator-LazyBear/",
+        "https://pastebin.com/raw/UCpcX8d7"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Supertrend",
+      "brand_or_source": "TradingView (built-in indicator; Olivier Seban origin)",
+      "category": "indicator",
+      "rules_or_formula": "hl2=(H+L)/2; basicUpper = hl2 + mult*ATR(n); basicLower = hl2 - mult*ATR(n). finalUpper = basicUpper if basicUpper<prev finalUpper or prev close>prev finalUpper, else prev finalUpper; finalLower = basicLower if basicLower>prev finalLower or prev close<prev finalLower, else prev finalLower. Trend flips up when close>finalUpper, down when close<finalLower; plot finalLower in uptrend, finalUpper in downtrend. Common defaults ATR length 10, factor 3 (TV help page does not state defaults).",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "No rigorous published evidence; ATR trailing-stop trend following generically related to time-series momentum.",
+      "evidence_grade": "D",
+      "holding_period": "Trend-length; weeks on daily bars",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000634738-supertrend/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "RSI Divergence Indicator (built-in)",
+      "brand_or_source": "TradingView",
+      "category": "indicator",
+      "rules_or_formula": "RSI(14) pivots found with left/right lookback 5/5; two pivots must be 5-60 bars apart. Regular bullish: price lower low + RSI higher low; regular bearish: price higher high + RSI lower high; hidden bullish: price higher low + RSI lower low (continuation); hidden bearish: price lower high + RSI higher high. Signal confirmed only after right-lookback bars (5-bar lag).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "No published validation; divergences are anecdotal reversal cues.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://www.luxalgo.com/library/indicator/RRp1xOWb-rsi-divergence/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "VWAP / Anchored VWAP with bands",
+      "brand_or_source": "TradingView",
+      "category": "indicator",
+      "rules_or_formula": "Typical price TP=(H+L+C)/3; VWAP = cumsum(TP*V)/cumsum(V) reset at anchor (Session, Week, Month, Quarter, Year, Decade, Century, Earnings, Dividends, Splits). Bands: 3 user-set multipliers in either volume-weighted standard deviation units or percent (mult 1 = 1%). Swing usage: anchor to earnings/gap/pivot low; above AVWAP = buyers since anchor in profit (support), below = resistance.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV (intraday for session VWAP)",
+      "free_data_ok": true,
+      "evidence": "Institutional execution benchmark; no strong evidence as a predictive signal.",
+      "evidence_grade": "D",
+      "holding_period": "Intraday to weeks (anchored)",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000502018-volume-weighted-average-price-vwap/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Pivot Points Standard (Traditional/Fibonacci/Woodie/Classic/DM/Camarilla)",
+      "brand_or_source": "TradingView",
+      "category": "indicator",
+      "rules_or_formula": "Traditional/Classic: P=(Hp+Lp+Cp)/3; R1=2P-Lp; S1=2P-Hp; R2=P+(Hp-Lp); S2=P-(Hp-Lp); higher levels extend range. Fibonacci: P same; R/S1=P+/-0.382*range; R/S2=P+/-0.618*range; R/S3=P+/-1.0*range. Woodie: P=(Hp+Lp+2*Open_current)/4; R1=2P-Lp; S1=2P-Hp. DM: X depends on prior open vs close; P=X/4; R1=X/2-Lp; S1=X/2-Hp. Camarilla: uses Cp +/- range*1.1/k (k=12,6,4,2 for levels 1-4 is the standard Camarilla convention). Auto pivot timeframe: 1D for charts <=15min, 1W for >15min to <1D, 1M for daily+ charts (so daily swing charts use monthly pivots; weekly/yearly selectable).",
+      "formula_status": "exact",
+      "data_needed": "Prior period OHLC",
+      "free_data_ok": true,
+      "evidence": "Self-fulfilling S/R levels; no robust academic evidence.",
+      "evidence_grade": "D",
+      "holding_period": "Period of the pivot (week/month for swing)",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000521824-pivot-points-standard/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Volume Profile (Fixed Range, Visible Range, Session, Auto-Anchored, Periodic)",
+      "brand_or_source": "TradingView",
+      "category": "indicator",
+      "rules_or_formula": "Histogram of volume by price over a window. POC = price row with highest volume; Value Area = contiguous price range holding a set % of volume (typically 70%); VAH/VAL its bounds; HVN = volume peaks (acceptance/consolidation, S/R), LVN = volume valleys (fast-move zones). Daily-bar approximation: distribute each bar's volume across its H-L range into N rows.",
+      "formula_status": "approximation",
+      "data_needed": "Intraday volume ideal; daily OHLCV approximation",
+      "free_data_ok": true,
+      "evidence": "Market Profile tradition (Steidlmayer); no robust independent evidence.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks (levels as targets/stops)",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000502040-volume-profile/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "TradingView Stock Screener (technical filters)",
+      "brand_or_source": "TradingView",
+      "category": "screen",
+      "rules_or_formula": "Filters on price/perf, moving averages and crossovers, oscillators (RSI, Momentum, etc. with custom params), volatility bands (e.g., Keltner), volume indicators, candlestick patterns, and the aggregate Technical Rating / MA rating / Oscillator rating columns. Relative Volume and Volatility definitions not stated in the help article.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLCV + fundamentals",
+      "free_data_ok": true,
+      "evidence": "Tool, not a signal.",
+      "evidence_grade": "none",
+      "holding_period": "n/a",
+      "sources": [
+        "https://www.tradingview.com/support/solutions/43000718866-stock-screener-fields-and-filters/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "StockCharts Technical Rank (SCTR)",
+      "brand_or_source": "StockCharts.com (John Murphy concept)",
+      "category": "rating",
+      "rules_or_formula": "Raw score = 0.30*(% above/below 200-day EMA) + 0.30*(125-day ROC) + 0.15*(% above/below 50-day EMA) + 0.15*(20-day ROC) + 0.05*PPOslopeScore + 0.05*RSI(14). PPOslopeScore: 3-day slope of PPO(12,26,9) histogram; if slope > +45 deg -> 100 (5 pts), if < -45 deg -> 0, else (slope+1)*50 (weighted 5%). Values enter raw (e.g., 15% above 200EMA -> 15*0.30 = 4.5). Then percentile-rank within peer universe -> 0.0..99.9. Universes: Large >$10B, Mid $2-10B, Small $250M-$2B, ETFs (no leveraged/inverse), industries, plus Toronto/London/India; reclassification needs 3+ months. Usage: >=70 cross or exit of 40-60 middle zone as buy; 90-99.9 top decile; <40 weak.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV (universe)",
+      "free_data_ok": true,
+      "evidence": "No vendor validation; ~90% weight is 6-12 month and 1-month-ish momentum/trend, related to cross-sectional momentum (Jegadeesh-Titman 1993). Note the 20-day ROC component contradicts short-term reversal literature.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks to months; rebalance weekly",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/technical-indicators-and-overlays/technical-indicators/stockcharts-technical-rank-sctr"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Relative Rotation Graphs (RRG): JdK RS-Ratio / RS-Momentum",
+      "brand_or_source": "StockCharts.com / RRG Research (Julius de Kempenaer)",
+      "category": "regime_tool",
+      "rules_or_formula": "RS-Ratio = normalized trend of relative strength (security/benchmark), centered on 100; RS-Momentum = rate of change of RS-Ratio, normalized around 100 and leading RS-Ratio. Quadrants (clockwise): Leading (Ratio>100, Mom>100) -> Weakening (Ratio>100, Mom<100) -> Lagging (<100,<100) -> Improving (<100,>100). Tail = recent N periods; weekly preferred over daily. Exact formula unpublished. Community approximation: RS = 100*P/Pbench; RS-Ratio = 100 + z-score of (RS / SMA(RS, n)) style smoothing; RS-Momentum = 100 + z-score of ROC(RS-Ratio). Buy candidates: entering Improving->Leading with long tail heading NE.",
+      "formula_status": "approximation",
+      "data_needed": "Daily/weekly closes of securities and benchmark",
+      "free_data_ok": true,
+      "evidence": "No published validation of quadrant rotation; underlying sector momentum has academic support (Moskowitz-Grinblatt 1999 industry momentum).",
+      "evidence_grade": "C",
+      "holding_period": "Weeks to months (sector/stock rotation)",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/chart-analysis/chart-types/relative-rotation-graphs-rrg-charts"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Point & Figure charting and signals",
+      "brand_or_source": "StockCharts.com (ChartCraft / Tom Dorsey tradition)",
+      "category": "pattern",
+      "rules_or_formula": "X columns = rising, O columns = falling; new column only after reversal of N boxes (standard 3-box). Box size: traditional table (e.g., $5.01-$20 -> $0.50; $20.01-$100 -> $1.00; higher bands larger), or percentage or ATR-based. Close-only or high/low method. Signals: Double Top Buy = X column exceeds prior X column high; Double Bottom Sell = O column breaks prior O low; Triple Top/Bottom = break of two prior equal columns; also catapults, spread triple tops, bullish/bearish signal reversals. Price objectives: vertical count (boxes in breakout column x box size x reversal, added to column low) and horizontal count (columns in congestion x box x reversal). Bullish Percent Index = % of stocks on P&F buy signal.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Long practitioner history (Dorsey); limited academic testing.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks to months",
+      "sources": [
+        "https://www.aaii.com/journal/article/online-point-and-figure-charting"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "DecisionPoint Trend Model",
+      "brand_or_source": "StockCharts.com (Carl Swenlin / Erin Swenlin)",
+      "category": "regime_tool",
+      "rules_or_formula": "Long-term trend: daily 50-EMA vs 200-EMA (weekly 17/43 EMA, monthly 6/10 EMA). Intermediate Trend Model: BUY when 20-EMA > 50-EMA; when 20 crosses below 50 -> NEUTRAL if 50>200, SELL if 50<200. Short-term: 5-EMA vs 20-EMA; 5 crosses below 20 -> Neutral if 20>50, Sell if 20<50. Price crossing EMAs or EMAs turning against trend makes trend 'neutral'. (DecisionPoint labels: Golden Cross 50>200, Silver Cross 20>50, Dark Cross 20<50, Death Cross 50<200.)",
+      "formula_status": "exact",
+      "data_needed": "Daily closes",
+      "free_data_ok": true,
+      "evidence": "Mechanical MA crossover trend model; generic MA trend-following has mixed evidence (Brock-Lakonishok-LeBaron 1992 positive pre-1990; weaker since).",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months (intermediate signal)",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/decisionpoint-trend-model"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Bollinger Band Squeeze",
+      "brand_or_source": "StockCharts ChartSchool (John Bollinger)",
+      "category": "strategy",
+      "rules_or_formula": "BB(20 SMA, 2 stdev). BandWidth = (Upper-Lower) [ChartSchool also normalizes by middle band]. Setup: BandWidth near low of its 6-month range (or <4% of price). Trigger: close above upper band (long) / below lower band (short), ideally through resistance/support. Direction bias from volume indicators: rising OBV / positive CMF / A-D line favors upside. Beware head-fake (initial band break that reverses). Stops/exits not specified (use Parabolic SAR/swing low).",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Practitioner backtests only.",
+      "evidence_grade": "C",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/bollinger-band-squeeze"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "CCI Correction",
+      "brand_or_source": "StockCharts ChartSchool (Donald Lambert's CCI)",
+      "category": "strategy",
+      "rules_or_formula": "Bias: weekly CCI(26) > +100 -> bullish bias (stays until < -100 -> bearish). Daily alternative for bias: CCI(100). Signal: in bullish bias, daily CCI(26) (or 20) dips below -100 then crosses back above 0 -> buy; in bearish bias, daily CCI rises above +100 then crosses back below 0 -> sell/short. Stops/targets left to trader.",
+      "formula_status": "exact",
+      "data_needed": "Daily/weekly OHLC",
+      "free_data_ok": true,
+      "evidence": "Practitioner illustration; no published stats.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/cci-correction"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "CVR3 VIX Market Timing",
+      "brand_or_source": "StockCharts ChartSchool (Larry Connors)",
+      "category": "strategy",
+      "rules_or_formula": "On VIX daily: BUY S&P when VIX low > its 10-day SMA AND VIX close >= 10% above 10-day SMA AND VIX close < open (all same day; optional 3-day rule window). SELL/short when VIX high < 10-day SMA AND close >= 10% below 10-day SMA AND close > open. Exit when VIX crosses back through prior day's 10-day SMA, or after 2-4 days.",
+      "formula_status": "exact",
+      "data_needed": "VIX daily OHLC (CBOE free) + SPY",
+      "free_data_ok": true,
+      "evidence": "Connors' published backtests (book 'Short Term Trading Strategies That Work'); VIX spike mean reversion broadly documented.",
+      "evidence_grade": "C",
+      "holding_period": "2-5 days",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/cvr3-vix-market-timing"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Faber's Sector Rotation",
+      "brand_or_source": "StockCharts ChartSchool (Mebane Faber)",
+      "category": "strategy",
+      "rules_or_formula": "Universe: 10 sectors (Faber used Fama-French 10 industries; ETFs as proxy). Monthly: rank by 3-month ROC, hold top 3 equal-weight (33% each). Trend filter: only long when S&P 500 is above its 10-month SMA (12-month alt) on monthly close; exit all when it closes below. Rebalance monthly, swapping sectors that leave top 3.",
+      "formula_status": "exact",
+      "data_needed": "Monthly closes of sector ETFs + SPX",
+      "free_data_ok": true,
+      "evidence": "Faber SSRN paper 'Relative Strength Strategies for Investing' (2010) backtest from 1920s; industry momentum (Moskowitz-Grinblatt 1999).",
+      "evidence_grade": "B",
+      "holding_period": "1+ months",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/fabers-sector-rotation-trading-strategy"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Gap Trading Strategies",
+      "brand_or_source": "StockCharts ChartSchool (Scott Andrews 'Understanding Gaps')",
+      "category": "strategy",
+      "rules_or_formula": "Gap types: Full Gap Up open>prior high; Full Gap Down open<prior low; Partial Up prior close<open<=prior high; Partial Down prior low<=open<prior close. After first hour (~10:30 ET): buy stop 2 ticks above first-hour high / sell stop 2 ticks below first-hour low; for Full Gap Down long, buy stop 2 ticks above prior day's low. Trailing stops 8% long / 4% short (5-6% for partial gaps). Filters: avg volume >=500k; Modified partial-gap method wants volume >=2x 5-day avg.",
+      "formula_status": "exact",
+      "data_needed": "Intraday first-hour bars + daily OHLCV",
+      "free_data_ok": false,
+      "evidence": "Book-level practitioner method; no independent stats.",
+      "evidence_grade": "D",
+      "holding_period": "Intraday to several days (trailing stop)",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/gap-trading-strategies"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Harmonic Patterns",
+      "brand_or_source": "StockCharts ChartSchool (Scott Carney / H.M. Gartley)",
+      "category": "pattern",
+      "rules_or_formula": "XABCD five-point patterns (Gartley, Bat, Butterfly, Crab, Shark, Cypher) defined by Fibonacci ratios of legs. ChartSchool Gartley example: Pattern Completion Zone at 0.786 XA, with BC extension 1.27-1.618 and AB=CD. Entry at D in PCZ; stop beyond D; targets D + 0.618-0.786*XA (zone 1) and D + 1.27-1.618*XA (zone 2). Full per-pattern ratio matrices are in Carney's books (not reproduced).",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLC + swing-point detector (zigzag)",
+      "free_data_ok": true,
+      "evidence": "No robust independent evidence.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/harmonic-patterns"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Hindenburg Omen",
+      "brand_or_source": "StockCharts ChartSchool (Jim Miekka)",
+      "category": "regime_tool",
+      "rules_or_formula": "All on same day (NYSE): (1) NYSE Composite higher than 50 trading days ago (or rising 50-day MA); (2) 52-week new highs and new lows each >= 2.8% of issues traded (classic versions also require new highs <= 2x new lows); (3) McClellan Oscillator < 0. Signal valid 30 trading days, active only while MCO negative; clusters more significant. ~20% hit rate, many false positives but catches most large declines (per ChartSchool).",
+      "formula_status": "approximation",
+      "data_needed": "NYSE breadth: advances/declines, new highs/lows (computable from full-universe daily OHLCV)",
+      "free_data_ok": true,
+      "evidence": "Mostly anecdotal; high false-positive rate.",
+      "evidence_grade": "D",
+      "holding_period": "Risk-off overlay 30 trading days",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/hindenburg-omen"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Ichimoku Cloud strategy",
+      "brand_or_source": "StockCharts ChartSchool (Goichi Hosoda)",
+      "category": "strategy",
+      "rules_or_formula": "Tenkan=(9H+9L)/2; Kijun=(26H+26L)/2; SpanA=(Tenkan+Kijun)/2 shifted +26; SpanB=(52H+52L)/2 shifted +26; Chikou=close shifted -26. Long: (1) price above the lower edge of cloud (bullish bias), (2) price dips below Kijun (correction), (3) price closes back above Tenkan (trigger). Short is mirror. Stop at low before the signal; trail with Parabolic SAR or 2xATR.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Practitioner only.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/ichimoku-cloud-trading-strategies"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "The 'Last' Stochastic Technique",
+      "brand_or_source": "StockCharts ChartSchool (George Lane variant)",
+      "category": "strategy",
+      "rules_or_formula": "Weekly Slow Stochastic 39-period (39,1 smoothing). Buy when %K crosses above 50 AND close > previous week's highest close; sell when %K crosses below 50 AND close < previous week's lowest close. Confirm with OBV direction.",
+      "formula_status": "exact",
+      "data_needed": "Weekly OHLCV",
+      "free_data_ok": true,
+      "evidence": "Illustrative examples only.",
+      "evidence_grade": "D",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/the-last-stochastic-technique"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "MACD Zero-Line Crosses With Swing Points",
+      "brand_or_source": "StockCharts ChartSchool",
+      "category": "strategy",
+      "rules_or_formula": "Trade MACD (default 12,26,9 assumed) zero-line crosses only when price confirms with a swing-structure break (higher high/higher low for longs; lower low/lower high for shorts); avoid congestion between S/R. Do not exit on opposite zero cross; use measured moves, S/R targets, and trail stop a few points below each new swing low.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Discretionary framework; no stats.",
+      "evidence_grade": "D",
+      "holding_period": "Weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/macd-zero-line-crosses-with-swing-points"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Moving Average Trading Strategies (ChartSchool)",
+      "brand_or_source": "StockCharts ChartSchool",
+      "category": "strategy",
+      "rules_or_formula": "Price/MA cross (long when price crosses above MA in direction of primary trend); MA crossovers (page cites 50/100-day SMA golden/death cross; 5-8-13 EMA for short-term traders); MA as dynamic S/R; MA ribbons such as Guppy Multiple MA (12 EMAs: commonly 3,5,8,10,12,15 short and 30,35,40,45,50,60 long) with ribbon width = trend strength.",
+      "formula_status": "description_only",
+      "data_needed": "Daily closes",
+      "free_data_ok": true,
+      "evidence": "MA trend rules: mixed academic evidence (Brock et al. 1992; Han-Yang-Zhou 2013 MA timing on volatility portfolios).",
+      "evidence_grade": "C",
+      "holding_period": "Days-months",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/moving-average-trading-strategies"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Moving Momentum",
+      "brand_or_source": "StockCharts ChartSchool (Arthur Hill)",
+      "category": "strategy",
+      "rules_or_formula": "Trend: 20-day SMA > 150-day SMA = long-only bias (below = short bias). Setup: Stochastic(14,3) drops below 20 (pullback) [above 80 for shorts]. Trigger: MACD(12,26,9) histogram turns positive (negative for shorts) after the stochastic setup. Stops at recent support/resistance.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Author examples; no published stats.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/moving-momentum"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Narrow Range Day NR7 (and NR4)",
+      "brand_or_source": "StockCharts ChartSchool (Toby Crabel)",
+      "category": "pattern",
+      "rules_or_formula": "NR7 = today's high-low range is the smallest of last 7 days (NR4 = of last 4). Buy stop above NR day high / sell stop below NR day low; long invalidated on move below NR low. Alternative stops: Parabolic SAR or 2xATR. Crabel-style exit at close of first day, or at resistance. Example filters: Aroon Up > Aroon Down, 5-day CCI low < -100 (pullback), 20-day avg volume > 100k, 60-day SMA price > $20.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Crabel (1990) 'Day Trading with Short Term Price Patterns and Opening Range Breakout' statistics on futures; whipsaw risk high.",
+      "evidence_grade": "C",
+      "holding_period": "1-3 days",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/narrow-range-day-nr7"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Percent Above 50-day SMA (breadth timing)",
+      "brand_or_source": "StockCharts ChartSchool",
+      "category": "regime_tool",
+      "rules_or_formula": "Series: $SPXA50R (% of S&P 500 above 50-day SMA). Tone: 150-day EMA of it > 52.5 = bullish until < 47.5 (hysteresis). Within bullish tone, 5-day EMA < 40 = pullback/oversold; confirm turn when it moves back above 50. Within bearish tone, 5-day EMA > 60 = bounce; confirm when it drops back below 50.",
+      "formula_status": "exact",
+      "data_needed": "Constituent daily closes (to compute breadth)",
+      "free_data_ok": true,
+      "evidence": "Practitioner examples.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks (market timing overlay)",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/percent-above-50-day-sma"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Percent B Money Flow",
+      "brand_or_source": "StockCharts ChartSchool (John Bollinger)",
+      "category": "strategy",
+      "rules_or_formula": "%B = (close-lowerBB)/(upperBB-lowerBB) with BB(20,2). Buy when %B > 0.80 AND MFI > 80 (trend-start confirmation); sell when %B < 0.20 AND MFI < 20. MFI: typical price*volume money flow ratio in RSI form (Bollinger often uses a 10-day MFI; ChartSchool default 14). Stops: Parabolic SAR. Filters suggested: MACD crossover confirmation; low ADX (<15) before signal.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "From Bollinger on Bollinger Bands; no independent stats.",
+      "evidence_grade": "D",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/percent-b-money-flow"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "The Pre-Holiday Effect",
+      "brand_or_source": "StockCharts ChartSchool (Yale Hirsch / Stock Trader's Almanac)",
+      "category": "strategy",
+      "rules_or_formula": "Buy equities 1-2 trading days before US market holidays (Presidents Day, Good Friday, Memorial Day, Independence Day, Labor Day, Election Day historically, Thanksgiving, Christmas, New Year's); sell just after the holiday. Shortened sessions (July 3, day after Thanksgiving) have thin liquidity.",
+      "formula_status": "exact",
+      "data_needed": "Daily closes + holiday calendar",
+      "free_data_ok": true,
+      "evidence": "Academic pre-holiday anomaly: Lakonishok & Smidt (1988), Ariel (1990); evidence weaker post-publication.",
+      "evidence_grade": "B",
+      "holding_period": "1-3 days",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/the-pre-holiday-effect"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "RSI(2) (Connors)",
+      "brand_or_source": "StockCharts ChartSchool (Larry Connors)",
+      "category": "strategy",
+      "rules_or_formula": "Trend filter: close > 200-day SMA for longs (below for shorts). Long when RSI(2) < 10 (more aggressive/better < 5); short when RSI(2) > 90 (better > 95). Exit long when close > 5-day SMA; exit short when close < 5-day SMA. Connors' tests found stops hurt; ChartSchool recommends traders define own stop. Variation: wait for RSI(2) to cross back above 50 before entering. Execute near close or next open.",
+      "formula_status": "exact",
+      "data_needed": "Daily closes",
+      "free_data_ok": true,
+      "evidence": "Connors & Alvarez published backtests; consistent with short-horizon reversal literature (Lehmann 1990, Jegadeesh 1990). Edge weaker in recent years per independent tests.",
+      "evidence_grade": "B",
+      "holding_period": "2-7 days",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/rsi-2"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Six-Month Cycle MACD",
+      "brand_or_source": "StockCharts ChartSchool (Sy Harding 'Seasonal Timing Strategy')",
+      "category": "strategy",
+      "rules_or_formula": "Bullish window Oct 16 - Apr 19; bearish window Apr 20 - Oct 15. Buy on Oct 16 if MACD already bullish, else on first MACD bullish turn after Oct 16. Sell on Apr 20 if MACD bearish, else on first bearish turn after. MACD 'bullish' = above signal line or above zero, whichever first (default 12,26,9 assumed). Weekend dates roll to next trading day.",
+      "formula_status": "exact",
+      "data_needed": "Daily index closes",
+      "free_data_ok": true,
+      "evidence": "Halloween / Sell-in-May effect documented by Bouman & Jacobsen (2002) across markets.",
+      "evidence_grade": "B",
+      "holding_period": "~6 months",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/six-month-cycle-macd"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Slope Performance Trend",
+      "brand_or_source": "StockCharts ChartSchool",
+      "category": "strategy",
+      "rules_or_formula": "Slope = linear-regression slope over lookback. Buy when 12-month slope of price > 0 AND 12-month slope of price relative (vs benchmark) > 0; sell when both < 0. Shorter alternatives: 13-week, 20-day slopes. Very few signals (long-term).",
+      "formula_status": "exact",
+      "data_needed": "Monthly/daily closes + benchmark",
+      "free_data_ok": true,
+      "evidence": "Related to time-series and relative momentum (Moskowitz-Ooi-Pedersen 2012).",
+      "evidence_grade": "C",
+      "holding_period": "Months",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/slope-performance-trend"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Stochastic Pop and Drop",
+      "brand_or_source": "StockCharts ChartSchool (Jake Bernstein, modified by Steckler/Hill)",
+      "category": "strategy",
+      "rules_or_formula": "Bias: 70-period Stochastic > 50 (long bias) / < 50 (short). Setup: ADX(14) < 20 (consolidation; < 15 better, < 10 for low-vol names). Pop: 14-day Stochastic surges above 80 on above-average volume (vs 250-day avg volume); prefer big surge (e.g., 35->85). Drop: 14-day Stochastic plunges below 20 with support break. Stop below consolidation support / recent low (above resistance for shorts); exit when 14-day Stochastic falls back below 50, or trail with Parabolic SAR.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Practitioner only.",
+      "evidence_grade": "D",
+      "holding_period": "Days-2 weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/stochastic-pop-and-drop"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Swing Charting",
+      "brand_or_source": "StockCharts ChartSchool",
+      "category": "indicator",
+      "rules_or_formula": "Plot only swings of at least a filter amount (e.g., 5%, 10%, 15% ZigZag) regardless of time; a new swing line is added when price penetrates the prior swing in the same direction. Last leg repaints until a full-filter reversal. Example rule: Donchian 4-week rule - buy when price exceeds highs of previous 4 full weeks, sell/short when below prior 4-week lows.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Donchian 4-week rule popularized by Turtle-style trend following; no recent stock-specific evidence.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/swing-charting"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Trend Quantification and Asset Allocation",
+      "brand_or_source": "StockCharts ChartSchool (Arthur Hill)",
+      "category": "regime_tool",
+      "rules_or_formula": "Smooth price with a 50-day EMA, then compute four PPO-style comparisons against longer EMAs (page cites 125/150/175/200-day; its table alternatively lists fixed 150-day vs variable 20/40/60/80-day). Allocation scales in 25% steps: 25% invested per positive PPO (100% when all 4 positive); reduce 25% per PPO turning negative; fully out when all negative.",
+      "formula_status": "approximation",
+      "data_needed": "Daily closes",
+      "free_data_ok": true,
+      "evidence": "Illustrative; no stats.",
+      "evidence_grade": "D",
+      "holding_period": "Months (scaling)",
+      "sources": [
+        "https://chartschool.stockcharts.com/table-of-contents/trading-strategies-and-models/trading-strategies/trend-quantification-and-asset-allocation"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Finviz Screener Signals (market-activity)",
+      "brand_or_source": "Finviz",
+      "category": "screen",
+      "rules_or_formula": "Top Gainers/Losers: highest % gain/loss today (top 200). New High/New Low: making 52-week high/low today (top 200). Most Volatile: widest high-low range today. Most Active: highest volume. Unusual Volume: highest relative-volume ratio today (top 200). Overbought/Oversold: extreme RSI(14) over ~2 weeks (top 100). Upgrades/Downgrades: analyst changes today. Earnings Before/After: reporting pre-open/after-close. Major News: highest news coverage (top 40). Swing use: New High + Unusual Volume = breakout candidates; Oversold + above SMA200 = pullback candidates.",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV (+ analyst/news feeds for some)",
+      "free_data_ok": true,
+      "evidence": "Screens, not tested signals. 52-week-high proximity has academic support (George & Hwang 2004).",
+      "evidence_grade": "C",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://finviz.com/help/screener.ashx"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Finviz Chart Pattern Signals",
+      "brand_or_source": "Finviz",
+      "category": "pattern",
+      "rules_or_formula": "Auto-detected on trendlines through local highs/lows: TL Resistance, TL Support, Horizontal S/R; Wedge Up (rising support + rising resistance, reversal), Wedge (rising support + falling resistance, continuation), Wedge Down (falling both, reversal); Triangle Ascending (rising support + flat resistance), Triangle Descending (flat support + falling resistance); Channel Up/Channel/Channel Down (parallel lines); Double/Multiple Top (short below support break, target = pattern height); Double/Multiple Bottom (buy above resistance break on volume, target = height); Head & Shoulders and Inverse. 'Chart Patterns' signal = top 100 stocks near strong patterns, sorted by pattern strength. Detection algorithm and strength metric unpublished.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLC + pivot/trendline fitting",
+      "free_data_ok": true,
+      "evidence": "Lo, Mamaysky & Wang (2000) found some kernel-detected patterns carry incremental information; Finviz detector itself untested.",
+      "evidence_grade": "C",
+      "holding_period": "Days-weeks",
+      "sources": [
+        "https://finviz.com/help/technical-analysis/charts-patterns.ashx",
+        "https://finviz.com/help/screener.ashx"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Finviz technical filters",
+      "brand_or_source": "Finviz",
+      "category": "screen",
+      "rules_or_formula": "Filters: price vs 20/50/200-day SMA (above/below/crossed), RSI(14) bands, Gap %, Change %, Change from Open, 20/50-day and 52-week high/low distance, Pattern, Candlestick, Beta, ATR, Volatility (week/month), Performance (1W..10Y), Relative Volume, Average Volume.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Tool.",
+      "evidence_grade": "none",
+      "holding_period": "n/a",
+      "sources": [
+        "https://finviz.com/help/screener.ashx"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "TC2000 Personal Criteria Formulas (PCF) - common swing scans",
+      "brand_or_source": "TC2000 (Worden)",
+      "category": "screen",
+      "rules_or_formula": "Syntax: C,O,H,L,V current bar; C1 = 1 bar ago; AVGC50 = 50-bar SMA of close; XAVGC20 = 20-bar EMA; AVGV50 = 50-bar avg volume; MAXH20/MINL20 = 20-bar highest high/lowest low. Booleans with AND/OR. Commonly shared swing scans (community, not official): near 52w high C >= 0.95*MAXH252; relative volume V/AVGV50 >= 1.5; ADR% proxy 100*(AVGH20/AVGL20-1); trend C>XAVGC18 with XAVGC50>XAVGC100 and AVGV60>250000 ('SlingShot'); pullback scans using distance from MAXH20/MINL20; inside day H<H1 AND L>L1.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Tooling; scans themselves untested.",
+      "evidence_grade": "none",
+      "holding_period": "Depends on scan",
+      "sources": [
+        "https://help.tc2000.com/m/69445",
+        "https://www.prorealcode.com/topic/conversion-of-pullback-scan-from-tc2000-to-prt10-3/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Barchart Opinion (13-indicator composite)",
+      "brand_or_source": "Barchart",
+      "category": "rating",
+      "rules_or_formula": "Each of 13 indicators gives Buy=+1, Hold=0, Sell=-1 by common interpretation. Groups (legacy/classic list): Short term (~20 days): 7-Day Average Directional Indicator, 10-8 Day Moving Average Hilo Channel, 20-Day MA vs Price, 20-50 Day MACD Oscillator, 20-Day Bollinger Bands; Medium (~50 days): 40-Day CCI, 50-Day Average Directional Indicator, 50-Day Parabolic Time/Price, 20-100 Day MACD Oscillator, 50-Day MA vs Price; Long (100-200 days): 60-Day CCI, 100-Day MA vs Price, 50-100 Day MACD Oscillator. Group signal = sum/number of studies; overall = average of all 13, scaled by 1.04 so it displays in 8% steps (8%,16%,...,96%,100%). Strength (vs its own 5-yr history): Maximum/Strong/Average/Weak/Minimum; Direction: Strongest/Strengthening/Average/Weakening/Weakest. Updated every 20 min (delayed). A newer version may weight MA-crossover studies; verify on site.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Barchart shows its own hypothetical 5-year backtests per study; no independent validation.",
+      "evidence_grade": "C",
+      "holding_period": "Short-term group: days-weeks; long: months",
+      "sources": [
+        "https://www.barchart.com/trader/help/technical_opinion/opinions.php",
+        "https://www.barchart.com/stocks/quotes/F/opinion-legacy",
+        "https://www.barchart.com/au/stocks/signals/new-recommendations/10-8-Day-Moving-Average-Hilo/Buy"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Barchart Trend Seeker",
+      "brand_or_source": "Barchart",
+      "category": "indicator",
+      "rules_or_formula": "Proprietary trend system combining wave theory, momentum and volatility; outputs Buy (green dot below price), Sell (red dot above), or Neutral (both); after a trend ends it stays neutral at least one day. Exact formula unpublished.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLC",
+      "free_data_ok": true,
+      "evidence": "Vendor claims only.",
+      "evidence_grade": "none",
+      "holding_period": "Weeks",
+      "sources": [
+        "https://www.barchart.com/story/news/36105528/find-stocks-to-trade-before-the-rest-of-the-market-by-adding-this-trend-indicator-to-your-charts"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "IBD Relative Strength (RS) Rating",
+      "brand_or_source": "Investor's Business Daily / MarketSurge / MarketSmith (O'Neil)",
+      "category": "rating",
+      "rules_or_formula": "Published: 12-month price performance vs all stocks, extra weight on latest 3 months, percentile 1-99. Widely used reconstruction: raw = 2*(P/P63) + P/P126 + P/P189 + P/P252 (i.e., 40/20/20/20 quarter weights), then percentile-rank across all US stocks -> 1-99. open8585 reports this matches IBD within ~1 point. Usage: buy candidates RS >= 80 (CAN SLIM 'L'); RS line (price/S&P 500) at new high before price is a leading clue.",
+      "formula_status": "approximation",
+      "data_needed": "Daily closes of whole universe",
+      "free_data_ok": true,
+      "evidence": "Cross-sectional 3-12 month momentum: Jegadeesh & Titman (1993) and many replications.",
+      "evidence_grade": "B",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://github.com/groverburger/open8585",
+        "https://www.tradingview.com/script/lsLzfQqs-RS-Rating-Multi-Timeframe"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD EPS Rating",
+      "brand_or_source": "Investor's Business Daily",
+      "category": "rating",
+      "rules_or_formula": "Published: growth and stability of EPS over last 3 years with extra weight on the most recent quarters, percentile 1-99. Open reconstruction (open8585): combined = 0.6*pct(recent quarterly YoY growth block) + 0.4*pct(multi-year growth) - 0.25*(pct(earnings instability)-0.5); loss makers get minimum; ~8-point mean error.",
+      "formula_status": "approximation",
+      "data_needed": "Quarterly EPS history (SEC XBRL)",
+      "free_data_ok": true,
+      "evidence": "Earnings momentum / PEAD literature (Bernard & Thomas 1989).",
+      "evidence_grade": "B",
+      "holding_period": "Months",
+      "sources": [
+        "https://github.com/groverburger/open8585",
+        "https://quizlet.com/83588114/the-ibd-smartselect-corporate-ratings-flash-cards/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD Composite Rating",
+      "brand_or_source": "Investor's Business Daily",
+      "category": "rating",
+      "rules_or_formula": "Combines EPS Rating, RS Rating, SMR Rating, Accumulation/Distribution Rating, industry group relative strength and the stock's % off its 52-week high into a 1-99 percentile (EPS and RS get extra weight per IBD descriptions). Exact weights unpublished. IBD guidance: favor >= 95 (or >= 90).",
+      "formula_status": "approximation",
+      "data_needed": "Price, volume, EPS, sales, margins, ROE, industry classification",
+      "free_data_ok": true,
+      "evidence": "Built from momentum + earnings factors with academic support; composite itself unvalidated publicly.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://finance.yahoo.com/news/composite-rating-combines-many-gauges.html",
+        "https://quizlet.com/83588114/the-ibd-smartselect-corporate-ratings-flash-cards/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD SMR Rating",
+      "brand_or_source": "Investor's Business Daily",
+      "category": "rating",
+      "rules_or_formula": "Sales growth (recent quarters), pre-tax and after-tax profit margins, and return on equity, graded A..E vs all stocks; A = top 20%, E = bottom 20% (quintiles). Exact weights unpublished.",
+      "formula_status": "approximation",
+      "data_needed": "Quarterly sales, margins, ROE (SEC XBRL)",
+      "free_data_ok": true,
+      "evidence": "Profitability/quality factor evidence (Novy-Marx 2013).",
+      "evidence_grade": "C",
+      "holding_period": "Months",
+      "sources": [
+        "https://quizlet.com/83588114/the-ibd-smartselect-corporate-ratings-flash-cards/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD Accumulation/Distribution Rating",
+      "brand_or_source": "Investor's Business Daily",
+      "category": "rating",
+      "rules_or_formula": "Daily price and volume action over last 13 weeks graded A (heavy institutional buying), B moderate buying, C neutral, D moderate selling, E heavy selling (A+..E). Open approximation: score = sum(clip(daily return, +/-10%) * (volume/avg volume) * decay) / sum(decay), exponential decay ~1-month half-life, over 65 days, then grade by percentile.",
+      "formula_status": "approximation",
+      "data_needed": "Daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Volume-weighted flow measures have weak-moderate evidence; reconstruction 0.67 rank correlation to IBD.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks",
+      "sources": [
+        "https://github.com/groverburger/open8585",
+        "https://finance.yahoo.com/news/accumulation-distribution-rating-tells-pros-234100013.html"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD 50 (index/list construction)",
+      "brand_or_source": "Investor's Business Daily (IBD 50 Index, FFTY ETF)",
+      "category": "screen",
+      "rules_or_formula": "Weekly computer-generated list of top 50 growth stocks from 7,000+ names. Baseline eligibility: minimum price, minimum volume, minimum upward price movement, minimum moving-average conditions. Removes extended names: price >= 6% beyond 10-week MA, >= 7 up days in last 14, >= 6 up weeks in last 8, or >= 3 consecutive up weeks. Remaining ranked by a composite of 11 fundamental + technical metrics (CAN SLIM). Top 50 tier-weighted (more weight to higher ranks); reconstituted weekly. Exact thresholds/weights not retrieved.",
+      "formula_status": "approximation",
+      "data_needed": "Price/volume + EPS/sales fundamentals",
+      "free_data_ok": true,
+      "evidence": "FFTY live record is mixed (volatile, underperformed S&P over long stretches).",
+      "evidence_grade": "C",
+      "holding_period": "Weekly rebalance",
+      "sources": [
+        "https://www.innovatoretfs.com/pdf/FFTY_Summary_Prospectus.pdf",
+        "https://etfdb.com/index/ibd-50-index/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "MarketSurge/MarketSmith Pattern Recognition",
+      "brand_or_source": "MarketSurge / MarketSmith (O'Neil)",
+      "category": "pattern",
+      "rules_or_formula": "Detects 7 base types on daily and weekly charts: Cup and Cup-with-Handle, Saucer and Saucer-with-Handle, Double Bottom, Flat Base, Ascending Base, Consolidation, IPO Base. Pivot: handle high (cup/saucer w/ handle); middle peak of the W (double bottom); left-side high (cup, flat base, consolidation, IPO base). Zones vs pivot: Buy Zone 0-5% above pivot, Profit-Taking Zone 20-25% above, Loss-Cutting Zone 5-8% below.",
+      "formula_status": "approximation",
+      "data_needed": "Daily/weekly OHLCV",
+      "free_data_ok": true,
+      "evidence": "O'Neil's historical model-book studies; no peer-reviewed validation.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://levelup.gitconnected.com/trading-cup-and-handles-with-marketsmith-pattern-recognition-3b869d0cfe2a",
+        "https://www.scribd.com/document/781709581/Using-MarketSurge"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD base rules (cup-with-handle, flat base, double bottom, ascending base)",
+      "brand_or_source": "IBD / William O'Neil",
+      "category": "pattern",
+      "rules_or_formula": "Cup-with-handle: >= ~7 weeks, cup depth ~12-33% (deeper in bear markets), handle in upper half of base and within ~15% of old high, handle drifts lower on light volume; buy breakout above handle high on volume >= ~40-50% above average. Flat base: >= 5 weeks, sideways range <= ~15%, often after prior base. Double bottom: >= ~7 weeks, W shape where second low undercuts first; pivot = middle peak. Ascending base: three pullbacks of ~10-20% each with higher lows (~9-16 weeks).",
+      "formula_status": "approximation",
+      "data_needed": "Daily/weekly OHLCV",
+      "free_data_ok": true,
+      "evidence": "Practitioner (O'Neil 'How to Make Money in Stocks').",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months (sell 20-25% gains, cut at 7-8%)",
+      "sources": [
+        "https://www.luxalgo.com/library/concept/cup-with-handle-base.md",
+        "https://www.luxalgo.com/library/concept/ascending-base.md",
+        "https://www.luxalgo.com/library/concept/double-bottom-base.md"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD Distribution Days and Follow-Through Day (market regime)",
+      "brand_or_source": "IBD 'The Big Picture' / O'Neil",
+      "category": "regime_tool",
+      "rules_or_formula": "Distribution day: major index falls >= 0.2% on higher volume than prior day; cluster of ~4-6 within ~25 sessions signals a topping market (count expires after 25 sessions or 5%+ index rally). Follow-through day: during a rally attempt (Day 1 = first up close after a low), on day 4-10 an index gains >= ~1.2% (threshold varied historically, 1%-1.7%) on higher volume than prior day -> confirmed uptrend; undercut of rally low resets.",
+      "formula_status": "approximation",
+      "data_needed": "Index daily OHLCV",
+      "free_data_ok": true,
+      "evidence": "Anecdotal/practitioner; IBD claims every bull market began with an FTD but many FTDs fail.",
+      "evidence_grade": "D",
+      "holding_period": "Regime overlay",
+      "sources": [
+        "https://www.tradingview.com/script/mrsKTQdQ-Distribution-Follow-Through-Day-Marker",
+        "https://discussion.fool.com/t/ot-ibd-follow-thru-day-again/36935"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "IBD Leaderboard",
+      "brand_or_source": "Investor's Business Daily",
+      "category": "other",
+      "rules_or_formula": "Curated (human-selected) list of leading growth stocks with annotated buy points, add-on points and sell rules; not a mechanical screen.",
+      "formula_status": "description_only",
+      "data_needed": "n/a",
+      "free_data_ok": false,
+      "evidence": "Editorial.",
+      "evidence_grade": "none",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://www.williamoneil.com/proprietary-ratings-and-rankings/"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "CAN SLIM (IBD core method)",
+      "brand_or_source": "William O'Neil / IBD",
+      "category": "strategy",
+      "rules_or_formula": "C: current quarterly EPS up strongly (O'Neil: >= ~25% YoY); A: annual EPS growth >= ~25% over 3 years, ROE >= ~17%; N: new product/management/new high; S: supply-demand (volume on breakout); L: leader, RS Rating >= 80; I: increasing institutional sponsorship; M: market in confirmed uptrend (FTD). Buy at pivot of a proper base within 5%; sell at 7-8% loss; take most gains at 20-25%.",
+      "formula_status": "approximation",
+      "data_needed": "Price/volume + quarterly EPS, sales, ROE, institutional holdings (13F)",
+      "free_data_ok": true,
+      "evidence": "AAII screen tracking showed strong historical returns for CAN SLIM screens; academic support for its momentum and earnings components.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://quizlet.com/83588114/the-ibd-smartselect-corporate-ratings-flash-cards/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Deepvue ratings and preset screens",
+      "brand_or_source": "Deepvue",
+      "category": "screen",
+      "rules_or_formula": "Proprietary 1-99 ratings (composite growth, technical quality, momentum; RS and EPS ratings) and 1,150+ screener data points with ANY/ALL logic; 80+ trader presets incl. Mark Minervini Trend Criteria, Qullamaggie screens, VCP, High Volume Edge, Oliver Kell Strength on Down Day; live industry-group rankings. Formulas unpublished.",
+      "formula_status": "description_only",
+      "data_needed": "Price/volume + fundamentals",
+      "free_data_ok": true,
+      "evidence": "Vendor tool.",
+      "evidence_grade": "none",
+      "holding_period": "Days-months",
+      "sources": [
+        "https://deepvue.com/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Minervini Trend Template (Deepvue 'Trend Criteria' preset)",
+      "brand_or_source": "Mark Minervini (via Deepvue/TradingView presets)",
+      "category": "screen",
+      "rules_or_formula": "All must hold: (1) price > 150-day and 200-day SMA; (2) 150 SMA > 200 SMA; (3) 200 SMA trending up >= 1 month (prefer 4-5 months); (4) 50 SMA > 150 and 200 SMA; (5) price > 50 SMA; (6) price >= 30% above 52-week low; (7) price within 25% of 52-week high; (8) RS rating >= 70 (prefer 80-90s).",
+      "formula_status": "exact",
+      "data_needed": "Daily OHLCV (universe for RS)",
+      "free_data_ok": true,
+      "evidence": "Author track record (US Investing Championship); components map to momentum and 52-week-high effects.",
+      "evidence_grade": "C",
+      "holding_period": "Weeks-months",
+      "sources": [
+        "https://www.tradingview.com/scripts/trend-template/",
+        "https://deepvue.com/"
+      ],
+      "confidence": "high"
+    },
+    {
+      "name": "Zacks Rank",
+      "brand_or_source": "Zacks Investment Research",
+      "category": "rating",
+      "rules_or_formula": "Four earnings-estimate-revision factors, recalculated nightly: Agreement (share of analysts revising in the same direction), Magnitude (size of recent change in current and next FY consensus), Upside (gap between Zacks 'Most Accurate Estimate' and consensus), Surprise (last few quarters' EPS surprises). Combined score ranks ~4,400 stocks: #1 Strong Buy top 5%, #2 Buy next 15%, #3 Hold middle 60%, #4 Sell next 15%, #5 Strong Sell bottom 5%. Intended horizon 1-3 months. Exact weights unpublished.",
+      "formula_status": "approximation",
+      "data_needed": "Analyst EPS estimate history and surprises",
+      "free_data_ok": false,
+      "evidence": "Estimate-revision drift documented (Stickel 1991; Chan, Jegadeesh & Lakonishok 1996). Zacks claims #1 avg ~+24-25%/yr since 1988 (vendor).",
+      "evidence_grade": "B",
+      "holding_period": "1-3 months",
+      "sources": [
+        "https://www.nasdaq.com/articles/zacks-rank-explained-how-find-strong-buy-computer-and-technology-stocks",
+        "https://www.nasdaq.com/articles/how-use-zacks-rank-pick-stocks-2017-08-22"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Zacks Style Scores (Value, Growth, Momentum, VGM)",
+      "brand_or_source": "Zacks Investment Research",
+      "category": "rating",
+      "rules_or_formula": "Each stock graded A-F per style vs peers. Momentum Score uses factors such as 1-week price change and monthly % change in earnings estimates; VGM = weighted combination of the three styles. Zacks suggests pairing Rank #1/#2 with Style Score A/B. Full metric lists/weights not retrieved (zacks.com blocked).",
+      "formula_status": "description_only",
+      "data_needed": "Price + estimates + fundamentals",
+      "free_data_ok": false,
+      "evidence": "Vendor claims.",
+      "evidence_grade": "C",
+      "holding_period": "1-3 months",
+      "sources": [
+        "https://www.zacks.com/stock/news/2146002/here-s-why-guess-ges-is-a-strong-momentum-stock"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "Seeking Alpha Quant Rating and Factor Grades",
+      "brand_or_source": "Seeking Alpha",
+      "category": "rating",
+      "rules_or_formula": "100+ metrics compared within sector; five factor grades A+..F: Value, Growth, Profitability, Momentum, EPS Revisions. Overall Quant score 1.0 (Strong Sell)..5.0 (Strong Buy), not a simple average - weights favor most predictive metrics. Hard caps: D+ or worse in Growth, Momentum or EPS Revisions, or D- or worse in Value/Profitability -> cannot rate above Hold. Updated daily pre-open; ~5,600 covered stocks with sell-side coverage. Commonly cited cutoffs (unverified): Strong Buy >= 4.5, Buy 3.5-4.49, Hold 2.5-3.49, Sell 1.5-2.49, Strong Sell < 1.5.",
+      "formula_status": "approximation",
+      "data_needed": "Fundamentals, analyst revisions, price",
+      "free_data_ok": false,
+      "evidence": "Vendor-reported performance of Strong Buy list; multifactor composite consistent with academic factors.",
+      "evidence_grade": "C",
+      "holding_period": "Months",
+      "sources": [
+        "https://help.seekingalpha.com/premium/quant-ratings-and-factor-grades-faq",
+        "https://help.seekingalpha.com/migration/premium/what-are-quant-ratings-and-how-do-i-use-them"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Trade Ideas Holly AI",
+      "brand_or_source": "Trade Ideas",
+      "category": "strategy",
+      "rules_or_formula": "Nightly backtests 60+ strategy algorithms across ~8,000 stocks, iteratively removing parameter ranges (price, volume, etc.) that hurt results, then selects the strategies with highest statistical edge for next session given market conditions. Segments: Holly Grail (original), Holly 2.0, Holly Neo (news-driven high-volume). 5-25 trades/day with entry, stop, target; intraday only (no overnight). Example families: 5 Day Bounce (oversold reversal <$20), Alpha Predators (momentum pullback), Bon Shorty (breakdown short), Breakout, Mighty Mouse (<$5 resistance cross), Trend Play (MA ribbon).",
+      "formula_status": "description_only",
+      "data_needed": "Intraday data",
+      "free_data_ok": false,
+      "evidence": "Vendor-published stats only.",
+      "evidence_grade": "C",
+      "holding_period": "Intraday (not swing)",
+      "sources": [
+        "https://www.trade-ideas.com/hollyguide/print.html"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Trade Ideas real-time alerts/scans",
+      "brand_or_source": "Trade Ideas",
+      "category": "screen",
+      "rules_or_formula": "Streaming alert types (e.g., new highs/lows, running up/down, crossed resistance/support, unusual volume, consolidation breakouts) combined with filters into scans. Exact alert definitions not retrieved in this pass.",
+      "formula_status": "description_only",
+      "data_needed": "Intraday data",
+      "free_data_ok": false,
+      "evidence": "None.",
+      "evidence_grade": "none",
+      "holding_period": "Intraday",
+      "sources": [
+        "https://trade-ideas.com/compare"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "Market Chameleon Earnings Implied Move vs Historical Reaction",
+      "brand_or_source": "Market Chameleon",
+      "category": "risk_tool",
+      "rules_or_formula": "Implied earnings move ~ at-the-money straddle price / stock price for the expiry spanning earnings; compared with the stock's historical actual post-earnings moves (avg absolute % move over past N reports) to judge whether options over/under-price the event. Swing use: size or avoid holding through earnings; historical earnings reaction stats computable from daily OHLCV.",
+      "formula_status": "approximation",
+      "data_needed": "Option chains (implied) + daily OHLCV (realized)",
+      "free_data_ok": false,
+      "evidence": "Options tend to overprice earnings moves on average (variance risk premium literature, e.g., Dubinsky et al. 2019).",
+      "evidence_grade": "B",
+      "holding_period": "Event (1-3 days)",
+      "sources": [
+        "https://marketchameleon.com/Instructional-Stock-and-Options-Trading-Videos/561/Earnings-Implied-Moves",
+        "https://www.interactivebrokers.com/campus/traders-insight/securities/options/do-options-traders-tend-to-underestimate-nflx-earnings-moves-a-market-chameleon-analysis/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Market Chameleon screeners (gaps, unusual volume, IV percentile)",
+      "brand_or_source": "Market Chameleon",
+      "category": "screen",
+      "rules_or_formula": "Scanners for price gaps, unusual stock/option volume, pre-market movers and implied-volatility percentile/rank. Definitions not retrieved.",
+      "formula_status": "description_only",
+      "data_needed": "Daily OHLCV + options",
+      "free_data_ok": false,
+      "evidence": "Tool.",
+      "evidence_grade": "none",
+      "holding_period": "n/a",
+      "sources": [
+        "https://marketchameleon.com/Instructional-Stock-and-Options-Trading-Videos/561/Earnings-Implied-Moves"
+      ],
+      "confidence": "low"
+    },
+    {
+      "name": "Stock Rover Ratings and Scores",
+      "brand_or_source": "Stock Rover",
+      "category": "rating",
+      "rules_or_formula": "Ratings: Growth, Valuation, Efficiency, Financial Strength, Dividends, Momentum - each metric converted to industry-group percentile, then weighted average (key metrics weighted higher); Momentum compared vs all stocks. Scores 0-100: Valuation, Growth (5-yr revenue/net income history + forward EBITDA/sales/EPS growth), Quality (ROIC, net and gross margin, interest coverage, D/E), Sentiment (short interest ratio, multi-period returns within last year, price vs 52-week high, days since 52-week high, MACD signals).",
+      "formula_status": "approximation",
+      "data_needed": "Fundamentals + price + short interest (FINRA)",
+      "free_data_ok": true,
+      "evidence": "Vendor tool; no published validation.",
+      "evidence_grade": "none",
+      "holding_period": "Months (Sentiment/Momentum shorter)",
+      "sources": [
+        "https://www.stockrover.com/help/how-stocks-are-rated",
+        "https://www.stockrover.com/metrics/stock-rover-ratings/"
+      ],
+      "confidence": "medium"
+    },
+    {
+      "name": "Koyfin screener",
+      "brand_or_source": "Koyfin",
+      "category": "screen",
+      "rules_or_formula": "Global screener with thousands of filter criteria (fundamentals, valuation, growth, estimates, performance, technicals); no proprietary swing rating. Low direct swing relevance; useful for fundamental filters.",
+      "formula_status": "description_only",
+      "data_needed": "Fundamentals + price",
+      "free_data_ok": true,
+      "evidence": "Tool.",
+      "evidence_grade": "none",
+      "holding_period": "n/a",
+      "sources": [
+        "https://www.koyfin.com/blog/find-best-stocks-with-screener/"
+      ],
+      "confidence": "medium"
+    }
+  ]
+}

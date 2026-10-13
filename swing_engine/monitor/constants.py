@@ -94,7 +94,7 @@ FILING_FORM_SEVERITY: dict[str, str] = {
 DILUTION_FORM_PREFIXES: tuple[str, ...] = ("S-1", "S-3", "F-1", "F-3", "424B")
 
 # ---- Form 4 ----------------------------------------------------------------------------------------------
-FORM4_BUY_CODES: frozenset[str] = frozenset({"P", "A"})
+FORM4_BUY_CODES: frozenset[str] = frozenset({"P"})  # P = open-market purchase; A = grant/award, not a buy
 INSIDER_CLUSTER_MIN = 3
 INSIDER_CLUSTER_WINDOW_DAYS = 30
 INSIDER_CLUSTER_IDENTICAL_REJECT_PCT = 80.0  # reject clusters with >= 80% identical date+price
