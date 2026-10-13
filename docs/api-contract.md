@@ -107,7 +107,7 @@
 - `ops.nightly.run_nightly(settings, secrets, as_of, provider, equity, dry_run, *, store, broker, execute=None, ...)` and
   `run_cycle(settings, secrets, as_of, broker, dry_run, *, equity=None, store=None)`; orders leave only through the execute step,
   which holds entries when the review step failed or a signal was not reviewed (`execution.require_review_approval`).
-  Steps (`STEP_NAMES`): ingest, float (skipped on dry runs and the sample provider), features (screened universe + index ETFs +
+  Steps (`STEP_NAMES`; `reconcile` sits between journal and weekly: `ops.reconcile.reconcile_fills` writes an `exit` receipt per stop / target leg or close that filled at the broker, read-only): ingest, float (skipped on dry runs and the sample provider), features (screened universe + index ETFs +
   held names; breadth to the `breadth` table), scan (playbook-routed; state saved to `runs/regime/<date>.json`; a playbook
   error fails the scan), rank, size (`risk_per_trade_pct x multiplier`), review, shadow (`research.shadow` record + grade),
   positions, execute, journal. Helpers: `compute_regime`, `route_strategies`, `screened_breadth`, `regime_name`,

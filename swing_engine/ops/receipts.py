@@ -113,6 +113,22 @@ def _jsonable(obj: Any) -> Any:
     return str(getattr(obj, "value", obj))
 
 
+def event_id(kind: str, strategy: str, symbol: str, step: str, key: str, lane: str = LANE_SWING) -> str:
+    """The deterministic id of the event with this natural key (a fire's key is its client order id)."""
+    return uuid.uuid5(ID_NAMESPACE, "|".join([kind, lane, strategy, symbol, step, key])).hex
+
+
+def cost_note(cost: float | None, bps: float | None) -> str:
+    """Where a net R's cost came from (shared by outcome and exit-fill receipts)."""
+    from swing_engine.research.cards import NET_SLIPPAGE_BPS_PER_SIDE
+
+    if cost is None:
+        return "gross only: no cost model for this row (short side, or the stop is not below the entry)"
+    if bps is None:
+        return f"default {NET_SLIPPAGE_BPS_PER_SIDE:g} bps per side (no per-signal cost data)"
+    return "per-signal cost_bps (research.costs)"
+
+
 def make_event(
     kind: str, step: str, reason: str, as_of: date, strategy: str | None = "", symbol: str | None = "",
     payload: Mapping[str, Any] | None = None, *, key: str | None = None, engine_sig: str, source: str = SOURCE_LIVE,
@@ -121,9 +137,8 @@ def make_event(
     """One ``events`` row. ``key`` completes the natural key (default: ``as_of``); pass the client order id for
     events that happen once per order."""
     strategy, symbol = strategy or "", symbol or ""
-    natural = "|".join([kind, lane, strategy, symbol, step, key or as_of.isoformat()])
     return {
-        "event_id": uuid.uuid5(ID_NAMESPACE, natural).hex, "ts": pd.Timestamp(datetime.now(UTC)), "as_of": as_of,
+        "event_id": event_id(kind, strategy, symbol, step, key or as_of.isoformat(), lane), "ts": pd.Timestamp(datetime.now(UTC)), "as_of": as_of,
         "kind": kind, "lane": lane, "strategy": strategy, "symbol": symbol, "step": step, "reason": str(reason),
         "payload": json.dumps(_jsonable(payload or {}), sort_keys=True), "engine_sig": engine_sig, "source": source,
         "run_id": run_id,
@@ -273,7 +288,7 @@ def outcome_events(frame: pd.DataFrame, **st: str) -> list[dict[str, Any]]:
     """One outcome event per final horizon of each shadow-ledger row in ``frame`` (``research.shadow`` columns,
     optionally ``cost_bps``). ``gross_r`` is the ledger's R (per filled risk); ``net_r`` is the planned-risk R
     (research.cards.planned_r) minus research.cards.cost_r, or None with a ``cost_note`` when no cost applies."""
-    from swing_engine.research.cards import NET_SLIPPAGE_BPS_PER_SIDE, cost_r, planned_r
+    from swing_engine.research.cards import cost_r, planned_r
     from swing_engine.research.shadow import FINAL_HITS
 
     if frame is None or frame.empty:
@@ -288,12 +303,7 @@ def outcome_events(frame: pd.DataFrame, **st: str) -> list[dict[str, Any]]:
         if signal_day is None:
             continue
         cost_i, bps = _num(cost.iloc[i]), _num(rec.get("cost_bps"))
-        if cost_i is None:
-            note = "gross only: no cost model for this row (short side, or the stop is not below the entry)"
-        elif bps is None:
-            note = f"default {NET_SLIPPAGE_BPS_PER_SIDE:g} bps per side (no per-signal cost data)"
-        else:
-            note = "per-signal cost_bps (research.costs)"
+        note = cost_note(cost_i, bps)
         for h in horizons:
             hit = rec.get(f"hit_{h}d")
             if hit not in FINAL_HITS:

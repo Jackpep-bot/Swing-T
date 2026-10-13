@@ -2386,6 +2386,30 @@ def receipts_backfill(ctx: typer.Context) -> None:
     _print_mapping(f"Receipts backfill ({len(orders)} ledger orders from {ledger_path})", counts)
 
 
+@receipts_app.command("reconcile")
+def receipts_reconcile(
+    ctx: typer.Context,
+    since: Annotated[str | None, typer.Option("--since", help="YYYY-MM-DD: fills on or after this day (default 30 days back)")] = None,
+    broker: Annotated[str | None, typer.Option("--broker", help="default execution.broker")] = None,
+) -> None:
+    """Read filled orders from the broker (read-only) and write one exit event per filled stop / target leg or
+    close. Places, replaces and cancels nothing. Safe to repeat: event ids are the broker's order ids."""
+    settings = _state(ctx).settings
+    broker_name = broker or settings.execution.broker
+    if not broker_name:
+        _fail("no broker: pass --broker or set execution.broker in settings.yaml", EXIT_USAGE)
+    b = _open_execution_broker(broker_name, settings, load_secrets())
+    if not hasattr(b, "closed_orders"):
+        _fail(f"broker {broker_name!r} does not list closed orders", EXIT_USAGE)
+    rec = importlib.import_module("swing_engine.ops.reconcile")
+    store = _open_store(settings)
+    try:
+        counts = rec.reconcile_fills(store, settings, b, rec.ledger_rows(settings), _parse_date(since) if since else None)
+    finally:
+        store.close()
+    _print_mapping(f"Receipts reconcile via {broker_name}", counts)
+
+
 @receipts_app.command("show")
 def receipts_show(
     ctx: typer.Context,

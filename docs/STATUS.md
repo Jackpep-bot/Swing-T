@@ -77,13 +77,29 @@ Plan P1 (intraday lane) first pass is DONE:
 - Pre-registered docs/preregistration/2026-10-13-intraday-chains.md, run once by `research/intraday_chains.py`:
   all 3 cards FAIL net of costs (results file beside it). Gross R is about zero; costs decide it. 6 trials logged.
 
-Open items:
+Also done 2026-10-13: zones drawn as filled boxes (app.js series primitive); broker stop/target fills logged as
+`exit` receipts (`ops/reconcile.py`, nightly `reconcile` step, `swing receipts reconcile --since DATE`; 2 target fills found).
+
+No jobs are running. Mac is on power (owner, 10:21 ET). Dashboard preview may be up on port 8765.
+
+Queue for the next session, in order (owner 2026-10-13: "complete all workflows, every facet"; 44 GB budget, max two
+long-window replays at once; pre-register before any new replay; commit and push each piece):
+1. Merge residual_momentum's v2c-resmom 2024-26 re-replay (store replay_p3) into the cards and leaderboard; its first
+   2024-26 result was invalid (warm-up too short). Then regrade batch 3 results doc if the verdict changes.
+2. Duplicate rows under renamed tickers (BK/BNY, ERJ/EMBJ): dedupe in the universe, re-check affected board rows.
+3. SPY-relative grading as the default yardstick on the leaderboard (alpha, not absolute R).
+4. Fetch card branches `claude/batch2-cards` / `claude/batch3-cards` for any candidates not yet replayed; pre-register
+   the next batch, run with `research.prereg_run`.
+5. Intraday lane, round 2 (new pre-registration, new trials; never retune the three failed cards on the same windows):
+   the first run showed gross R about zero and BTC costs near 1.9R per trade, and the full chains under 200 trades.
+   Check `intraday_chains.py` and the dashboard use the same day clock for PDH/PDL. Add fires/refusals from
+   `data/research/intraday_chains/*.parquet` as "trades / setups seen" layers on the intraday chart.
+6. Receipts not yet hooked: in-strategy filters (min_stop), `swing paper --from-intents`; outcome events do not link
+   to their fire; backfilled refusals have step `unknown` (runs/nightly JSON has the sizer reasons).
+7. Dashboard polish: collapse a zone's lifecycle events into one box; filter box on Vocabulary; deep link to an
+   intraday symbol/day; old daily markers duplicate the new layers.
+8. Clean up lane store copies in data/live by hand (ask before deleting).
 - Plan P2 (always-on host, intraday paper executor) WAITS for the owner's decision. Do not start it.
-- Not hooked into receipts: in-strategy filters (min_stop), broker-side stop/target fills, `swing paper --from-intents`.
-- Dashboard: zones are edge lines not boxes; max 300 line series per chart; old daily markers still shown beside layers.
-- The intraday chart extracts on New York calendar days; check `intraday_chains.py` uses the same day clock for PDH/PDL.
-- Any new intraday idea is a new pre-registration and new trials; never retune these three cards on the same windows.
-- Earlier leftovers: residual_momentum v2c-resmom re-replay not merged into the board; duplicate renamed tickers.
 
 ## Older resume notes (superseded by the section above) - updated 2026-10-09 22:30 ET
 No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no

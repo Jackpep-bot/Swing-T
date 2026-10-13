@@ -5,7 +5,8 @@ playbook router -> allowed strategies) -> rank predict (when a model exists) -> 
 router's per-strategy multiplier scales risk_per_trade_pct) -> review (ANTHROPIC key, not dry-run) -> shadow
 (every signal into the shadow ledger, taken or not, and grading of matured ones) -> positions (exit decisions,
 when a broker is injected) -> execute (execution.autopilot, when enabled) -> journal -> weekly (agent.weekly, last session of the ISO
-week only) -> study (ops.study: the day's markdown study from the decision receipts; a problem is a skip) ->
+week only) -> reconcile (ops.reconcile, between journal and weekly: exit receipts for stop / target legs and closes
+that filled at the broker; read-only, a problem is a skip) -> study (ops.study: the day's markdown study from the decision receipts; a problem is a skip) ->
 notify (ops.notify: one Telegram message, plus the weekly report when written; never fails the run).
 A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
@@ -100,7 +101,7 @@ ERROR_PREVIEW_CHARS = 200
 
 STEP_NAMES = (
     "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
-    "weekly", "study", "notify",
+    "reconcile", "weekly", "study", "notify",
 )
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
@@ -1191,6 +1192,25 @@ def _step_weekly(ctx: _Context) -> tuple[str, dict[str, Any]]:
     return f"weekly report written to {path}", {"path": path}
 
 
+def _step_reconcile(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """ops.reconcile: exit receipts for stop / target legs and closes that filled at the broker. Read-only on the
+    broker (one closed-order listing). Any problem is a skip, never a failure."""
+    if ctx.broker is None:
+        raise Skip("no broker: nothing to reconcile")
+    if ctx.dry_run:
+        raise Skip("dry run: broker fills not read")
+    if not hasattr(ctx.broker, "closed_orders"):
+        raise Skip(f"broker {getattr(ctx.broker, 'name', '?')} does not list closed orders")
+    try:
+        rec = importlib.import_module("swing_engine.ops.reconcile")
+        data = rec.reconcile_fills(ctx.store, ctx.settings, ctx.broker, rec.ledger_rows(ctx.settings),
+                                   ctx.as_of - timedelta(days=rec.LOOKBACK_DAYS), **_stamp(ctx))
+    except Exception as e:  # noqa: BLE001 - recording only: the night goes on without it
+        raise Skip(f"could not reconcile broker fills: {_error_text(e)}") from e
+    return (f"{data['exit_fills']} broker exit fills ({data['written']} new, {data['unmatched']} unmatched) "
+            f"{data['by_step'] or ''}").rstrip(), data
+
+
 def _step_study(ctx: _Context) -> tuple[str, dict[str, Any]]:
     """ops.study's daily markdown study from the `events` table (no LLM call). Any problem is a skip, never a
     failure: a study that cannot be written must not mark the nightly failed."""
@@ -1325,6 +1345,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("positions", _step_positions),
     ("execute", _step_execute),
     ("journal", _step_journal),
+    ("reconcile", _step_reconcile),
     ("weekly", _step_weekly),
     ("study", _step_study),
     ("notify", _step_notify),

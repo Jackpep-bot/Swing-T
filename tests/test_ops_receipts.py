@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -317,3 +317,133 @@ def test_events_api_reads_the_live_store(tmp_path: Path) -> None:
     assert event["symbol"] == "AAA" and event["payload"] == {"qty": 5} and event["as_of"] == AS_OF.isoformat()
     assert event["engine_sig"] == st["engine_sig"] and body["data"]["count"] == 1
     assert app.handle("GET", "/api/events?as_of=2020-01-01", H).json()["data"]["events"] == []
+
+
+# ----------------------------------------------------------------------------------------------- broker fills
+class _ReadOnlyBroker:
+    """A broker double that lists closed orders and raises on anything else (submit / cancel / replace / close)."""
+    name = "fake"
+
+    def __init__(self, orders: list[dict[str, Any]]) -> None:
+        self._orders, self.asked = orders, []
+
+    def closed_orders(self, since: date) -> list[dict[str, Any]]:
+        self.asked.append(since)
+        return self._orders
+
+    def __getattr__(self, attr: str) -> Any:
+        raise AssertionError(f"the reconcile path touched broker.{attr}")
+
+
+def _order(oid: str, symbol: str, side: str, kind: str, price: float | None, at: str | None, **extra: Any) -> dict[str, Any]:
+    return {"id": oid, "client_order_id": f"auto-{oid}", "symbol": symbol, "side": side, "order_type": kind,
+            "status": "filled" if price else "canceled", "filled_qty": "10" if price else "0",
+            "filled_avg_price": None if price is None else str(price), "filled_at": at, **extra}
+
+
+def _entry(symbol: str, day: date, legs: list[dict[str, Any]]) -> dict[str, Any]:
+    return _order(f"e-{symbol}", symbol, "buy", "limit", 50.0, f"{day}T14:00:00Z", legs=legs,
+                  client_order_id=_intent(symbol, day).client_order_id)
+
+
+def _broker_orders() -> list[dict[str, Any]]:
+    d = date(2026, 9, 2)
+    return [
+        _entry("AAA", d, [_order("a-tp", "AAA", "sell", "limit", None, None, limit_price="57.5"),  # stopped out
+                          _order("a-sl", "AAA", "sell", "stop", 47.4, "2026-09-04T15:00:00Z", stop_price="47.5")]),
+        _entry("BBB", d, [_order("b-tp", "BBB", "sell", "limit", 57.5, "2026-09-08T15:00:00Z", limit_price="57.5"),
+                          _order("b-sl", "BBB", "sell", "stop", None, None, stop_price="47.5")]),
+        _entry("CCC", d, [_order("c-sl", "CCC", "sell", "stop", None, None, stop_price="47.5")]),
+        _order("c-close", "CCC", "sell", "market", 52.0, "2026-09-09T13:30:00Z"),  # the engine's own close
+        _entry("DDD", d, [_order("d-sl", "DDD", "sell", "stop", None, None, stop_price="47.5", status="replaced")]),
+        _order("d-sl2", "DDD", "sell", "stop", 50.0, "2026-09-10T15:00:00Z", stop_price="50.0", replaces="d-sl"),
+        _order("z-1", "ZZZ", "sell", "market", 9.0, "2026-09-05T15:00:00Z"),  # no engine entry: kept as unknown
+        _order("old", "AAA", "sell", "market", 9.0, "2026-08-01T15:00:00Z"),  # before --since: not recorded
+    ]
+
+
+def test_reconcile_writes_one_exit_per_broker_fill_and_never_writes_to_the_broker(tmp_path: Path) -> None:
+    from swing_engine.ops import reconcile, study
+
+    settings, st = Settings(), receipts.stamp(Settings())
+    day = date(2026, 9, 2)
+    ledger = [{"client_order_id": _intent(s, day).client_order_id, "strategy": "s1",
+               "intent": _intent(s, day).model_dump(mode="json")} for s in ("AAA", "BBB", "CCC")]
+    broker = _ReadOnlyBroker(_broker_orders())
+    with Store() as store:
+        fire = receipts.make_event(receipts.FIRE, "broker", "submitted", day, "s1", "AAA", {"signal": {"entry": 50.0}},
+                                   key=_intent("AAA", day).client_order_id, **st)
+        closed = receipts.make_event(receipts.EXIT, "time", "time_stop: 5 bars", date(2026, 9, 8), "s1", "CCC",
+                                     {"action": "close", "response": {"broker_order_id": "c-close"}}, **st)
+        receipts.write_events(store, [fire, closed])
+        counts = reconcile.reconcile_fills(store, settings, broker, ledger, date(2026, 9, 1), **st)
+        assert counts["exit_fills"] == counts["written"] == 5 and counts["unmatched"] == 1
+        assert counts["by_step"] == {"stop": 2, "target": 1, "time": 1, "unknown": 1}
+        assert broker.asked == [date(2026, 9, 1) - timedelta(days=reconcile.ENTRY_LOOKBACK_DAYS)]
+        again = reconcile.reconcile_fills(store, settings, broker, ledger, date(2026, 9, 1), **receipts.stamp(settings))
+        assert again["exit_fills"] == 5 and again["written"] == 0  # ids are stable: a rerun writes nothing
+
+        events = receipts.read_events(store, kind=receipts.EXIT)
+        got = {json.loads(p)["exit_order_id"]: (rec, json.loads(p)) for rec, p in
+               zip(events.to_dict("records"), events["payload"], strict=True) if "exit_order_id" in p}
+        rec, p = got["a-sl"]
+        assert rec["step"] == "stop" and pd.Timestamp(rec["as_of"]).date() == date(2026, 9, 4) and rec["strategy"] == "s1"
+        assert p["ref"] == fire["event_id"] and p["entry_order_id"] == "e-AAA" and p["leg_type"] == "stop"
+        assert p["planned_entry"] == 50.0 and p["planned_stop"] == 47.5 and p["planned_target"] == 57.5
+        assert p["fill_price"] == 47.4 and p["entry_fill_price"] == 50.0 and p["qty"] == 10
+        assert p["gross_r"] == pytest.approx(-2.6 / 2.5) and p["net_r"] == pytest.approx(p["gross_r"] - p["cost_r"])
+        assert p["cost_r"] == pytest.approx(2 * 10 / 1e4 * 50.0 / 2.5) and "default" in p["cost_note"]
+        rec, p = got["b-tp"]  # no fire receipt and no signal entry: R per the intent's entry limit, no ref
+        assert rec["step"] == "target" and p["ref"] is None and p["planned_entry"] == 50.5
+        assert p["gross_r"] == pytest.approx(7.5 / 3.0)
+        rec, p = got["c-close"]
+        assert rec["step"] == "time" and p["leg_type"] == "close" and p["action_event"] == closed["event_id"]
+        rec, p = got["d-sl2"]  # a tightened stop: matched through `replaces`; no ledger row, so the broker's legs
+        assert rec["step"] == "stop" and p["matched_by"] == "replaces" and p["entry_client_order_id"].startswith("swing-s1-DDD")
+        assert rec["strategy"] == "s1" and p["planned_stop"] == 47.5 and p["gross_r"] is None and "not computed" in p["cost_note"]
+        rec, p = got["z-1"]
+        assert rec["step"] == "unknown" and rec["symbol"] == "ZZZ" and p["entry_order_id"] is None and p["fill_price"] == 9.0
+        assert "old" not in got
+
+        text = study.build_study(store, settings, date(2026, 9, 4))
+        assert "- AAA s1 (stop): stop filled at the broker: 10 @ 47.4 (-1.04R gross" in text
+
+
+def test_nightly_reconcile_step_is_soft(tmp_path: Path) -> None:
+    from swing_engine.ops import nightly
+
+    class Down(_ReadOnlyBroker):
+        def closed_orders(self, since: date) -> list[dict[str, Any]]:
+            raise ConnectionError("broker down")
+
+    def run(broker: Any, dry_run: bool) -> tuple[Any, Any]:
+        report = nightly.NightlyReport(as_of=AS_OF, provider="sample", dry_run=dry_run, started_at=pd.Timestamp.now(tz="UTC"))
+        ctx = nightly._Context(settings=make_settings(tmp_path), secrets=no_secrets(), as_of=AS_OF, provider="sample",
+                               equity=None, dry_run=dry_run, store=store, broker=broker, review_client=None,
+                               journal_client=None, journal_root=tmp_path, report=report)
+        return nightly._run_step(ctx, "reconcile", nightly._step_reconcile), report
+
+    recent = [_order("z-9", "ZZZ", "sell", "market", 9.0, f"{AS_OF}T15:00:00Z")]
+    with Store() as store:
+        for broker, dry in ((None, False), (_ReadOnlyBroker(recent), True), (PaperSimBroker(), False), (Down([]), False)):
+            step, report = run(broker, dry)
+            assert step.status is nightly.StepStatus.SKIP and report.ok, step.detail
+        assert "broker down" in step.detail and receipts.read_events(store).empty
+        step, report = run(_ReadOnlyBroker(recent), False)
+        assert step.status is nightly.StepStatus.OK and step.data["written"] == 1 and step.data["unmatched"] == 1
+    assert nightly.STEP_NAMES.index("reconcile") < nightly.STEP_NAMES.index("study")
+
+
+def test_alpaca_closed_orders_is_a_listing_only() -> None:
+    from unittest.mock import MagicMock
+
+    from alpaca.trading.enums import QueryOrderStatus
+
+    from swing_engine.execution.alpaca_broker import AlpacaBroker
+
+    client = MagicMock()
+    client.get_orders.return_value = [{"id": "1", "submitted_at": "2026-10-02T14:00:00Z", "legs": [{"id": "2"}]}]
+    out = AlpacaBroker(paper=True, client=client).closed_orders(date(2026, 10, 1))
+    request = client.get_orders.call_args.args[0]
+    assert out[0]["legs"] == [{"id": "2"}] and request.status == QueryOrderStatus.CLOSED and request.nested is True
+    assert [c[0] for c in client.method_calls] == ["get_orders"]  # nothing but the listing reached the client
