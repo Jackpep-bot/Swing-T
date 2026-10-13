@@ -385,3 +385,17 @@ def test_place_stop_rearms_an_unprotected_position_but_not_under_the_kill_switch
     trip(tmp_path)
     killed = run_autopilot(make_settings(tmp_path), SECRETS, AS_OF, broker, [], exit_actions=[arm])
     assert statuses(killed.exits) == {"BARE": "refused"} and broker.positions()[0].stop is None
+
+
+def test_probation_strategies_never_reach_a_live_broker(tmp_path: Path) -> None:
+    settings = make_settings(tmp_path)
+    settings.strategies = {"candidate": {"enabled": False, "probation": True}}
+    broker = UnknownBroker()
+    report = run_autopilot(settings, SECRETS, AS_OF, broker, [intent("AAA", "candidate"), intent("BBB")],
+                           env={"SWING_ALLOW_LIVE": "yes"})
+    assert statuses(report.entries) == {"BBB": "staged"} and broker.submits == 0  # AAA is not even staged
+    assert "probation" in report.errors[0] and "AAA" in report.errors[0]
+    pending = json.loads(Path(report.staged_path).read_text())
+    assert [i["symbol"] for i in pending["intents"]] == ["BBB"]
+    paper = run_autopilot(settings, SECRETS, AS_OF, PaperSimBroker(), [intent("AAA", "candidate")])
+    assert statuses(paper.entries) == {"AAA": "submitted"} and paper.errors == []

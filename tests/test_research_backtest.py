@@ -379,3 +379,20 @@ def test_trade_costs_reconcile_with_equity():
     t = res.trades.iloc[0]
     assert t["costs"] == pytest.approx(t["slippage_cost"] + t["fees"])
     assert res.final_equity == pytest.approx(res.initial_equity + t["pnl"])
+
+
+def test_entry_fill_by_entry_type():
+    from datetime import date
+
+    from swing_engine.core.models import EntryType
+    from swing_engine.research.backtest import entry_fill
+
+    def sig(kind: EntryType, entry: float) -> Signal:
+        return Signal(strategy="x", symbol="A", as_of=date(2024, 1, 2), entry=entry, entry_type=kind, stop=90.0)
+
+    assert entry_fill(sig(EntryType.OPEN, 100.0), 101.0, 105.0, 99.0) == (101.0, None)
+    assert entry_fill(sig(EntryType.STOP, 103.0), 101.0, 105.0, 99.0) == (103.0, None)
+    assert entry_fill(sig(EntryType.STOP, 100.0), 101.0, 105.0, 99.0) == (101.0, None)  # gap above the stop
+    assert entry_fill(sig(EntryType.STOP, 106.0), 101.0, 105.0, 99.0)[1] == "not_triggered"
+    assert entry_fill(sig(EntryType.LIMIT, 100.0), 101.0, 105.0, 99.0) == (100.0, None)
+    assert entry_fill(sig(EntryType.LIMIT, 98.0), 101.0, 105.0, 99.0)[1] == "not_triggered"

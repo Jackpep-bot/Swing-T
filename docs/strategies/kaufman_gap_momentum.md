@@ -1,0 +1,152 @@
+---
+slug: kaufman_gap_momentum
+name: Gap Momentum System (Perry Kaufman, S&C January 2024)
+originators: [Perry J. Kaufman]
+category: strategy
+decision: implement_disabled_for_comparison
+holding_period_days: [2, 30]
+timeframe: daily
+direction: long
+regimes_good: [healthy_uptrend, narrow_uptrend]
+regimes_bad: [choppy, high_vol_selloff]
+typical_win_rate: null
+typical_payoff_ratio: null
+evidence_grade: D
+free_data_ok: true
+status: not_built
+---
+
+# Kaufman Gap Momentum
+
+## One-line summary
+Measure only the overnight part of returns: the sum of up opening gaps against the sum of down gaps over N days,
+smoothed into a signal line. Be long while the signal line rises and exit when it turns down.
+
+## Origin and lineage
+- Perry J. Kaufman, "Taking A Page From The On-Balance Volume: Gap Momentum", *Technical Analysis of Stocks &
+  Commodities* V.42:01 (January 2024), pp. 14-17.
+- The same month's Traders' Tips carried platform code.
+- thinkorswim ships GapMomentum (study) and GapMomentumSystem (strategy). A TradingView open-source port exists
+  ("TASC 2024.01 Gap Momentum System").
+- The idea borrows from OBV: accumulate a one-sided quantity instead of price.
+
+## Exact rules
+- **Gap:** `gap_t = open_t - close_{t-1}`.
+- **Sums over `length` days:** `up = sum(max(gap, 0))`, `dn = sum(max(-gap, 0))`.
+- **Ratio:** `ratio = up / dn`.
+- **Gap Momentum and signal line (verified 2026-10-07):** the published Traders' Tips code
+  (https://financial-hacker.com/the-gap-momentum-system/) is non-cumulative: Gap Momentum = 100 * UpGaps / DnGaps over
+  `length` (1 when DnGaps = 0), and the signal line is an SMA of it over `signal_length`. The "built like OBV,
+  cumulatively" wording in summaries does not match the code.
+- **Entry:** buy-to-open when signal_t > signal_{t-1}.
+- **Exit:** sell-to-close when signal_t < signal_{t-1}. Long-only in the thinkorswim strategy.
+- **thinkorswim inputs:** `length`, `signal length`, and `full range` (whether initialisation starts at the first
+  bar of the lookup period). Published defaults 40 / 20.
+- **Not specified:** stops, targets and sizing.
+
+## Why it should work
+In US equities, most of the long-run return accrues overnight. Overnight and intraday returns behave differently,
+and overnight returns are persistent cross-sectionally (catalog E31, the "evidence-backed cousin"; e.g. Lou,
+Polk & Skouras 2019, JFE, cited from memory and not fetched this run). A rising share
+of up-gaps may reflect persistent overnight demand: retail orders at the open, or news flow. The other side is
+intraday liquidity providers who fade opens.
+
+## When it works and when it fails
+- Untested here. It should behave like any short-term momentum filter: fine in steady trends, whipsawed in chop.
+- The "rising signal line" rule flips often unless `signal length` is long.
+- Overnight-return regimes may shift with 23x5 trading. `docs/methods.md` says to re-validate all gap statistics
+  after 2026-12-06.
+
+## Parameters and sensitivity
+| Parameter | Value |
+|---|---|
+| `length` | 40 (published default; test 20-60) |
+| `signal_length` | 20 (published default; test 10-30) |
+| `dn_zero_policy` | NaN, or cap the ratio at `ratio_cap` = 10 |
+| `min_hold_days` | 0 |
+
+The slope rule is very sensitive to `signal_length`. Pick one grid in advance and log every trial.
+
+## Evidence
+- The S&C article is a practitioner's in-sample illustration. Its results were not read (paywalled / 403).
+- The broker publishes no performance data.
+- Grade D. No independent test was found.
+
+## Common mistakes
+- Using adjusted opens across splits and dividends, which produces fake gaps. Compute gaps on split-adjusted prices
+  with dividends handled consistently.
+- Dividing by `dn = 0` in strong trends (the published code returns 1).
+- Treating the cumulative and ratio versions as interchangeable.
+
+## Discretionary parts and how to make them mechanical
+None in the rule itself. The exit-only-on-slope rule has no stop, so the engine must add one (an engine choice):
+`entry - 2 x atr_14`.
+
+## Implementation spec for swing-engine
+**Features (new, `features/patterns2.py` or a new `features/overnight.py`):**
+- `gap_abs = open - prev_close`
+- `gapm_up_L = rolling_sum(max(gap_abs, 0), L)`, `gapm_dn_L = rolling_sum(max(-gap_abs, 0), L)`
+- `gapm_ratio_L = gapm_up_L / gapm_dn_L`
+- `gapm_signal = sma(gapm_ratio_L, S)`
+- `gapm_slope = sign(gapm_signal - gapm_signal.shift(1))`
+
+All are per symbol and causal: today's open is known before today's close.
+
+**Signal:** `gapm_slope` turns from <= 0 to > 0 (a fresh rise, to avoid re-entering every day). Optional
+`trend_state >= 0`.
+
+**Orders:**
+- Entry at the close, or next open.
+- Stop = entry - 2 x `atr_14` (engine choice).
+- `should_exit` when `gapm_slope < 0`. No target.
+- `min_reward_risk` 0. `max_hold_days` 30.
+
+**Reuse:** `gap_pct`, `prev_close`, `atr_14`.
+
+**Missing:** the gapm features themselves. `should_exit` must read `gapm_slope`, so the column has to be in
+`required_features`.
+
+## What the router should know
+- High turnover: daily flips mean costs dominate (10-20 bps/side plus SEC/TAF per `docs/gates.md`).
+- Use as a comparison and ranking feature for the overnight-return idea rather than a primary entry.
+
+## Signs of decay to monitor
+- Hit rate of the signal-slope direction against the next 5-day return.
+- Turnover per month.
+- Change in behaviour after extended-hours (23x5) trading starts.
+
+## Sources
+- https://toslc.thinkorswim.com/center/reference/Tech-Indicators/strategies/E-K/GapMomentumSystem
+- https://toslc.thinkorswim.com/center/reference/Tech-Indicators/studies-library/G-L/GapMomentum (fetched 2026-10-07)
+- https://kr.tradingview.com/script/52wKLj6P-TASC-2024-01-Gap-Momentum-System (fetched 2026-10-07)
+- https://store.traders.com/stcov421gapm.html (article listing)
+- https://traders.com/Documentation/FEEDbk_docs/2024/01/TradersTips.html (403; not read)
+- `docs/catalog/catalog.json` B43; `docs/methods.md` (23x5 re-validation note)
+
+## Empirical (replay)
+_Generated 2026-10-13 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the playbook router's labels on the signal day.
+About 141 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 4774 | 42 | 56% | +0.06 | -0.04 | -0.29 | 50% | +0.02 | -0.09 | -0.34 | 47% | +0.13 | +0.02 | -0.35 | 1.25 |
+| correction | 1086 | 6 | 67% | +0.25 | +0.01 | -0.18 | 72% | +0.49 | +0.26 | -0.33 | 68% | +0.56 | +0.32 | -0.50 | 3.33 |
+| healthy_uptrend | 19302 | 263 | 47% | -0.02 | -0.14 | -0.17 | 43% | -0.04 | -0.16 | -0.21 | 38% | -0.04 | -0.16 | -0.25 | 0.92 |
+| high_vol_selloff | 3201 | 35 | 60% | +0.13 | +0.01 | -0.23 | 60% | +0.27 | +0.15 | -0.34 | 44% | +0.13 | +0.01 | -0.50 | 1.25 |
+| narrow_uptrend | 2427 | 19 | 44% | -0.08 | -0.19 | -0.22 | 42% | -0.09 | -0.20 | -0.22 | 33% | -0.18 | -0.30 | -0.53 | 0.73 |
+| **all** | 30790 | 365 | 50% | +0.01 | -0.11 | -0.20 | 47% | +0.01 | -0.10 | -0.25 | 41% | +0.02 | -0.11 | -0.32 | 1.03 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
+
+### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 18234 | 219 | 53% | +0.07 | -0.02 | -0.12 | 52% | +0.12 | +0.03 | -0.16 | 49% | +0.25 | +0.15 | -0.15 | 1.54 |
+| correction | 11793 | 103 | 59% | +0.14 | +0.04 | -0.12 | 54% | +0.15 | +0.05 | -0.12 | 47% | +0.20 | +0.10 | -0.10 | 1.42 |
+| healthy_uptrend | 64774 | 799 | 49% | -0.01 | -0.11 | -0.14 | 47% | +0.01 | -0.10 | -0.15 | 41% | +0.01 | -0.10 | -0.19 | 1.01 |
+| high_vol_selloff | 21325 | 264 | 51% | -0.01 | -0.12 | -0.13 | 51% | +0.03 | -0.09 | -0.14 | 46% | +0.06 | -0.05 | -0.13 | 1.14 |
+| narrow_uptrend | 16078 | 153 | 52% | +0.04 | -0.07 | -0.12 | 51% | +0.06 | -0.05 | -0.12 | 44% | +0.06 | -0.05 | -0.12 | 1.11 |
+| **all** | 132204 | 1538 | 51% | +0.02 | -0.08 | -0.13 | 49% | +0.05 | -0.06 | -0.14 | 44% | +0.07 | -0.03 | -0.16 | 1.14 |
+
+Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

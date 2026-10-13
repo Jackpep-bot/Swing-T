@@ -1,0 +1,4 @@
+# No-news variant replays on a research copy that includes the Alpaca news table.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_news.duckdb

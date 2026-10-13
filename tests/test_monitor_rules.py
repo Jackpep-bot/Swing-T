@@ -108,6 +108,7 @@ def test_form4_buy_then_cluster():
     out = r.evaluate(_form4("f3", "Carol", 5, 11.0), ctx)
     assert out == ("insider_cluster", "P2")
     assert r.evaluate(_form4("f4", "Alice", 1, 10.0, code="S"), ctx) is None  # sale
+    assert r.evaluate(_form4("f5", "Dan", 2, 10.0, code="A"), ctx) is None  # grant / award, not a buy
     assert r.evaluate(_form4("f5", "Dan", 2, 10.0, acq="D"), ctx) is None  # disposed
 
 

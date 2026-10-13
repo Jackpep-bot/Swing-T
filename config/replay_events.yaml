@@ -1,0 +1,4 @@
+# Event-strategy research replays (13D drift, avoid-4.02, no-news variants) on the research copy with 8-K/13D tables.
+extends: replay.yaml
+data:
+  store_path: data/live/replay_p3.duckdb

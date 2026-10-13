@@ -2,6 +2,8 @@
 
 - ``summarize(result)``: headline numbers for a ``BacktestResult``.
 - ``deflated_sharpe``: Bailey & Lopez de Prado (2014), "The Deflated Sharpe Ratio", J. Portfolio Mgmt 40(5).
+- ``haircut_sharpe``: Harvey & Liu (2015), "Backtesting", J. Portfolio Mgmt 42(1), Bonferroni adjustment.
+- ``multiple_testing``: deflated and haircut Sharpe against ALL logged trials (``trial_count(None)``).
 - ``probability_backtest_overfit``: Bailey, Borwein, Lopez de Prado & Zhu (2017), CSCV procedure.
 
 Conventions: returns are per-period simple returns; ``sharpe`` is annualized by ``sqrt(periods_per_year)``;
@@ -19,6 +21,7 @@ import structlog
 from scipy.stats import norm
 
 from swing_engine.research.backtest import TRADING_DAYS_PER_YEAR, BacktestResult
+from swing_engine.research.trials import DEFAULT_TRIALS_PATH, trial_count
 
 log = structlog.get_logger(__name__)
 
@@ -200,6 +203,42 @@ def deflated_sharpe(
     var = sharpe_var if sharpe_var is not None else 1.0 / n_obs
     sr0 = expected_max_sharpe(max(int(n_trials), 1), var)
     return probabilistic_sharpe(sr, n_obs, skew, kurt, benchmark=sr0)
+
+
+def haircut_sharpe(sharpe_ratio: float, years: float, n_trials: int) -> tuple[float, float]:
+    """Harvey-Liu Bonferroni haircut: ``(adjusted annual Sharpe, haircut fraction)``.
+
+    ``t = SR x sqrt(years)``; two-sided ``p``; ``p_adj = min(1, n_trials x p)``; ``SR_adj = t_adj / sqrt(years)``
+    with ``t_adj = Phi^-1(1 - p_adj / 2)``. Haircut = ``1 - SR_adj / SR``. Non-positive SR: ``(SR, nan)``.
+    """
+    if not math.isfinite(sharpe_ratio) or sharpe_ratio <= 0 or years <= 0:
+        return sharpe_ratio, math.nan
+    t = sharpe_ratio * math.sqrt(years)
+    p = 2.0 * norm.sf(t)
+    p_adj = min(1.0, max(int(n_trials), 1) * p)
+    sr_adj = float(norm.isf(p_adj / 2.0)) / math.sqrt(years)
+    return sr_adj, 1.0 - sr_adj / sharpe_ratio
+
+
+def multiple_testing(
+    sharpe_ratio: float,
+    n_obs: int,
+    skew: float = 0.0,
+    kurt: float = NORMAL_KURTOSIS,
+    *,
+    periods_per_year: int = DEFAULT_PERIODS_PER_YEAR,
+    trials_path: str = DEFAULT_TRIALS_PATH,
+) -> dict[str, float]:
+    """Gate-2 significance (docs/gates.md): deflated and haircut Sharpe using the count of ALL logged trials,
+    not only this strategy's, since every trial in the log was a look at the same data."""
+    n_trials = max(trial_count(None, trials_path), 1)
+    sr_adj, haircut = haircut_sharpe(sharpe_ratio, n_obs / periods_per_year, n_trials)
+    return {
+        "n_trials_all": float(n_trials),
+        "deflated_sharpe": deflated_sharpe(sharpe_ratio, n_trials, n_obs, skew, kurt, periods_per_year=periods_per_year),
+        "haircut_sharpe": sr_adj,
+        "haircut": haircut,
+    }
 
 
 # ----------------------------------------------------------------------------------------------- PBO / CSCV

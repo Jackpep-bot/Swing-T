@@ -50,6 +50,9 @@ def test_liquidity_filters_and_cap() -> None:
     stats = stats[stats["symbol"] != "SPY"]  # ETFs are excluded by the reference filter
     top5 = stats[stats["passes"]].nlargest(5, "avg_dollar_volume")["symbol"]
     assert sorted(top5) == capped
+    # skip_top leaves out the most liquid names: the next five by dollar volume
+    ranked = stats[stats["passes"]].sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])["symbol"]
+    assert build_universe(p, _settings(max_symbols=5, skip_top=5), as_of, bars=bars) == sorted(ranked.iloc[5:10])
 
 
 def test_reference_filters_exchange_type_and_dates() -> None:

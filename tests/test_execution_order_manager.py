@@ -128,3 +128,10 @@ def test_ledger_reserve_is_atomic():
     ledger.update(CID, "FILLED", broker_order_id="x", broker_json={"ok": True})
     assert ledger.get(CID)["status"] == "filled" and ledger.pending() == []
     assert ledger.all()[0]["broker"] == {"ok": True}
+
+
+def test_stop_and_limit_entry_intents_are_refused_by_the_broker_layer():
+    from swing_engine.core.models import EntryType
+
+    assert "not supported" in validate_intent(intent(entry_type=EntryType.STOP))
+    assert validate_intent(intent(entry_type=EntryType.OPEN)) is None

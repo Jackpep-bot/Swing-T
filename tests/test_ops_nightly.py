@@ -192,7 +192,7 @@ def test_full_pipeline_dry_run_on_sample_provider(tmp_path: Path, contract: Cont
     assert [s.name for s in report.steps] == list(nightly.STEP_NAMES)
     assert statuses(report) == {
         "ingest": "ok", "float": "skip", "features": "ok", "scan": "ok", "rank": "skip", "size": "ok", "review": "skip",
-        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok", "reconcile": "skip", "weekly": "skip", "study": "ok", "notify": "skip",
     }  # fmt: skip
     assert report.ok and report.failed == [] and report.dry_run and report.provider == "sample"
     assert "no broker" in report.step("positions").detail and "dry run" in report.step("execute").detail
@@ -381,14 +381,14 @@ def test_failures_are_isolated_and_the_report_is_still_written(tmp_path: Path) -
         report = run_nightly(settings, no_secrets(), AS_OF, "no_such_provider", EQUITY, True, store=store, journal_root=tmp_path)
     assert statuses(report) == {
         "ingest": "fail", "float": "skip", "features": "fail", "scan": "fail", "rank": "skip", "size": "skip", "review": "skip",
-        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok",
+        "shadow": "ok", "positions": "skip", "execute": "skip", "journal": "ok", "reconcile": "skip", "weekly": "skip", "study": "ok", "notify": "skip",
     }  # fmt: skip
     assert "no_such_provider" in report.step("ingest").detail
     assert "no bars" in report.step("features").detail and "no signals" in report.step("size").detail
     assert report.failed == ["ingest", "features", "scan"] and not report.ok
     saved = json.loads(run_file(tmp_path, "nightly").read_text())
     assert [s["status"] for s in saved["steps"]] == [
-        "fail", "skip", "fail", "fail", "skip", "skip", "skip", "ok", "skip", "skip", "ok",
+        "fail", "skip", "fail", "fail", "skip", "skip", "skip", "ok", "skip", "skip", "ok", "skip", "skip", "ok", "skip",
     ]  # fmt: skip
 
 
@@ -474,3 +474,17 @@ def test_float_step_refreshes_small_cap_candidates_incrementally(tmp_path: Path,
         assert calls == []
         detail, data = nightly._step_float(ctx)
         assert calls == [["TINY"]] and data["written"] == 1, detail
+
+
+def test_probation_strategies_are_sized_at_a_quarter_risk_in_any_regime(tmp_path: Path, contract: ContractStubs) -> None:
+    """Strategies on probation, none enabled: they are scanned and sized at risk.probation_risk_mult, the router's
+    table is not asked about them, and they are not also recorded as shadow-only."""
+    names = ("sr_bounce", "pullback_trend", "rsi2_meanrev")
+    settings = make_settings(tmp_path, strategies={
+        n: {"enabled": False, "probation": True, "shadow_only": True, "min_reward_risk": 0.0} for n in names})
+    report = run_nightly(settings, no_secrets(), AS_OF, "sample", EQUITY, True, journal_root=tmp_path)
+    scan, size = report.step("scan"), report.step("size")
+    assert scan.status == "ok" and set(scan.data["per_strategy"]) == set(names) and scan.data["shadow_only"] == {}
+    assert scan.data["allowed"] == dict.fromkeys(names, 0.25) and size.data["risk_multipliers"] == dict.fromkeys(names, 0.25)
+    intents = [OrderIntent.model_validate(r) for r in json.loads(run_file(tmp_path, "intents").read_text())]
+    assert intents and all(i.risk_dollars <= EQUITY * settings.risk.risk_per_trade_pct / 100 * 0.25 + 1e-9 for i in intents)

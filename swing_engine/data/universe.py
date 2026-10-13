@@ -79,6 +79,8 @@ def filter_symbols(symbols: pd.DataFrame, cfg: UniverseConfig, as_of: date) -> p
     listed = listed_at.isna() | (listed_at <= as_of_ts)
     not_yet_delisted = delisted_at.isna() | (delisted_at > as_of_ts)
     df = df[listed & not_yet_delisted]
+    if df.empty:  # an empty object-dtype mask below would drop the columns
+        return df
     if cfg.exclude_otc:
         df = df[~df["exchange"].map(_is_otc)]
     df = df[df["type"].map(lambda t: _type_allowed(t, cfg.include_etfs))]
@@ -225,7 +227,7 @@ def build_universe(
     splits: pd.DataFrame | None = None,
 ) -> list[str]:
     """Symbols that pass `settings.universe` at `as_of`, ranked by average dollar volume, capped at
-    `max_symbols`. `static_symbols` overrides the screen. Pass `bars` (e.g. a panel) or `store` (a DuckDB
+    `max_symbols` (after leaving out the `skip_top` most liquid). `static_symbols` overrides the screen. Pass `bars` (e.g. a panel) or `store` (a DuckDB
     store filled by grouped ingest) to screen without fetching the liquidity window from the provider."""
     cfg = settings.universe
     as_of_d = as_date(as_of)
@@ -245,7 +247,7 @@ def build_universe(
         splits = store.read_table(SPLITS_TABLE)
     stats = liquidity_screen(bars, cfg, as_of_d, splits)
     passed = stats[stats["passes"]].sort_values(["avg_dollar_volume", "symbol"], ascending=[False, True])
-    universe = passed["symbol"].head(cfg.max_symbols).tolist()
+    universe = passed["symbol"].iloc[cfg.skip_top:cfg.skip_top + cfg.max_symbols].tolist()
     log.info(
         "universe_built", as_of=str(as_of_d), candidates=len(names), screened=len(stats),
         passed=int(stats["passes"].sum()) if len(stats) else 0, size=len(universe),

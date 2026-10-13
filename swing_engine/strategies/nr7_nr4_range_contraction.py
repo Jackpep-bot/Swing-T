@@ -1,0 +1,91 @@
+"""NR7 / NR4 / ID-NR4 range-contraction breakout (Crabel, long): docs/strategies/nr7_nr4_range_contraction.md.
+
+Setup at the close of bar t: `pattern` (nr7 default; nr4 or id_nr4) from features.extra, trend_state >= 1,
+avg_vol_20d >= 100k, close >= $5. Entry: buy stop high_t + tick for the next session (`EntryType.STOP`; untriggered
+orders expire). Stop: low_t - tick. Variant A (Crabel, default): no target, exit at the first close above the entry
+fill (`exit_first_profitable_close`, card: "first profitable close") or after 3 bars. Variant B (Bulkowski): set
+`target_pct: 0.07`, `stop_pct: 0.07`, `max_hold_days: 40`, `exit_first_profitable_close: false`. The sell-stop short
+half of the OCO bracket is not modelled (long-only).
+"""
+from __future__ import annotations
+
+from datetime import date
+from typing import Any
+
+import pandas as pd
+
+from swing_engine.core.models import EntryType, PositionContext, Signal
+from swing_engine.core.registry import register
+
+from ._base import (
+    P_MIN_MARKET_TREND,
+    P_MIN_RR,
+    P_MIN_TREND,
+    TREND_DOWN,
+    TREND_UP,
+    PanelStrategy,
+    entry_price,
+    finite,
+)
+
+NAME = "nr7_nr4_range_contraction"
+PATTERNS = ("nr7", "nr4", "id_nr4")
+
+
+@register("strategy", NAME)
+class NR7RangeContraction(PanelStrategy):
+    name = NAME
+    description = "NR7 (or NR4 / ID-NR4) in an uptrend; buy stop over the NR high, stop under its low; 3-bar exit."
+    default_params: dict[str, Any] = {
+        "pattern": "nr7",  # card: NR7 default; nr4 / id_nr4 variants
+        "min_avg_volume": 100_000,  # card: avg_vol_20d >= 100k
+        "min_price": 5.0,  # card: close >= 5
+        "tick": 0.01,  # card: buy stop high + 0.01, stop low - 0.01
+        "target_pct": None,  # card variant B (Bulkowski): 0.07
+        "stop_pct": None,  # card variant B (Bulkowski): 0.07 -> stop entry x 0.93
+        "max_hold_days": 3,  # card variant A (Crabel); variant B uses 40
+        "exit_first_profitable_close": True,  # card variant A: exit at the first close above the entry fill
+        P_MIN_TREND: TREND_UP,  # card: trend_state >= 1
+        P_MIN_MARKET_TREND: TREND_DOWN,
+        P_MIN_RR: 0.0,  # card: variant A needs min_reward_risk 0
+    }
+    features_required = ["avg_vol_20d", "trend_state"]
+    extra_features = list(PATTERNS)
+
+    def required_features(self) -> list[str]:
+        return [*self.features_required, str(self.params["pattern"])]
+
+    def should_exit(self, row: pd.Series, bars_held: int, position: PositionContext | None = None) -> bool:
+        if bars_held >= int(self.params["max_hold_days"]):
+            return True
+        fill = entry_price(position)
+        return bool(self.params["exit_first_profitable_close"]) and fill is not None and float(row["close"]) > fill
+
+    def signals(self, panel: pd.DataFrame, as_of: date, regime: dict[str, Any] | None = None) -> list[Signal]:
+        if not self.market_ok(regime):
+            return []
+        p = self.params
+        flag = str(p["pattern"])
+        rows = self.rows_as_of(panel, as_of, required=self.required_features())
+        keep = (rows[flag] == 1.0) & (rows["avg_vol_20d"] >= float(p["min_avg_volume"])) & (
+            rows["close"] >= float(p["min_price"]))
+        tick, tgt = float(p["tick"]), p["target_pct"]
+        out: list[Signal] = []
+        for _, row in rows.loc[keep.fillna(False)].iterrows():
+            if not self.trend_ok(row):
+                continue
+            high, low = float(row["high"]), float(row["low"])
+            entry = high + tick
+            sp = p["stop_pct"]
+            stop = entry * (1.0 - float(sp)) if sp is not None and finite(sp) else low - tick
+            sig = self.build_signal(
+                row, as_of, entry=entry, stop=stop,
+                target=entry * (1.0 + float(tgt)) if tgt is not None and finite(tgt) else None,
+                score=-(high - low) / float(row["close"]),  # tightest range first
+                features={"range_pct": (high - low) / float(row["close"])},
+                notes=f"{flag}: buy stop {entry:.2f}, stop {stop:.2f}",
+            )
+            if sig:
+                out.append(sig.model_copy(update={"entry_type": EntryType.STOP}))
+        self.log_scan(as_of, len(rows), len(out))
+        return out
