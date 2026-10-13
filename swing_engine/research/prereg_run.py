@@ -41,10 +41,11 @@ class Job:
     gb: float
 
 
-def plan(slugs: Sequence[str]) -> list[Job]:
-    """Every (slug, window), biggest jobs first so the packing fills the budget early."""
+def plan(slugs: Sequence[str], years: Sequence[int] | None = None) -> list[Job]:
+    """Every (slug, window), biggest jobs first so the packing fills the budget early. ``years``: only the windows
+    that start in these years (a group registered to run its windows one after the other)."""
     jobs = [Job(s, w.start.isoformat(), w.end.isoformat(), JOB_GB.get(w.start.year, max(JOB_GB.values())))
-            for s in slugs for w in WINDOWS]
+            for s in slugs for w in WINDOWS if years is None or w.start.year in years]
     return sorted(jobs, key=lambda j: -j.gb)
 
 
@@ -102,6 +103,11 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap.add_argument("--benchmark-settings", default=None,
                     help="settings file for the replays of --benchmark-slugs (their own book); default --settings")
     ap.add_argument("--alpha-slugs", default="", help="passed to prereg_eval")
+    ap.add_argument("--window-years", default="", help="only the windows starting in these years, e.g. 2024 (default: all)")
+    ap.add_argument("--no-eval", action="store_true", help="replays only; grade later with prereg_eval")
+    ap.add_argument("--job-gb", default="", metavar="YEAR=GB,...",
+                    help="peak memory per replay by window start year when the universe is wider than the default 1,500 "
+                         "names (default: 2024=5, 2017=18)")
     ap.add_argument("--book", action="append", default=[], metavar="SLUG=FILE",
                     help="settings file (own book) for the replays of one slug; repeatable")
     args = ap.parse_args(argv)
@@ -109,7 +115,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     slugs = [s for s in args.slugs.split(",") if s]
     bench_slugs = {s for s in args.benchmark_slugs.split(",") if s}
     base = ROOT / load_settings.__wrapped__(Path(args.settings)).data.store_path
-    pending, running = plan(slugs), {}
+    JOB_GB.update({int(k): float(v) for k, v in (item.split("=") for item in args.job_gb.split(",") if item.strip())})
+    years = [int(y) for y in args.window_years.split(",") if y.strip()] or None
+    pending, running = plan(slugs, years), {}
     while pending or running:
         for job, (proc, store, cfg) in list(running.items()):
             if proc.poll() is not None:
@@ -132,6 +140,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             running[job] = (subprocess.Popen(cmd, cwd=ROOT, stdout=log.open("w"), stderr=subprocess.STDOUT), store, cfg)
             print(f"start {job.slug} {job.start}", flush=True)
         time.sleep(POLL_S)
+    if args.no_eval:
+        print("PREREG REPLAYS DONE", flush=True)
+        return
     prereg_eval.main(["--settings", args.settings, "--slugs", ",".join(slugs), "--tag-prefix", args.tag_prefix,
                       "--n-trials", str(args.n_trials), "--out", args.out, *eval_benchmark_args(args)])
     print("PREREG GROUP DONE", flush=True)

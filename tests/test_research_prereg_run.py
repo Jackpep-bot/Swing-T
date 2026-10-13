@@ -11,6 +11,8 @@ def test_plan_and_packing_respect_the_budget() -> None:
     assert sum(j.gb for j in first) <= 40.0 and sum(j.gb == 18.0 for j in first) == 2  # two long + shorts
     assert pr.next_batch(jobs, 36.0, budget=40.0) == []  # nothing fits beside two long runs
     assert len(pr.next_batch(jobs[:1], 0.0, budget=1.0)) == 1  # never deadlocks on an oversize job
+    short = pr.plan(["a", "b"], years=[2024])
+    assert len(short) == 2 and {j.start[:4] for j in short} == {"2024"}  # one window at a time
 
 
 def test_benchmark_arguments_are_handed_to_the_grader() -> None:

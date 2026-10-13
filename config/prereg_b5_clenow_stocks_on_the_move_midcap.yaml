@@ -1,0 +1,10 @@
+# Book of clenow_stocks_on_the_move_midcap in batch 5 (docs/preregistration/2026-10-13-batch5.md). Fixed before any run.
+# 30 positions, equal risk: 1% of equity at risk on the strategy's own stop, capped per name.
+extends: prereg_b5.yaml
+risk:
+  risk_per_trade_pct: 1.0
+  max_position_pct: 3.3333
+  max_open_positions: 30
+execution:
+  max_new_orders_per_day: 30
+  reuse_exiting_slots: true

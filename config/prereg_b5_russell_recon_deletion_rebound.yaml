@@ -1,0 +1,10 @@
+# Book of russell_recon_deletion_rebound in batch 5 (docs/preregistration/2026-10-13-batch5.md). Fixed before any run.
+# 40 positions, equal weight: the position cap sizes (the risk budget covers any stop up to 50% of the price).
+extends: prereg_b5.yaml
+risk:
+  risk_per_trade_pct: 1.25
+  max_position_pct: 2.5
+  max_open_positions: 40
+execution:
+  max_new_orders_per_day: 40
+  reuse_exiting_slots: true

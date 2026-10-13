@@ -257,15 +257,18 @@ def _delisting_returns(store: Any, settings: Settings) -> dict[str, float]:
 def _with_edgar(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
     """EDGAR earnings / fundamentals columns (``data.fundamentals.join_edgar``), the split-adjusted share-count
     columns (``join_share_issuance``), the VIX / French factor columns
-    (``data.market_series.join_market_series``) and the dividend-month flag (``data.dividends.join_dividends``)
-    when the store has them."""
+    (``data.market_series.join_market_series``), the dividend-month flag (``data.dividends.join_dividends``) and the
+    batch-5 columns (``data.b5_fundamentals``, ``data.b5_events``) when the store has them."""
     if store is None:
         return panel
+    from swing_engine.data.b5_events import join_b5_events
+    from swing_engine.data.b5_fundamentals import join_b5_fundamentals
     from swing_engine.data.dividends import join_dividends
     from swing_engine.data.fundamentals import join_edgar, join_share_issuance
     from swing_engine.data.market_series import join_market_series
 
-    return join_dividends(store, join_market_series(store, join_share_issuance(store, join_edgar(store, panel))))
+    panel = join_market_series(store, join_share_issuance(store, join_edgar(store, panel)))
+    return join_b5_events(store, join_b5_fundamentals(store, join_dividends(store, panel)))
 
 
 def _with_extras(panel: pd.DataFrame, strategies: Any) -> pd.DataFrame:
