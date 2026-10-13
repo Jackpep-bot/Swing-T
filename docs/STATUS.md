@@ -1,15 +1,32 @@
-# Project status: small-cap map WAITING FOR AC POWER (script armed); everything else idle (2026-10-13 13:05 ET)
+# Project status: TWO RUNS ARMED, BOTH WAITING FOR AC POWER (small-cap map, then batch 5); else idle (2026-10-13 14:40 ET)
 
-## Running / armed (2026-10-13 13:05 ET)
-- `scripts/run_smallcap_map.sh` (PID 58878, log data/logs/research/smallcap_map.log) waits for AC power, then runs
-  `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild` (every strategy on
-  the 2,500 stocks AFTER the 1,500 most liquid, 2024-26, about 6 hours on 2 lanes; progress in
-  data/logs/research/<run-id>.log), writes docs/edge_map_smallcap.md and Telegrams its top.
-  Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md. If the script is gone (restart), run it again
-  with nohup; an interrupted run resumes with `research run --resume latest --no-rebuild` (same settings file).
-- When it is done: commit docs/edge_map_smallcap.md. Candidates (t >= 2 in both halves, clearly more than luck
-  gives) go to a forward test only. Owner was asked (13:00 ET) whether the best candidates may trade on paper at a
-  quarter of normal risk; no answer yet, so until then they are shadow-only.
+## Running / armed (2026-10-13 14:40 ET). The Mac is on battery (53%); nothing heavy runs until it is plugged in.
+1. `scripts/run_smallcap_map.sh` (PID 58878, log data/logs/research/smallcap_map.log) waits for AC power, then runs
+   `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild` (every strategy on
+   the 2,500 stocks AFTER the 1,500 most liquid, 2024-26, about 6 hours on 2 lanes; progress in
+   data/logs/research/<run-id>.log), writes docs/edge_map_smallcap.md and Telegrams its top.
+   Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md. Interrupted: `research run --resume latest
+   --no-rebuild` with the same settings file, then the python block at the end of the script.
+2. `scripts/run_batch5.sh` (PID 64565, log data/logs/research/batch5.log) waits for AC power AND for (1) to end,
+   then replays the 15 batch-5 cards on 2024-26 (3 at a time, logs data/logs/research/pr_prereg-b5-*.log), then
+   2017-24 for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
+   (docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
+   verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13). Expect most of a day.
+   Rerun is safe only for replays that did not finish (each replay logs a trial); check the logs first.
+If either script is gone after a restart, start it again with nohup (see the script's header).
+
+When they are done: commit the results files, docs/edge_map_smallcap.md and docs/income_view.md. Candidates go to a
+forward test only: `shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes)
+for ordinary swing signals the live sizer can trade. A small-cap candidate also needs the nightly's universe
+widened (it screens the top 1,500). Then apply the `event_avoid_filters` card to the small-cap map's best rows.
+
+Batch 5 (owner 12:54 ET: "scrape as many possible online traders ... integrate as many more methodologies as
+possible"): the research thread checked 49 ideas, kept 15 strategies and one filter
+(docs/proposals/swing-methods-2026-10/batch5/). All 15 are coded (`swing_engine/strategies/`, joins
+`data/b5_events.py`, `data/b5_fundamentals.py`, shared `strategies/_b5.py`), registered disabled, tested on
+synthetic panels (2,705 tests pass), and checked to run on real bars (signal counts only).
+Open follow-up (task chip "Fix same-bar target fills for limit entries"): `_check_exit` can fill a price target
+on the entry bar of a LIMIT entry; flatters older limit-entry strategies, does not touch batch 5.
 
 Owner, 13:14 ET: "keep running". Done since:
 - **Income view** (docs/income_view.md, `research/income_view.py`): the 11 portfolios already replayed, read the way
