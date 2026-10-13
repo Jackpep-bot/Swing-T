@@ -1,0 +1,10 @@
+# Book of industry_leader_lag_smallmid in batch 6 (docs/preregistration/2026-10-13-batch6.md). Fixed before any run.
+# 30 positions, equal weight: the position cap sizes (3.33% x the 15% stop is 0.5% of equity at risk).
+extends: prereg_b6.yaml
+risk:
+  risk_per_trade_pct: 1.0
+  max_position_pct: 3.33
+  max_open_positions: 30
+execution:
+  max_new_orders_per_day: 30
+  reuse_exiting_slots: true

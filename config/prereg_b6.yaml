@@ -1,0 +1,14 @@
+# Batch 6 (docs/proposals/swing-methods-2026-10/batch6/; pre-registration docs/preregistration/2026-10-13-batch6.md).
+# Store: the research copy built by scripts/build_b6_store.py (the live store plus 2016-24 bars for SVXY, IWD, IWF,
+# BIL and the `sic` table); prereg_run copies it per job. Never point this at the live store.
+# The screen is batch 5's (everything with close >= $1, $1M a day and 100k shares; max_symbols above the count so
+# the cap never binds): each strategy applies its own universe (500 or 1,000 largest by mcap_pit, the 1,500 most
+# liquid, SMALLMID followers). Research replays only; never used by the nightly.
+extends: live.yaml
+data:
+  store_path: data/live/replay_b6.duckdb
+universe:
+  min_price: 1.0
+  min_avg_dollar_volume: 1000000
+  min_avg_volume: 100000
+  max_symbols: 8000
