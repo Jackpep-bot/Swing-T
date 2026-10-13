@@ -1,19 +1,44 @@
-# Project status: TWO RUNS ARMED, BOTH WAITING FOR AC POWER (small-cap map, then batch 5); else idle (2026-10-13 14:40 ET)
+# Project status: TWO RUNS GOING (small-cap map running, batch 5 starts behind it) (2026-10-13 16:20 ET)
 
-## Running / armed (2026-10-13 14:40 ET). The Mac is on battery (53%); nothing heavy runs until it is plugged in.
-1. `scripts/run_smallcap_map.sh` (PID 58878, log data/logs/research/smallcap_map.log) waits for AC power, then runs
-   `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild` (every strategy on
-   the 2,500 stocks AFTER the 1,500 most liquid, 2024-26, about 6 hours on 2 lanes; progress in
-   data/logs/research/<run-id>.log), writes docs/edge_map_smallcap.md and Telegrams its top.
-   Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md. Interrupted: `research run --resume latest
-   --no-rebuild` with the same settings file, then the python block at the end of the script.
-2. `scripts/run_batch5.sh` (PID 64565, log data/logs/research/batch5.log) waits for AC power AND for (1) to end,
+Branch `claude/project-thread-fesglg` continues from `claude/project-thread-4wq9xa` (PR 2, still open, ends at 62455ed).
+
+## Running (started 2026-10-13 15:52 ET; the Mac went on AC power at 15:51)
+Both run under `scripts/on_power.sh` (owner: "start them I will plug in soon"): a job starts on AC or on a battery at
+or above 25% (`BATT_FLOOR`), is paused in place (SIGSTOP, Telegram notice) if the battery falls under that, and
+continues by itself on AC. The old wait-for-AC gate held both runs for almost three hours.
+1. `scripts/on_power.sh scripts/run_smallcap_map.sh` (PID 66729, log data/logs/research/smallcap_map.log): run id
+   20261013-155159, `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild
+   --allow-battery --lanes 4` (every strategy on the 2,500 stocks AFTER the 1,500 most liquid, 2024-26; 10 chunks
+   on 4 lanes, about 3 GB a lane; progress in data/logs/research/20261013-155159.log), then writes
+   docs/edge_map_smallcap.md and Telegrams its top. Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md.
+   Interrupted: `research run --resume latest --no-rebuild` with the same settings file, then the python block at
+   the end of the script.
+2. `scripts/on_power.sh scripts/run_batch5.sh` (PID 66425, log data/logs/research/batch5.log) waits for (1) to end,
    then replays the 15 batch-5 cards on 2024-26 (3 at a time, logs data/logs/research/pr_prereg-b5-*.log), then
    2017-24 for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
    (docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
    verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13). Expect most of a day.
    Rerun is safe only for replays that did not finish (each replay logs a trial); check the logs first.
-If either script is gone after a restart, start it again with nohup (see the script's header).
+If either is gone after a restart, start it again with nohup (see the script's header).
+
+Fixed 2026-10-13 (commit c28625e): a limit entry could take a target its fill bar reached before the fill
+(`backtest._check_exit` sold at that bar's open; `shadow.grade_one` counted its high). On the fill bar of a limit
+filled away from the open, only the close now counts as after the fill. One registered strategy is affected,
+`elder_ma_penetration_channel`; its rows on the older boards are flattered and were not regraded. Batch 5's two
+limit-entry cards carry no Signal target (their pre-registered workaround), so they do not change.
+
+Other paper venues (owner: "begin other sandbox or paper trading sites as able"). Checked 2026-10-13, web only:
+- Second Alpaca paper account: the one worth having. Same adapter, no new code: real environment variables win over
+  .env, so a second book is a settings file that `extends: live.yaml` with its own `state/` paths, launched with
+  ALPACA_API_KEY / ALPACA_SECRET_KEY set from a second pair of keys. Alpaca's forum says 3 paper accounts per login
+  (undated post; the dashboard decides). Use: the probation book (quarter risk, small-cap universe via
+  `universe.skip_top`) apart from the three rsi2 positions. WAITING FOR THE OWNER: he creates the account and puts
+  its keys in .env as ALPACA2_API_KEY / ALPACA2_SECRET_KEY. Not built until a candidate exists.
+- Tradier sandbox: free with an account, fills on 15-minute delayed quotes, OTOCO brackets in the API. Needs a new
+  adapter and adds nothing over Alpaca paper. Not built.
+- IBKR paper: needs an open IBKR Pro account and a desktop gateway that is logged in by hand every day. No.
+- tastytrade sandbox: positions are wiped every 24 hours. Useless for swing holds.
+- No account needed: the shadow ledger already forward-tests every `shadow_only` strategy at next-open prices.
 
 When they are done: commit the results files, docs/edge_map_smallcap.md and docs/income_view.md. Candidates go to a
 forward test only: `shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes)
@@ -25,8 +50,6 @@ possible"): the research thread checked 49 ideas, kept 15 strategies and one fil
 (docs/proposals/swing-methods-2026-10/batch5/). All 15 are coded (`swing_engine/strategies/`, joins
 `data/b5_events.py`, `data/b5_fundamentals.py`, shared `strategies/_b5.py`), registered disabled, tested on
 synthetic panels (2,705 tests pass), and checked to run on real bars (signal counts only).
-Open follow-up (task chip "Fix same-bar target fills for limit entries"): `_check_exit` can fill a price target
-on the entry bar of a LIMIT entry; flatters older limit-entry strategies, does not touch batch 5.
 
 Owner, 13:14 ET: "keep running". Done since:
 - **Income view** (docs/income_view.md, `research/income_view.py`): the 11 portfolios already replayed, read the way

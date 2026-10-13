@@ -46,3 +46,10 @@ estimate; the report says so. Every cell (strategy x liquidity band x horizon x 
 A forward test, nothing more: tracked in the shadow ledger on this universe, and on paper at a quarter of normal
 risk if the owner has said yes to that. Both halves of history are used up by the selection, so only forward results
 can confirm a candidate; `docs/gates.md` still decides anything beyond paper.
+
+## Notes at the start of the run (2026-10-13 15:52 ET, before any chunk had finished)
+- Run id 20261013-155159, 4 lanes (a 2024-26 replay of 16 strategies on this universe held 3.1 GB).
+- Commit c28625e landed while chunks 1-4 were running and before chunks 5-10 started: a limit entry can no longer
+  take a target that its fill bar reached before the fill. It changes one strategy, `elder_ma_penetration_channel`
+  (chunk 9, so the whole of its replay uses the fixed code). Nothing else in the counting rule moves. The main
+  edge map (docs/edge_map.md) graded that strategy with the old, flattering rule.
