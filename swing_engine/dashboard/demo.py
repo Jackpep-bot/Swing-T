@@ -520,6 +520,127 @@ class DemoData:
         rows = [r for r in rows if all(v is None or r[k] == v for k, v in want.items())][:limit]
         return ok({"events": rows, "count": len(rows)})
 
+    # ------------------------------------------------------------------------------------------- farm views
+    def chart_layers(self, symbol: str, start: date | None = None, end: date | None = None) -> dict[str, Any]:
+        """A taken (or shadow) fire with its stop and target, a refusal, a graded outcome and an exit on the demo
+        bars, drawn through the same builders as the live provider."""
+        from . import farm
+
+        bars = self.bars(symbol)
+        hi = (end or DEMO_AS_OF).isoformat()
+        lo = (start or (end or DEMO_AS_OF) - timedelta(days=180)).isoformat()
+        held = any(p["symbol"] == symbol for p in self._positions)
+        k = len(bars) - 16
+        px = bars[k]["c"]
+        sig = {"entry": px, "stop": round(px * 0.95, 2), "target": round(px * 1.1, 2), "side": "long"}
+        chain = {"regime": "narrow_uptrend", "signal": sig}
+
+        def row(n: int, kind: str, i: int, strat: str, step: str, reason: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return {"event_id": f"{zlib.crc32(f'{symbol}:{n}'.encode()):08x}{n:024x}", "ts": _ts(DEMO_AS_OF, 10, 30 + n),
+                    "as_of": bars[i]["t"], "kind": kind, "lane": "swing", "strategy": strat, "symbol": symbol,
+                    "step": step, "reason": reason, "payload": payload, "engine_sig": "demo0000", "source": "live",
+                    "run_id": "demo"}
+
+        fire = ({**chain, "intent": {"entry_limit": px, "stop": sig["stop"], "target": sig["target"]}} if held
+                else {**chain, "shadow": True})
+        events = [
+            row(0, "refusal", k - 12, "sr_bounce", "reward_risk", "reward_risk 1.20 below min 2.0", chain),
+            row(1, "fire", k, "pullback_trend", "broker" if held else "scan",
+                "submitted" if held else "shadow-only signal", fire),
+            row(2, "outcome", k + 6, "pullback_trend", "target", "target_hit",
+                {"signal_as_of": bars[k]["t"], "entry_date": bars[k + 1]["t"], "entry_price": bars[k + 1]["o"],
+                 "exit_date": bars[k + 6]["t"], "hit": "target_hit", "horizon": 10, "gross_r": 1.4, "cost_r": 0.09,
+                 "net_r": 1.31, "taken": held, **sig}),
+            row(3, "exit", k + 8, "pullback_trend", "time", "time_stop: held 10 sessions", {"action": "close"}),
+        ]
+        events = [e for e in events if lo <= e["as_of"] <= hi]
+        levels = farm.level_objects([b["t"] for b in bars], [b["h"] for b in bars], [b["l"] for b in bars],
+                                    [b["c"] for b in bars], lo, hi)
+        regimes = {b["t"]: ("narrow_uptrend" if i < 20 else "healthy_uptrend", "demo")
+                   for i, b in enumerate(bars[-40:]) if lo <= b["t"] <= hi}
+        return ok(farm.layers_payload(symbol, lo, hi, events, [levels, farm.regime_objects(regimes)], "demo0000"))
+
+    def intraday(self, symbol: str, day: date | None = None, tf: str = "5m") -> dict[str, Any]:
+        """A seeded random walk at ``tf`` run through the real extractor (features.market_structure)."""
+        import pandas as pd
+
+        from swing_engine.data.intraday import TIMEFRAMES
+
+        from . import farm
+
+        day = day or DEMO_AS_OF
+        _warm, lo, _hi = farm.intraday_window(symbol, day, tf)
+        crypto = "/" in symbol
+        step = pd.Timedelta(minutes=TIMEFRAMES[tf])
+        first = lo if crypto else lo + pd.Timedelta(hours=9, minutes=30)
+        warm, n_day = 360, max(1, (1440 if crypto else 390) // TIMEFRAMES[tf])
+        rng = _rng(f"intraday:{symbol}:{day}:{tf}")
+        rows, prev = [], 100.0 + rng.random() * 400.0
+        for i in range(warm + n_day):
+            c = prev * (1 + rng.gauss(0, 0.0015))
+            h, low = max(prev, c) * (1 + abs(rng.gauss(0, 0.0007))), min(prev, c) * (1 - abs(rng.gauss(0, 0.0007)))
+            ts = first + step * (i - warm) if i >= warm else lo - step * (warm - i)  # warm-up: before the day
+            rows.append({"ts": ts, "open": prev, "high": h, "low": low, "close": c,
+                         "volume": float(rng.randint(1_000, 90_000)),
+                         "session": "crypto" if crypto else ("post" if i < warm else "rth")})
+            prev = c
+        return ok(farm.intraday_payload(symbol, day, tf, pd.DataFrame(rows), engine_sig="demo0000",
+                                        first_day=HISTORY_START.isoformat(), last_day=DEMO_AS_OF.isoformat()))
+
+    def studies(self) -> dict[str, Any]:
+        d = DEMO_AS_OF.isoformat()
+        return ok({"studies": [{"date": d, "title": f"Swing study {d}", "bytes": 0}], "count": 1, "dir": "demo://studies"})
+
+    def study(self, day: date) -> dict[str, Any]:
+        if day != DEMO_AS_OF:
+            return unavailable(f"no study for {day.isoformat()}")
+        d = day.isoformat()
+        md = (
+            f"# Swing study {d}\n\nR values are gross and net R-multiples. engine_sig `demo0000`.\n\n"
+            "## Counts\n| strategy | fires | refusals | outcomes |\n|---|---|---|---|\n"
+            "| pullback_trend | 1 | 0 | 1 |\n| sr_bounce | 0 | 1 | 0 |\n\n"
+            "## Fires\n- ORCA pullback_trend long: regime narrow_uptrend x0.5 -> sized -> submitted\n\n"
+            "## Refusals\n- KITE sr_bounce: `reward_risk` 1.20 below min 2.0\n\n"
+            "Demo data: every number on this page is generated.\n"
+        )
+        return ok({"date": d, "markdown": md, "available_dates": [d]})
+
+    def coverage(self, days: int = 60) -> dict[str, Any]:
+        from . import farm
+
+        rng = _rng("coverage")
+        symbols = [p["symbol"] for p in self._positions] + ["FINCH", "LYNX", "HERON"]
+        cells = []
+        for d in self.days[-min(days, 30):]:
+            for strat in STRATEGIES[:6]:
+                for kind in ("fire", "refusal", "outcome"):
+                    if rng.random() < 0.45:
+                        cells.append((d.isoformat(), strat, rng.choice(symbols), kind, rng.randint(1, 6)))
+        kinds = {k: sum(c[4] for c in cells if c[3] == k) for k in ("fire", "refusal", "outcome")}
+        tiles = {"days_covered": len({c[0] for c in cells}), "events": sum(kinds.values()), "fires": kinds["fire"],
+                 "refusals": kinds["refusal"], "outcomes": kinds["outcome"], "studies": 1}
+        return ok(farm.coverage_payload(cells, tiles, days))
+
+    def vocabulary(self) -> dict[str, Any]:
+        ruling = [{"date": "2026-10-08", "text": "Paper trading only (demo ruling)."}]
+        return ok({
+            "rulings_for_everything": ruling,
+            "strategies": [
+                {"slug": "pullback_trend", "name": "Trend pullback", "status": "shadow", "grade": "B", "has_card": True,
+                 "summary": "Buy a pullback to the 20-day average in an established uptrend.", "rulings": []},
+                {"slug": "rsi2_meanrev", "name": "RSI-2 mean reversion", "status": "shadow", "grade": "B",
+                 "has_card": True, "summary": "Buy a 2-day RSI washout above the 200-day average.",
+                 "rulings": [{"date": "2026-10-06", "text": "Shadow-only until it passes the gates (demo)."}]},
+            ],
+            "structure": [
+                {"section": "Liquidity", "kinds": ["sweep", "pool_swept"], "rulings": [],
+                 "definition": "A bar's high goes strictly above a live buy-side pool's level (demo text)."},
+                {"section": "Structure", "kinds": ["mss"], "rulings": [],
+                 "definition": "A `CHoCH` whose breaking candle is a displacement candle (demo text)."},
+            ],
+            "structure_doc": "docs/market-structure.md",
+        })
+
     def replay(self) -> dict[str, Any]:
         """Shaped like ``swing replay`` output (research.replay): fractions, rows keyed by strategy / regime."""
         days = _sessions(date(2024, 10, 1), date(2026, 9, 30))

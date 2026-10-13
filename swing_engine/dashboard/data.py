@@ -21,6 +21,8 @@ Sources (all read-only except the two documented writes):
   ``GET /v2/account/portfolio/history`` on the paper host only. Nothing here submits, replaces or cancels.
 * kill switch ``settings.risk.kill_switch_file``: status, and ``risk.killswitch.trip`` (there is no clear).
 * journal ``data/journal/<date>.md`` (``agent.journal.journal_path``).
+* intraday store (``settings.data.intraday_store_path``): ``bars_1m`` through a read-only ``data.store.Store``.
+* studies ``<settings.data.studies_dir>/<date>.md`` (ops.study) and the vocabulary docs (ops.vocabulary).
 """
 from __future__ import annotations
 
@@ -81,6 +83,8 @@ SYMBOL_RE = re.compile(r"^[A-Z.\-]{1,10}$")
 EVENT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9:_.\-]{0,127}$")
 RUN_NAME_RE = re.compile(r"^(?P<stem>[A-Za-z0-9][A-Za-z0-9_.\-]{0,127})\.json$")
 DATE_FILE_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})\.(json|md)$")
+STUDY_MAX_BYTES = 2 * 1024 * 1024
+COVERAGE_MAX_DAYS = 365
 
 
 # ------------------------------------------------------------------------------------------------ envelope
@@ -120,6 +124,15 @@ def parse_symbol(value: str) -> str:
     if not SYMBOL_RE.match(sym):
         raise BadRequest("symbol must match ^[A-Z.-]{1,10}$")
     return sym
+
+
+def parse_intraday_symbol(value: str) -> str:
+    from .farm import intraday_symbol
+
+    try:
+        return intraday_symbol(value)
+    except ValueError as exc:
+        raise BadRequest(str(exc)) from exc
 
 
 def parse_strategy(value: str | None) -> str | None:
@@ -588,6 +601,7 @@ class LiveData:
         broker_factory: Callable[[], Any] | None = None,
         http_get: Callable[..., tuple[int, Any]] | None = None,
         journal_dirs: list[Path] | None = None,
+        studies_dir: Path | None = None,
         now: Callable[[], datetime] | None = None,
         duck_connect: Callable[..., Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -619,6 +633,9 @@ class LiveData:
                 seen.append(d)
         self.journal_dirs = seen
         self.duck = DuckReader(self.store_path, connect=duck_connect, clock=clock, sleep=sleep)
+        self.intraday_path = _resolve(s.data.intraday_store_path)
+        self.intraday_duck = DuckReader(self.intraday_path, connect=_open_store, clock=clock, sleep=sleep)
+        self.studies_dir = studies_dir or _resolve(getattr(s.data, "studies_dir", "docs/studies"))
         self.cache = TTLCache(clock)
         self._broker_factory = broker_factory or self._default_broker
         self._http_get = http_get or _httpx_get
@@ -1324,7 +1341,7 @@ class LiveData:
         return out
 
     # ------------------------------------------------------------------------------------------ chart
-    def chart(self, symbol: str, days: int = DEFAULT_CHART_DAYS) -> dict[str, Any]:
+    def _bar_rows(self, symbol: str) -> tuple[list[tuple[Any, ...]], dict[str, Any] | None]:
         def q(con: Any) -> list[tuple[Any, ...]]:
             if not duck_has_table(con, "bars"):
                 raise Unavailable("no bars table in the store yet (run `swing ingest`)")
@@ -1333,8 +1350,11 @@ class LiveData:
                 "ORDER BY ts", [symbol]
             ).fetchall()
 
+        return self.duck.read(f"bars:{symbol}", q)
+
+    def chart(self, symbol: str, days: int = DEFAULT_CHART_DAYS) -> dict[str, Any]:
         try:
-            rows, stale = self.duck.read(f"bars:{symbol}", q)
+            rows, stale = self._bar_rows(symbol)
         except Unavailable as exc:
             return unavailable(str(exc))
         if not rows:
@@ -1646,13 +1666,169 @@ class LiveData:
             frame, stale = self.duck.read(f"events:{as_of}:{strategy}:{symbol}:{kind}:{limit}", q)
         except Unavailable as exc:
             return unavailable(str(exc))
-        rows = frame.to_dict(orient="records")
-        for rec in rows:
+        rows = _event_rows(frame)
+        return ok({"events": rows, "count": len(rows)}, stale=stale)
+
+    # ------------------------------------------------------------------------------------------ farm views
+    def chart_layers(self, symbol: str, start: date | None = None, end: date | None = None) -> dict[str, Any]:
+        """Inspector layers for the daily chart: receipts of ``symbol`` with ``as_of`` in ``start..end`` as
+        drawable objects, features.levels support / resistance and the regime per day (dashboard.farm)."""
+        from . import farm
+
+        end = end or self._now().astimezone(NY).date()
+        start = start or end - timedelta(days=DEFAULT_CHART_DAYS)
+        lo, hi = start.isoformat(), end.isoformat()
+        partial: dict[str, str] = {}
+
+        def q(con: Any) -> Any:
+            if not duck_has_table(con, "events"):
+                return []
+            return _event_rows(con.execute(
+                "SELECT * REPLACE (CAST(as_of AS VARCHAR) AS as_of) FROM events WHERE symbol = ? AND as_of BETWEEN ? "
+                "AND ? ORDER BY as_of, ts, event_id LIMIT ?", [symbol, start, end, farm.LAYER_MAX_EVENTS]).df())
+
+        try:
+            events, stale = self.duck.read(f"layers:{symbol}:{lo}:{hi}", q)
+        except Unavailable as exc:
+            return unavailable(str(exc))
+        extra = []
+        try:
+            rows = [r for r in self._bar_rows(symbol)[0] if None not in r[1:5]]
+            extra.append(farm.level_objects([r[0].isoformat() for r in rows], [r[2] for r in rows],
+                                            [r[3] for r in rows], [r[4] for r in rows], lo, hi))
+        except Unavailable as exc:
+            partial["levels"] = str(exc)
+        regimes: dict[str, tuple[str, str]] = {}
+        for e in events:  # the regime a signal was made in (outcomes carry the signal's, dated the exit: skipped)
+            name = (e.get("payload") or {}).get("regime")
+            if name and e.get("kind") in ("fire", "refusal"):
+                regimes[str(e["as_of"])] = (str(name), "receipt payload")
+        for d in self.runs.dates("regime"):
+            if lo <= d <= hi:
+                try:
+                    name = (self.runs.load("regime", d) or {}).get("regime")
+                except (Unavailable, AttributeError):
+                    continue
+                if name:
+                    regimes[d] = (str(name), f"runs/regime/{d}.json")
+        extra.append(farm.regime_objects(regimes))
+        try:
+            from swing_engine.core.signature import engine_signature
+
+            sig = engine_signature(self.settings)
+        except Exception:  # noqa: BLE001 - the signature is a label here, never worth failing the chart for
+            sig = None
+        return ok(farm.layers_payload(symbol, lo, hi, events, extra, sig), stale=stale, partial=partial)
+
+    def intraday(self, symbol: str, day: date | None = None, tf: str = "5m") -> dict[str, Any]:
+        """Candles of one market day at ``tf`` with the market-structure events of that day, extracted on request
+        from the read-only intraday store (prior bars are read for warm-up; cached for ``CACHE_TTL_S``)."""
+        from . import farm
+
+        key = f"intraday:{symbol}:{day}:{tf}"
+        hit = self.cache.get(key, CACHE_TTL_S)
+        if hit is not None:
+            return ok(hit)
+        if not self.intraday_path.exists():
+            return unavailable(f"no intraday store at {self.intraday_path} yet (run `swing ingest-intraday`)")
+
+        def q(store: Any) -> Any:
+            from swing_engine.data.intraday import TABLE, read_bars
+
+            if not store.has_table(TABLE):
+                raise Unavailable("the intraday store has no bars yet (run `swing ingest-intraday`)")
+            span = store.sql(f"SELECT min(ts) AS lo, max(ts) AS hi FROM {TABLE} WHERE symbol = ?", [symbol])
+            if span.empty or span["hi"].isna().iloc[0]:
+                raise Unavailable(f"no intraday bars for {symbol} in the store")
+            tz = farm.market_tz(symbol)
+            first, last = (t.tz_convert(tz).date() for t in (span["lo"].iloc[0], span["hi"].iloc[0]))
+            want = day or last
+            warm, _lo, hi = farm.intraday_window(symbol, want, tf)
+            return want, first.isoformat(), last.isoformat(), read_bars(store, symbol, tf, warm, hi)
+
+        try:
+            (want, first, last, bars), stale = self.intraday_duck.read(key, q)
+        except Unavailable as exc:
+            return unavailable(str(exc).replace("market store", "intraday store"))
+        try:
+            from swing_engine.core.signature import engine_signature
+
+            sig = engine_signature(self.settings)
+        except Exception:  # noqa: BLE001
+            sig = None
+        data = farm.intraday_payload(symbol, want, tf, bars, engine_sig=sig, first_day=first, last_day=last)
+        if stale is None:
+            self.cache.put(key, data)
+        return ok(data, stale=stale)
+
+    def _study_dates(self) -> list[str]:
+        try:
+            names = os.listdir(self.studies_dir)
+        except OSError:
+            return []
+        return sorted((m.group(1) for n in names if (m := DATE_FILE_RE.match(n)) and m.group(2) == "md"), reverse=True)
+
+    def studies(self) -> dict[str, Any]:
+        """The auto-written daily studies (ops.study), newest first."""
+        rows = []
+        for d in self._study_dates():
+            path = self.studies_dir / f"{d}.md"
             try:
-                rec["payload"] = json.loads(rec.get("payload") or "{}")
-            except ValueError:
-                rec["payload"] = {}
-        return ok(clean({"events": rows, "count": len(rows)}), stale=stale)
+                with path.open(encoding="utf-8", errors="replace") as fh:
+                    title = fh.readline().strip().lstrip("# ").strip()[:200]
+                rows.append({"date": d, "title": title or d, "bytes": path.stat().st_size})
+            except OSError:
+                continue
+        return ok({"studies": rows, "count": len(rows), "dir": str(self.studies_dir)})
+
+    def study(self, day: date) -> dict[str, Any]:
+        """One study's markdown. The file name is built from the parsed date, never from request text."""
+        dates = self._study_dates()
+        path = self.studies_dir / f"{day.isoformat()}.md"
+        if day.isoformat() not in dates:
+            return unavailable(f"no study for {day.isoformat()} (the nightly writes one per session)")
+        try:
+            if path.stat().st_size > STUDY_MAX_BYTES:
+                return unavailable(f"the study for {day.isoformat()} is larger than {STUDY_MAX_BYTES // 1024} KB")
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError as exc:
+            return unavailable(f"study {day.isoformat()} is unreadable ({_err(exc)})")
+        return ok({"date": day.isoformat(), "markdown": text, "available_dates": dates})
+
+    def coverage(self, days: int = 60) -> dict[str, Any]:
+        """Summary tiles (all receipts) and the heatmap cells of the last ``days`` days (dashboard.farm)."""
+        from . import farm
+
+        since = self._now().astimezone(NY).date() - timedelta(days=days)
+
+        def q(con: Any) -> Any:
+            if not duck_has_table(con, "events"):
+                raise Unavailable("no decision receipts yet (the nightly writes the events table; "
+                                  "`swing receipts backfill` fills in the history)")
+            cells = con.execute(
+                "SELECT CAST(as_of AS VARCHAR), strategy, symbol, kind, count(*) FROM events WHERE as_of >= ? "
+                "GROUP BY ALL", [since]).fetchall()
+            kinds = dict(con.execute("SELECT kind, count(*) FROM events GROUP BY kind").fetchall())
+            covered = con.execute("SELECT count(DISTINCT as_of) FROM events").fetchone()[0]
+            return cells, kinds, covered
+
+        try:
+            (cells, kinds, covered), stale = self.duck.read(f"coverage:{since}", q)
+        except Unavailable as exc:
+            return unavailable(str(exc))
+        tiles = {"days_covered": int(covered), "events": int(sum(kinds.values())), "fires": int(kinds.get("fire", 0)),
+                 "refusals": int(kinds.get("refusal", 0)), "outcomes": int(kinds.get("outcome", 0)),
+                 "studies": len(self._study_dates())}
+        return ok(farm.coverage_payload(cells, tiles, days), stale=stale)
+
+    def vocabulary(self) -> dict[str, Any]:
+        from . import farm
+
+        hit = self.cache.get("vocabulary", CACHE_TTL_S)
+        if hit is None:
+            hit = farm.vocabulary_payload()
+            self.cache.put("vocabulary", hit)
+        return ok(hit)
 
     def drift(self) -> dict[str, Any]:
         """research.drift over the store's live and replay shadow ledgers, as of the latest live signal."""
@@ -1843,6 +2019,24 @@ def _flatten_orders(orders: Iterable[Mapping[str, Any]]) -> list[dict[str, Any]]
             item["_parent_client_order_id"] = d.get("client_order_id")
             out.append(item)
     return out
+
+
+def _open_store(path: str, read_only: bool = True) -> Any:
+    """``DuckReader`` connect hook for readers that need a ``data.store.Store`` (always read-only)."""
+    from swing_engine.data.store import Store
+
+    return Store(path, read_only=True)
+
+
+def _event_rows(frame: Any) -> list[dict[str, Any]]:
+    """ops.receipts rows as JSON-safe dicts with ``payload`` parsed."""
+    rows = frame.to_dict(orient="records")
+    for rec in rows:
+        try:
+            rec["payload"] = json.loads(rec.get("payload") or "{}")
+        except ValueError:
+            rec["payload"] = {}
+    return clean(rows)
 
 
 def _chunks(items: list[Any], n: int) -> Iterable[list[Any]]:

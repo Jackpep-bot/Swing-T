@@ -21,6 +21,8 @@ OUT = ROOT / "docs" / "vocabulary.md"
 STRUCTURE_DOC = "market-structure.md"
 _RULING = re.compile(r"^-\s*(\d{4}-\d{2}-\d{2})\s+([\w*@.-]+):\s*(.+)$")
 _FRONT = re.compile(r"^(\w+):\s*(.*?)\s*(?:#.*)?$")
+STRUCTURE_SECTIONS = ("Swings", "Structure", "Liquidity", "Imbalance", "Zones (order blocks)", "Other")
+_KIND_HEAD = re.compile(r"^(?:-\s+)?((?:\*\*`[^*]+\*\*(?:\s+and\s+)?)+)[.:,]?\s*(.*)$", re.S)
 
 
 def read_card(path: Path) -> dict[str, str]:
@@ -57,6 +59,38 @@ def entries() -> list[dict[str, object]]:
         rows.append({"slug": slug, "name": card.get("name", slug), "status": card.get("status", ""),
                      "grade": card.get("evidence_grade", ""), "summary": card.get("summary", ""),
                      "has_card": bool(card), "rulings": sorted(rulings.get(slug, []))})
+    return rows
+
+
+def structure_entries(path: Path | None = None) -> list[dict[str, object]]:
+    """Market-structure event kinds with their written definition, read from docs/market-structure.md: under each
+    kind section, a paragraph or list item that opens with a bold back-ticked kind starts an entry, and the plain
+    list items right after it belong to it."""
+    path = path or ROOT / "docs" / STRUCTURE_DOC
+    rows: list[dict[str, object]] = []
+    section, current, blocks = "", None, []
+    for line in [*(path.read_text().splitlines() if path.exists() else []), ""]:
+        if line.strip() and not line.startswith(("#", "- ")) and blocks and blocks[-1] is not None:
+            blocks[-1][1] += " " + line.strip()  # continuation of the paragraph / list item above
+        elif line.startswith("## "):
+            section = line[3:].strip()
+            blocks.append(None)
+        elif line.strip() and not line.startswith("#"):
+            blocks.append([section, line.strip()])
+        else:
+            blocks.append(None)
+    for block in blocks:
+        if block is None or block[0] not in STRUCTURE_SECTIONS:
+            current = None if block is not None else current
+            continue
+        m = _KIND_HEAD.match(block[1])
+        if m:
+            current = {"section": block[0], "kinds": re.findall(r"`(\w+)`", m.group(1)), "definition": m.group(2)}
+            rows.append(current)
+        elif block[1].startswith("- ") and current is not None:
+            current["definition"] = f"{current['definition']}\n{block[1]}"
+        else:
+            current = None
     return rows
 
 

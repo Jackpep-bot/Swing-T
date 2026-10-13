@@ -43,6 +43,7 @@ from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import DEFAULT_HOST, DEFAULT_PORT
 from .data import (
+    COVERAGE_MAX_DAYS,
     DEFAULT_CHART_DAYS,
     EQUITY_PERIODS,
     EVENT_KINDS,
@@ -60,10 +61,12 @@ from .data import (
     parse_date,
     parse_event_id,
     parse_int,
+    parse_intraday_symbol,
     parse_strategy,
     parse_symbol,
     unavailable,
 )
+from .farm import COVERAGE_DAYS, INTRADAY_DEFAULT_TF, INTRADAY_TFS
 
 log = logging.getLogger("swing_engine.dashboard")
 
@@ -267,6 +270,12 @@ class DashboardApp:
             (re.compile(r"^/api/positions$"), self._positions),
             (re.compile(r"^/api/orders$"), self._orders),
             (re.compile(r"^/api/chart/(?P<symbol>[^/]+)$"), self._chart),
+            (re.compile(r"^/api/chart/(?P<symbol>[^/]+)/layers$"), self._chart_layers),
+            (re.compile(r"^/api/intraday/(?P<symbol>[^/]+)$"), self._intraday),
+            (re.compile(r"^/api/studies$"), self._studies),
+            (re.compile(r"^/api/studies/(?P<day>[^/]+)$"), self._study),
+            (re.compile(r"^/api/coverage$"), self._coverage),
+            (re.compile(r"^/api/vocabulary$"), self._vocabulary),
             (re.compile(r"^/api/signals$"), self._signals),
             (re.compile(r"^/api/shadow$"), self._shadow),
             (re.compile(r"^/api/events$"), self._events),
@@ -378,6 +387,33 @@ class DashboardApp:
     def _chart(self, q: dict[str, str], symbol: str) -> Any:
         sym = parse_symbol(unquote(symbol))
         return self.provider.chart(sym, parse_int(q.get("days"), "days", DEFAULT_CHART_DAYS, 5, MAX_CHART_DAYS))
+
+    def _chart_layers(self, q: dict[str, str], symbol: str) -> Any:
+        sym = parse_symbol(unquote(symbol))
+        start, end = parse_date(q.get("start"), "start"), parse_date(q.get("end"), "end")
+        if start and end and not 0 <= (end - start).days <= MAX_CHART_DAYS:
+            raise BadRequest(f"start must be on or before end, at most {MAX_CHART_DAYS} days apart")
+        return self.provider.chart_layers(sym, start, end)
+
+    def _intraday(self, q: dict[str, str], symbol: str) -> Any:
+        sym = parse_intraday_symbol(unquote(symbol))
+        tf = parse_choice(q.get("tf"), "tf", INTRADAY_TFS, INTRADAY_DEFAULT_TF)
+        return self.provider.intraday(sym, parse_date(q.get("day"), "day"), tf)
+
+    def _studies(self, q: dict[str, str]) -> Any:
+        return self.provider.studies()
+
+    def _study(self, q: dict[str, str], day: str) -> Any:
+        parsed = parse_date(unquote(day))  # the only thing that reaches the file name: a real calendar date
+        if parsed is None:
+            raise BadRequest("date must be YYYY-MM-DD")
+        return self.provider.study(parsed)
+
+    def _coverage(self, q: dict[str, str]) -> Any:
+        return self.provider.coverage(parse_int(q.get("days"), "days", COVERAGE_DAYS, 1, COVERAGE_MAX_DAYS))
+
+    def _vocabulary(self, q: dict[str, str]) -> Any:
+        return self.provider.vocabulary()
 
     def _signals(self, q: dict[str, str]) -> Any:
         return self.provider.signals(parse_date(q.get("date")))

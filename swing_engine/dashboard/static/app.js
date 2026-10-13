@@ -21,7 +21,10 @@
   const SHADOW_MIN_N = 20;                // fewer graded signals than this = dimmed "too few to judge"
   const EVENT_DRIVEN_FEED = /account/i;   // trade-update feeds are silent until something fills: never "stale"
   const ET = "America/New_York";
-  const TABS = ["overview", "charts", "signals", "shadow", "drift", "alerts", "journal", "replay", "settings"];
+  const TABS = ["overview", "charts", "signals", "shadow", "drift", "alerts", "journal", "replay", "studies", "vocabulary", "settings"];
+  const MAX_LAYER_LINES = 300;            // one chart series per drawn line: more than this makes the chart sluggish
+  const PICK_PX = 30;                     // a click this close to a drawn object selects it
+  const MARKER_TEXT_MAX = 80;             // more markers than this are drawn without their text
   const THEME_KEY = "swing.theme";
 
   const REGIMES = {
@@ -70,6 +73,14 @@
     equityData: null,
     chartSymbol: null,
     chartDays: 180,
+    chartLayers: null,          // last /api/chart/<symbol>/layers payload (+ symbol)
+    layerVis: {},               // "ch" | "in" -> Set of visible layer keys
+    intraSymbol: "SPY",
+    intraTf: "5m",
+    intraDay: null,             // null = the latest day in the store
+    coverage: null,
+    coverageView: "strategies",
+    studyDate: null,
     orderStatus: "open",
     signals: null,
     signalFilters: { strategy: "", taken: "all" },
@@ -515,8 +526,10 @@
     requestAnimationFrame(() => requestAnimationFrame(() => { try { entry.chart.timeScale().fitContent(); } catch (e) { /* ignore */ } }));
   }
   function resetSeries(entry) {
-    for (const s of Object.values(entry.series)) { try { entry.chart.removeSeries(s); } catch (e) { /* ignore */ } }
+    for (const s of Object.values(entry.series).concat(entry.overlay || [])) { try { entry.chart.removeSeries(s); } catch (e) { /* ignore */ } }
     entry.series = {};
+    entry.overlay = [];
+    entry.drawn = [];
     entry.priceLines = [];
   }
   function restyleCharts() {
@@ -1222,7 +1235,7 @@
       renderChartSide(null);
       return;
     }
-    if (!quiet) { chartMessage(box, "Loading " + sym + "\u2026"); $("#ch-sub").textContent = ""; }
+    if (!quiet) { chartMessage(box, "Loading " + sym + "\u2026"); $("#ch-sub").textContent = ""; showInspector("ch", null); }
     const res = await api("/api/chart/" + encodeURIComponent(sym) + "?days=" + state.chartDays, { key: "chart", timeout: SLOW_FETCH_TIMEOUT_MS });
     if (res.aborted) return;
     if (sym !== state.chartSymbol) return;
@@ -1241,6 +1254,23 @@
     state.chartData = Object.assign({ symbol: sym }, res.data || {});
     renderPriceChart(state.chartData);
     renderChartSide(state.chartData);
+    loadChartLayers(sym);
+  }
+  async function loadChartLayers(sym) {
+    const bars = (state.chartData && state.chartData.bars) || [];
+    if (!bars.length) return;
+    const res = await api("/api/chart/" + encodeURIComponent(sym) + "/layers?start=" + toDay(bars[0].t) + "&end=" + toDay(bars[bars.length - 1].t), { key: "layers", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted || sym !== state.chartSymbol) return;
+    state.chartLayers = res.ok ? Object.assign({}, res.data, { symbol: sym }) : null;
+    drawChartLayers();
+    if (!res.ok) $("#ch-status").textContent = "Layers not available yet: " + res.unavailable;
+  }
+  function drawChartLayers() {
+    const L = state.chartLayers, d = state.chartData;
+    const mine = L && d && L.symbol === d.symbol ? L : null;
+    const st = (mine && mine.status) || {};
+    const n = (state.charts.price && state.charts.price.barTimes || []).length;
+    applyLayers("price", "ch", mine, fmtInt(n) + " bars \u00b7 " + fmtInt(st.events) + " events \u00b7 " + fmtInt(st.fires) + " fires \u00b7 sig " + (st.engine_sig || DASH));
   }
   function markerStyle(kind) {
     const k = String(kind || "").toLowerCase();
@@ -1312,6 +1342,8 @@
 
     // Markers must sit on a bar time and be sorted: snap each to the last bar on or before its date.
     const days = bars.map((b) => b.time);
+    entry.barTimes = days;
+    entry.bars = bars;
     const snap = (t) => {
       const day = toDay(t);
       if (!day) return null;
@@ -1328,7 +1360,8 @@
         const px = toNum(m.price);
         return { time: time, position: st.position, shape: st.shape, color: st.color, text: label === "Sell" && px !== null ? label + " " + fmtNum(px, 2) : label };
       }).filter(Boolean).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
-      candles.setMarkers(ms);
+      entry.baseMarkers = ms;
+      drawChartLayers(); // sets the markers: these plus the visible layers'
     };
     paintMarkers();
 
@@ -1430,6 +1463,289 @@
     ]));
     if (p && liveStop(p) === null && toNum(lv.current_stop) === null) blocks.push(el("div", { class: "allowed__none", text: "No stop on this position." }));
     replace(side, blocks);
+  }
+
+  // Chart layers + Inspector (shared by the daily and the intraday chart) ---------------------------
+  // A drawable object is {id, layer, shape: marker|line|zone|band, t, t2, price, price2, dir, text, ref};
+  // payload.receipts[ref] is the JSON the Inspector shows. Everything is drawn with chart-library series only.
+  const LAYER_COLORS = {
+    taken: "--c-target", seen: "--c-sma50", refusals: "--c-stop", entries: "--c-account", stops: "--c-stop", targets: "--c-target",
+    exits: "--orange", levels: "--c-entry", pools: "--c-entry", sweeps: "--orange", manip: "--c-stop", inducements: "--c-trail",
+    swings: "--c-spy", breaks: "--c-account", mss: "--c-sma50", ob: "--c-target", fvg: "--c-sma20", sessions: "--c-entry", rejections: "--c-trail",
+  };
+  const MARKER_SHAPES = { seen: "circle", refusals: "square", sessions: "square" };
+  const BAND_TONES = { ok: "--pos-soft", warn: "--warn-soft", bad: "--neg-soft" };
+  function layerColor(key) { return cssVar(LAYER_COLORS[key] || "--c-entry"); }
+  function showInspector(prefix, payload, obj, others) {
+    const node = $("#" + prefix + "-inspector");
+    if (!node) return;
+    if (!obj) { replace(node, el("p", { class: "muted", text: "Click a marker, line or zone on the chart to see its receipt." })); return; }
+    const receipt = payload && payload.receipts ? payload.receipts[obj.ref] : undefined;
+    const layer = ((payload && payload.layers) || []).find((l) => l.key === obj.layer);
+    const list = others || [];
+    replace(node, [
+      el("p", null, [el("b", { text: layer ? layer.label : obj.layer }), obj.text ? " · " + obj.text : ""]),
+      el("pre", { class: "receipt", tabindex: "0", text: JSON.stringify(receipt === undefined ? obj : receipt, null, 2) }),
+      list.length > 1 ? el("p", { class: "muted", text: "Also near this click:" }) : null,
+      list.length > 1 ? el("div", { class: "symbol-chips" }, list.map((o) => el("button", { type: "button", "aria-pressed": String(o === obj), text: (o.text || o.layer) + "", title: o.layer, onclick: () => showInspector(prefix, payload, o, list) }))) : null,
+    ]);
+  }
+  /** Draw payload's visible layers on chart `name` (controls in #<prefix>-layers, status in #<prefix>-status). */
+  function applyLayers(name, prefix, payload, label) {
+    const entry = state.charts[name];
+    const box = $("#" + prefix + "-layers"), status = $("#" + prefix + "-status");
+    if (entry) {
+      (entry.overlay || []).forEach((s) => { try { entry.chart.removeSeries(s); } catch (e) { /* ignore */ } });
+      entry.overlay = [];
+      entry.drawn = [];
+      if (entry.clickHandler) { try { entry.chart.unsubscribeClick(entry.clickHandler); } catch (e) { /* ignore */ } entry.clickHandler = null; }
+    }
+    const candles = entry && entry.series.candles;
+    const times = (entry && entry.barTimes) || [];
+    if (!payload || !candles || !times.length) {
+      clear(box);
+      status.textContent = "";
+      if (candles) candles.setMarkers(entry.baseMarkers || []);
+      return;
+    }
+    const layers = Array.isArray(payload.layers) ? payload.layers : [];
+    const vis = state.layerVis[prefix] || (state.layerVis[prefix] = new Set(layers.filter((l) => l.default).map((l) => l.key)));
+    const redraw = () => applyLayers(name, prefix, payload, label);
+    const preset = (text, keys) => el("button", { type: "button", class: "btn btn--small", "data-key": "preset:" + text, text: text, onclick: () => { state.layerVis[prefix] = new Set(keys); redraw(); } });
+    preservingFocus(box, () => replace(box, layers.map((l) => el("label", { class: "layer" }, [
+      el("input", { type: "checkbox", "data-key": l.key, checked: vis.has(l.key), onchange: (ev) => { if (ev.target.checked) vis.add(l.key); else vis.delete(l.key); redraw(); } }),
+      el("i", { class: "sw", style: "background:var(" + (LAYER_COLORS[l.key] || "--c-entry") + ")" }),
+      l.label + " ", el("span", { class: "tab-count", text: fmtInt(l.count) }),
+    ])).concat([
+      preset("Declutter", layers.filter((l) => l.default).map((l) => l.key)),
+      preset("Everything", layers.map((l) => l.key)),
+    ])));
+
+    const last = times.length - 1;
+    const idx = (t) => { // the last bar at or before t (0 when t is before the first bar)
+      let lo = 0, hi = last, ans = 0;
+      while (lo <= hi) { const mid = (lo + hi) >> 1; if (times[mid] <= t) { ans = mid; lo = mid + 1; } else hi = mid - 1; }
+      return ans;
+    };
+    const LS = window.LightweightCharts.LineStyle;
+    let lines = 0, skipped = 0;
+    const addLine = (color, i1, p1, i2, p2, style) => {
+      const s = entry.chart.addLineSeries({ color: color, lineWidth: 1, lineStyle: style, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: priceFmt(), autoscaleInfoProvider: () => null });
+      s.setData([{ time: times[i1], value: p1 }, { time: times[i2], value: p2 }]);
+      entry.overlay.push(s);
+      lines += 1;
+    };
+    const markers = (entry.baseMarkers || []).slice();
+    const layerMarkers = [];
+    const bands = new Array(times.length).fill(null);
+    for (const o of Array.isArray(payload.objects) ? payload.objects : []) {
+      if (!o || !vis.has(o.layer) || o.t === null || o.t === undefined) continue;
+      const end = o.t2 === null || o.t2 === undefined ? (o.shape === "marker" ? o.t : times[last]) : o.t2;
+      if (end < times[0] || o.t > times[last]) continue; // wholly outside the bars on screen
+      const color = layerColor(o.layer);
+      if (o.shape === "marker") {
+        if (o.t < times[0]) continue;
+        const i = idx(o.t), down = o.dir === "bear";
+        layerMarkers.push({ time: times[i], position: down ? "aboveBar" : "belowBar", shape: MARKER_SHAPES[o.layer] || (down ? "arrowDown" : o.dir === "bull" ? "arrowUp" : "circle"), color: color, text: String(o.text || "").slice(0, 18), id: o.id });
+        entry.drawn.push({ o: o, marker: true, i: i, above: down });
+        continue;
+      }
+      let i1 = idx(o.t), i2 = idx(end);
+      if (o.shape === "band") {
+        const tone = cssVar(BAND_TONES[(REGIMES[o.text] || {}).tone] || "--info-soft");
+        for (let i = i1; i <= i2; i++) bands[i] = tone;
+        entry.drawn.push({ o: o, band: true, i1: i1, i2: i2 });
+        continue;
+      }
+      if (i2 <= i1) i2 = Math.min(i1 + 1, last);
+      if (i2 <= i1) i1 = i2 - 1;
+      const p1 = toNum(o.price), p2 = toNum(o.price2);
+      if (i1 < 0 || p1 === null || p2 === null) continue;
+      const zone = o.shape === "zone";
+      if (lines + (zone ? 2 : 1) > MAX_LAYER_LINES) { skipped += 1; continue; }
+      if (zone) {
+        addLine(color, i1, p1, i2, p1, LS.Dashed);
+        addLine(color, i1, p2, i2, p2, LS.Dashed);
+        entry.drawn.push({ o: o, zone: true, i1: i1, i2: i2, lo: Math.min(p1, p2), hi: Math.max(p1, p2) });
+      } else {
+        addLine(color, i1, p1, i2, p2, o.layer === "levels" || o.layer === "pools" ? LS.Dotted : LS.Solid);
+        entry.drawn.push({ o: o, i1: i1, i2: i2, p1: p1, p2: p2 });
+      }
+    }
+    if (bands.some(Boolean)) {
+      const shade = entry.chart.addHistogramSeries({ priceScaleId: "shade", priceFormat: { type: "volume" }, lastValueVisible: false, priceLineVisible: false });
+      shade.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 }, visible: false });
+      shade.setData(times.map((t, i) => (bands[i] ? { time: t, value: 1, color: bands[i] } : { time: t })));
+      entry.overlay.push(shade);
+    }
+    if (layerMarkers.length > MARKER_TEXT_MAX) layerMarkers.forEach((m) => { m.text = ""; });
+    candles.setMarkers(markers.concat(layerMarkers).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0)));
+    status.textContent = label + (skipped ? " · " + fmtInt(skipped) + " lines not drawn (limit " + MAX_LAYER_LINES + "; untick a layer)" : "");
+
+    entry.clickHandler = (param) => {
+      if (!param || !param.point || param.time === undefined || param.time === null) return;
+      const t = isNum(param.time) && isNum(times[0]) ? param.time : lwcDay(param.time);
+      const i = idx(t), y = param.point.y;
+      const yOf = (price) => candles.priceToCoordinate(price);
+      const near = [];
+      let band = null;
+      for (const d of entry.drawn) {
+        let dist = null;
+        if (d.band) { if (i >= d.i1 && i <= d.i2) band = d.o; continue; }
+        if (d.o.id === param.hoveredObjectId) dist = -1;
+        else if (d.marker) {
+          const bar = d.i === i ? entry.bars[i] : null;
+          const base = bar ? yOf(d.above ? bar.high : bar.low) : null;
+          if (base !== null) dist = Math.max(0, Math.abs(y - (base + (d.above ? -14 : 14))) - 14); // markers stack away from the bar
+        } else if (i >= d.i1 && i <= d.i2) {
+          if (d.zone) { const a = yOf(d.hi), b = yOf(d.lo); if (a !== null && b !== null) dist = y >= a && y <= b ? 0.5 : Math.min(Math.abs(y - a), Math.abs(y - b)); }
+          else { const at = yOf(d.p1 + (d.p2 - d.p1) * (d.i2 === d.i1 ? 0 : (i - d.i1) / (d.i2 - d.i1))); if (at !== null) dist = Math.abs(y - at); }
+        }
+        if (dist !== null && dist <= PICK_PX) near.push({ o: d.o, dist: dist });
+      }
+      near.sort((a, b) => a.dist - b.dist);
+      const list = near.slice(0, 12).map((n) => n.o);
+      if (list.length) showInspector(prefix, payload, list[0], list);
+      else showInspector(prefix, payload, band, []);
+    };
+    entry.chart.subscribeClick(entry.clickHandler);
+  }
+
+  // Intraday: one market day of candles at 2m-4h with market-structure event layers ------------------
+  async function loadIntraday() {
+    const box = $("#in-chart");
+    const sym = state.intraSymbol, tf = state.intraTf, day = state.intraDay;
+    chartMessage(box, "Loading " + sym.replace("-", "/") + "…");
+    const res = await api("/api/intraday/" + encodeURIComponent(sym) + "?tf=" + encodeURIComponent(tf) + (day ? "&day=" + encodeURIComponent(day) : ""), { key: "intraday", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    setNote("in-note", res.ok ? res : null);
+    showInspector("in", null);
+    if (!res.ok) {
+      if (state.charts.intraday) resetSeries(state.charts.intraday);
+      applyLayers("intraday", "in", null);
+      $("#in-sub").textContent = "";
+      chartMessage(box, "Intraday chart not available yet: " + res.unavailable);
+      return;
+    }
+    const d = res.data || {};
+    state.intraDay = d.day || day;
+    const input = $("#in-day");
+    input.value = state.intraDay || "";
+    if (d.first_day) input.min = d.first_day;
+    if (d.last_day) input.max = d.last_day;
+    renderIntraday(d);
+  }
+  function renderIntraday(d) {
+    const box = $("#in-chart");
+    const entry = getChart("intraday", box);
+    if (!entry) return;
+    resetSeries(entry);
+    const bars = (Array.isArray(d.bars) ? d.bars : []).map((b) => ({ time: toNum(b.t), open: toNum(b.o), high: toNum(b.h), low: toNum(b.l), close: toNum(b.c) }))
+      .filter((b) => b.time !== null && b.open !== null && b.high !== null && b.low !== null && b.close !== null)
+      .sort((a, b) => a.time - b.time).filter((b, i, arr) => i === 0 || b.time !== arr[i - 1].time);
+    const clock = d.tz === "UTC" ? "UTC" : "New York time";
+    $("#in-sub").textContent = String(d.symbol || "") + " · " + fmtDay(d.day) + " · " + clock;
+    if (!bars.length) {
+      applyLayers("intraday", "in", null);
+      chartMessage(box, "No " + d.tf + " bars for " + d.symbol + " on " + fmtDay(d.day) + " (market closed that day, or not ingested yet).");
+      return;
+    }
+    chartMessage(box, null);
+    entry.chart.applyOptions({ timeScale: { timeVisible: true, secondsVisible: false } });
+    const colors = () => ({ upColor: cssVar("--c-up"), downColor: cssVar("--c-down"), wickUpColor: cssVar("--c-up"), wickDownColor: cssVar("--c-down") });
+    const candles = entry.chart.addCandlestickSeries(Object.assign({ borderVisible: false, priceFormat: priceFmt(), priceLineVisible: false }, colors()));
+    candles.setData(bars);
+    entry.series = { candles: candles };
+    entry.barTimes = bars.map((b) => b.time);
+    entry.bars = bars;
+    entry.baseMarkers = [];
+    const st = d.status || {};
+    const draw = () => applyLayers("intraday", "in", d, fmtInt(bars.length) + " " + d.tf + " bars · " + fmtInt(st.events) + " events · extractor " + (st.extractor_version || DASH) + " · sig " + (st.engine_sig || DASH));
+    entry.restyle = () => { candles.applyOptions(colors()); draw(); };
+    draw();
+    fitSoon(entry);
+  }
+  function initIntradayControls() {
+    const seg = (id, attr, key) => $$(id + " button").forEach((b) => b.addEventListener("click", () => {
+      state[key] = b.dataset[attr];
+      $$(id + " button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      loadIntraday();
+    }));
+    seg("#in-symbols", "symbol", "intraSymbol");
+    seg("#in-tf", "tf", "intraTf");
+    $("#in-day").addEventListener("change", (ev) => { state.intraDay = /^\d{4}-\d{2}-\d{2}$/.test(ev.target.value) ? ev.target.value : null; loadIntraday(); });
+  }
+
+  // Overview: receipt tiles + coverage heatmap --------------------------------------------------------
+  async function loadCoverage() {
+    const res = await api("/api/coverage", { key: "coverage", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    setNote("cv-note", res.ok ? res : null);
+    if (!res.ok) { state.coverage = null; clear($("#cv-tiles")); $("#cv-meta").textContent = ""; showUnavailable($("#cv-heat"), res); return; }
+    state.coverage = res.data || {};
+    renderCoverage();
+  }
+  function renderCoverage() {
+    const d = state.coverage;
+    if (!d) return;
+    const t = d.tiles || {};
+    const tile = (label, v, title) => el("div", { class: "stat", title: title }, [el("span", { class: "stat__label", text: label }), el("span", { class: "stat__value", text: fmtInt(v) })]);
+    replace($("#cv-tiles"), [
+      tile("Days covered", t.days_covered, "Sessions with at least one receipt"), tile("Events", t.events, "Every receipt in the events table"),
+      tile("Fires", t.fires, "Signals that reached an order, or shadow-only signals"), tile("Refusals", t.refusals, "Signals a gate declined, with the step and its inputs"),
+      tile("Outcomes", t.outcomes, "Graded results, gross and net R"), tile("Studies", t.studies, "Auto-written daily studies"),
+    ]);
+    const view = d[state.coverageView] || {};
+    const rows = Array.isArray(view.rows) ? view.rows : [];
+    const days = Array.isArray(d.days) ? d.days : [];
+    const bySymbol = state.coverageView === "symbols";
+    $("#cv-meta").textContent = "last " + fmtInt(d.window_days) + " days · " + (rows.length < toNum(view.total) ? "busiest " + rows.length + " of " : "") + fmtInt(view.total) + " " + state.coverageView;
+    const heat = $("#cv-heat");
+    if (!days.length || !rows.length) { replace(heat, emptyBox("No receipts in the last " + fmtInt(d.window_days) + " days.")); return; }
+    const max = Math.max(1, ...rows.map((r) => Math.max(0, ...Object.values(r.cells || {}).map((v) => toNum(v) || 0))));
+    const head = el("thead", null, el("tr", null, [el("th", { text: bySymbol ? "Symbol" : "Strategy" })].concat(days.map((day) => el("th", { class: "c", title: fmtDay(day), text: day.slice(5) })), [el("th", { class: "r", text: "Total" })])));
+    const body = rows.map((r) => el("tr", null, [el("td", bySymbol ? { class: "sym", text: r.key } : { class: "strat", title: r.key, text: strategyName(r.key) })].concat(days.map((day) => {
+      const n = toNum((r.cells || {})[day]) || 0;
+      if (!n) return el("td");
+      const open = () => (bySymbol ? openChart(r.key) : loadCoverageEvents(day, r.key));
+      const pct = Math.round(12 + 68 * Math.log1p(n) / Math.log1p(max));
+      return el("td", {
+        class: "heat__cell", tabindex: "0", role: "button", style: "background:color-mix(in srgb, var(--accent) " + pct + "%, transparent)",
+        title: r.key + " · " + fmtDay(day) + ": " + fmtInt(n) + " events" + (bySymbol ? " (open the chart)" : " (list them)"),
+        onclick: open, onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); } },
+      }, fmtInt(n));
+    }), [el("td", { class: "r", text: fmtInt(r.total) })])));
+    replace(heat, el("table", { class: "data compact" }, [head, el("tbody", null, body)]));
+  }
+  async function loadCoverageEvents(day, strategy) {
+    const node = $("#cv-events");
+    showSkeleton(node, 3);
+    const res = await api("/api/events?as_of=" + encodeURIComponent(day) + "&strategy=" + encodeURIComponent(strategy) + "&limit=500", { key: "cv-events", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    if (!res.ok) { showUnavailable(node, res); return; }
+    const rows = (res.data && Array.isArray(res.data.events) ? res.data.events : []);
+    const pre = el("pre", { class: "receipt", tabindex: "0", hidden: true });
+    const head = el("thead", null, el("tr", null, ["Kind", "Symbol", "Step", "Reason", "Sig"].map((h) => el("th", { text: h }))));
+    const body = rows.map((e) => {
+      const show = () => { pre.textContent = JSON.stringify(e, null, 2); pre.hidden = false; };
+      return el("tr", { class: "is-click", tabindex: "0", title: "Show this receipt", onclick: show, onkeydown: (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); show(); } } }, [
+        el("td", { text: e.kind || DASH }), el("td", { class: "sym", text: e.symbol || DASH }), el("td", { text: e.step || DASH }),
+        el("td", { text: reasonText(e.reason || "") }), el("td", { class: "mono", text: e.engine_sig || DASH }),
+      ]);
+    });
+    replace(node, [
+      el("h3", { class: "subhead", text: strategyName(strategy) + " · " + fmtDay(day) + " · " + fmtInt(rows.length) + " receipts (click a row for its JSON)" }),
+      rows.length ? el("div", { class: "table-wrap" }, el("table", { class: "data compact" }, [head, el("tbody", null, body)])) : emptyBox("No receipts."),
+      pre,
+    ]);
+  }
+  function initCoverageControls() {
+    $$("#cv-view button").forEach((b) => b.addEventListener("click", () => {
+      state.coverageView = b.dataset.view;
+      $$("#cv-view button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+      clear($("#cv-events"));
+      renderCoverage();
+    }));
   }
 
   // Orders ------------------------------------------------------------------------------------------
@@ -1988,7 +2304,51 @@
     $("#jr-prev").disabled = i < 0 || i >= state.journalDates.length - 1;
     $("#jr-next").disabled = i <= 0;
   }
+  // Studies (auto-written markdown, one per session) and the vocabulary page -----------------------
+  async function loadStudy(date) {
+    const body = $("#study-body");
+    showSkeleton(body, 8);
+    const list = await api("/api/studies", { key: "studies" });
+    if (list.aborted) return;
+    if (!list.ok) { showUnavailable(body, list); return; }
+    const studies = (list.data && Array.isArray(list.data.studies) ? list.data.studies : []).filter((s) => s && /^\d{4}-\d{2}-\d{2}$/.test(String(s.date)));
+    const sel = $("#st-date");
+    replace(sel, studies.map((s) => el("option", { value: s.date, text: fmtDay(s.date) })));
+    if (!studies.length) { replace(body, emptyBox("No studies yet. The nightly writes one markdown study per session.")); return; }
+    const want = date && studies.some((s) => s.date === date) ? date : studies[0].date;
+    const res = await api("/api/studies/" + encodeURIComponent(want), { key: "study", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    if (!res.ok) { showUnavailable(body, res); return; }
+    state.studyDate = want;
+    sel.value = want;
+    body.innerHTML = renderMarkdown((res.data && res.data.markdown) || ""); // safe: renderMarkdown escapes all HTML first
+  }
+  async function loadVocabulary() {
+    const body = $("#vocab-body");
+    showSkeleton(body, 8);
+    const res = await api("/api/vocabulary", { key: "vocabulary", timeout: SLOW_FETCH_TIMEOUT_MS });
+    if (res.aborted) return;
+    if (!res.ok) { showUnavailable(body, res); return; }
+    const d = res.data || {};
+    const strategies = Array.isArray(d.strategies) ? d.strategies : [], structure = Array.isArray(d.structure) ? d.structure : [];
+    const rulings = (list) => (Array.isArray(list) ? list : []).map((r) => "- operator ruling " + r.date + ": " + r.text);
+    const md = ["## Rulings that apply to everything", ""].concat(rulings(d.rulings_for_everything), ["", "## Strategies", ""]);
+    strategies.forEach((s) => {
+      const tags = [s.status, s.grade ? "evidence " + s.grade : ""].filter(Boolean).join(", ");
+      md.push("### `" + s.slug + "`" + (tags ? " (" + tags + ")" : ""), "", String(s.summary || s.name || ""), "", ...rulings(s.rulings), "");
+    });
+    md.push("## Market-structure event kinds", "", "Intraday events, defined in `" + (d.structure_doc || "docs/market-structure.md") + "`. A vocabulary, not a strategy.", "");
+    let section = null;
+    structure.forEach((e) => {
+      if (e.section !== section) { section = e.section; md.push("### " + section, ""); }
+      md.push("#### " + (e.kinds || []).map((k) => "`" + k + "`").join(" / "), "", ...String(e.definition || "").split("\n"), "", ...rulings(e.rulings), "");
+    });
+    $("#vc-meta").textContent = fmtInt(strategies.length) + " strategies · " + fmtInt(structure.reduce((n, e) => n + (e.kinds || []).length, 0)) + " event kinds";
+    body.innerHTML = renderMarkdown(md.join("\n")); // safe: renderMarkdown escapes all HTML first
+  }
+
   function initJournalControls() {
+    $("#st-date").addEventListener("change", (ev) => setHash("studies", ev.target.value));
     $("#jr-date").addEventListener("change", (ev) => setHash("journal", ev.target.value));
     $("#jr-prev").addEventListener("click", () => { const i = state.journalDates.indexOf(state.journalDate); if (i >= 0 && i < state.journalDates.length - 1) setHash("journal", state.journalDates[i + 1]); });
     $("#jr-next").addEventListener("click", () => { const i = state.journalDates.indexOf(state.journalDate); if (i > 0) setHash("journal", state.journalDates[i - 1]); });
@@ -2238,13 +2598,13 @@
     state.loaded[tab] = true;
     switch (tab) {
       case "overview":
-        if (first) { loadEquity(); loadRegime(); }
+        if (first) { loadEquity(); loadRegime(); loadCoverage(); }
         break;
       case "charts": {
         const sym = cleanSymbol(arg);
         if (sym && sym !== state.chartSymbol) { state.chartSymbol = sym; loadChart(); }
         else if (first) loadChart();
-        if (first) loadOrders();
+        if (first) { loadOrders(); loadIntraday(); }
         break;
       }
       case "signals": {
@@ -2262,6 +2622,12 @@
         break;
       }
       case "replay": if (first) loadReplay(); break;
+      case "studies": {
+        const date = arg && /^\d{4}-\d{2}-\d{2}$/.test(arg) ? arg : null;
+        if (first || (date && date !== state.studyDate)) loadStudy(date);
+        break;
+      }
+      case "vocabulary": if (first) loadVocabulary(); break;
       case "settings": if (first || !state.health) loadHealth(); break;
       default: break;
     }
@@ -2274,6 +2640,7 @@
         if (name === "charts" && state.chartSymbol) setHash("charts", state.chartSymbol);
         else if (name === "signals" && state.signalsRequested && state.signals && state.signals.date) setHash("signals", toDay(state.signals.date));
         else if (name === "journal" && state.journalDate) setHash("journal", state.journalDate);
+        else if (name === "studies" && state.studyDate) setHash("studies", state.studyDate);
         else setHash(name);
       });
       t.addEventListener("keydown", (ev) => {
@@ -2302,7 +2669,7 @@
   }
   function refreshSlow() {
     state.lastSlow = Date.now();
-    if (state.loaded.overview) { loadEquity({ quiet: true }); loadRegime({ quiet: true }); }
+    if (state.loaded.overview) { loadEquity({ quiet: true }); loadRegime({ quiet: true }); loadCoverage(); }
     if (state.loaded.charts) { loadChart({ quiet: true }); loadOrders({ quiet: true }); }
   }
   async function refreshAll() {
@@ -2316,6 +2683,9 @@
     if (state.loaded.drift && state.tab === "drift") loadDrift();
     if (state.loaded.journal && state.tab === "journal") loadJournal(state.journalDate);
     if (state.loaded.replay && state.tab === "replay") loadReplay();
+    if (state.loaded.studies && state.tab === "studies") loadStudy(state.studyDate);
+    if (state.loaded.vocabulary && state.tab === "vocabulary") loadVocabulary();
+    if (state.loaded.charts && state.tab === "charts") loadIntraday();
     if (state.tab === "settings") loadHealth();
     setTimeout(() => { btn.classList.remove("spinning"); btn.disabled = false; }, 700);
   }
@@ -2346,6 +2716,8 @@
     initPopovers();
     initEquityControls();
     initChartControls();
+    initIntradayControls();
+    initCoverageControls();
     initSignalControls();
     initAlertControls();
     initJournalControls();

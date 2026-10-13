@@ -42,6 +42,8 @@ presentation values (rebasing to 100, moving averages for the chart, R multiples
 | Equity vs SPY | account equity and SPY, both rebased to 100 at the first common date; return, SPY return, max drawdown | account: Alpaca `GET /v2/account/portfolio/history` on the **paper** host (daily); without keys or on a live account, one point per autopilot audit file. SPY: daily closes from the DuckDB `bars` table |
 | Positions | qty, entry, current price, P/L, strategy, original stop and target, current stop, risk per share, R multiple, days held vs the strategy's time stop | positions: Alpaca. Strategy and original stop/target: the order ledger (`state/orders.sqlite`, the intent the engine submitted), else the newest `runs/intents/<date>.json` that sized the symbol. Current stop: the open stop leg at Alpaca (moves when the position manager trails it). Days held: NYSE sessions since the fill. Time stop: the signal's own `max_hold_days`, else `settings.strategies.<name>`, else the strategy's default |
 | Chart | daily candles, SMA 20 / 50, entry / stop / target / current-stop lines, markers for signals, entries and exits | bars from DuckDB `bars`; levels from the ledger and the open stop leg; markers from `runs/signals/*.json`, the ledger's fills and Alpaca's closed orders |
+| Chart layers + Inspector | tick boxes with counts: signals taken, setups seen (shadow fires), refusals, entries, stops, targets, exits, support / resistance, regime shading; "Declutter" and "Everything" presets; a status line "N bars · N events · N fires · sig <engine_sig>". Clicking a drawn marker or line shows its receipt JSON in the Inspector | decision receipts (DuckDB `events`, `ops.receipts`) for the symbol and the dates on screen; `features.levels` support_1 / resistance_1 computed from the stored bars (point-in-time); regime from `runs/regime/<date>.json` and the receipts' own `payload.regime`. An outcome's entry and exit are drawn once per signal, not once per horizon |
+| Intraday | one market day of candles for SPY, QQQ, IWM, GLD or BTC/USD at 2m to 4h, with market-structure event layers (pools, sweeps, manipulation legs, inducements, swing structure, structure breaks, MSS / failed, OB zones, FVG / inversions, session opens, rejections) and the same Inspector | `data.intraday.read_bars` on the intraday store (`data.intraday_store_path`, opened read-only), then `features.market_structure.extract_events` on that day plus at least 350 prior bars of warm-up, on request, cached 60 s. Only events whose `ts_event` falls inside the day are drawn. The time axis is New York time for the ETFs and UTC for BTC/USD; receipts keep UTC. A vocabulary, not a strategy (`docs/market-structure.md`) |
 | Orders | open or closed orders with bracket legs and the strategy behind each | Alpaca (`open_orders()`, closed orders read-only); without keys, the order ledger |
 | Regime | today's regime, SPY trend, volatility, breadth, the router's notes, allowed strategies with their risk multiplier, breadth history | `runs/regime/<date>.json` (written by the nightly scan from `strategies.playbook`); falls back to the nightly report's scan step. Breadth history: DuckDB `breadth` table (the features step) |
 | Signals | every signal of a day: levels, R:R, score, rank, **taken or not and why**, Claude's review (decision, thesis, event-risk flags) | `runs/signals/<date>.json` joined to `runs/reviews`, `runs/intents`, `runs/autopilot` (vetoed / capped / staged / dry run), the size step's skips in the nightly report, and the order ledger |
@@ -49,6 +51,9 @@ presentation values (rebasing to 100, moving averages for the chart, R multiples
 | Alerts | P1-P3 alerts of the last 48 h with rules hit and your rating; rate them in place | event log `events` (priority above P0 or in `alerts`), `alerts` for delivery, `meta.rating` / `alert_ratings` for ratings. Rating writes through `monitor.rate.rate_alert` (source `dashboard`), exactly like `swing monitor rate` |
 | Journal | the day's journal entry | `data/journal/<date>.md` (`agent.journal`) |
 | Replay | historical replay runs, the latest one's summary, per-strategy and per-regime tables and equity curve | `runs/replay/<id>.json` (written by `swing replay`) |
+| Coverage (Overview) | tiles: days covered, events, fires, refusals, outcomes, studies (all-time); a heatmap of receipts per day for the last 60 days, by strategy or by symbol (the 40 busiest). A strategy cell lists that day's receipts (click a row for its JSON); a symbol cell opens its chart | DuckDB `events`; the studies count is the number of study files |
+| Studies | the auto-written study of each session, newest first | `<data.studies_dir>/<date>.md` (`ops.study`, default `docs/studies`), shown through the page's own escaping markdown renderer |
+| Vocabulary | every registered strategy with its one-line definition, status and evidence grade; the 21 market-structure event kinds with their definitions; dated operator rulings | `ops.vocabulary` (strategy cards, `docs/rulings.md`, the kind paragraphs of `docs/market-structure.md`) |
 
 ### Why a signal was not taken
 
@@ -99,12 +104,18 @@ parameters are HTTP 400, a non-local `Host` 403, unknown routes 404.
 | `GET /api/positions` | one row per open position |
 | `GET /api/orders?status=open\|closed&limit=50` | orders with legs |
 | `GET /api/chart/{SYMBOL}?days=180` | bars (calendar days back from the last stored bar), sma20, sma50, levels, markers |
+| `GET /api/chart/{SYMBOL}/layers?start=&end=` | layers (key, label, count, default), objects (`{id, layer, shape: marker\|line\|zone\|band, t, t2, price, price2, dir, text, ref}`), receipts (`ref` -> the event row), status (events, fires, refusals, outcomes, engine_sig) |
+| `GET /api/intraday/{SYMBOL}?day=YYYY-MM-DD&tf=2m\|5m\|15m\|30m\|1h\|4h` | SYMBOL is SPY, QQQ, IWM, GLD or BTC-USD; day defaults to the latest stored. bars (`t` = wall-clock seconds on the market's clock), layers, objects, receipts, status (bars, events, warmup_bars, extractor_version, engine_sig), first_day, last_day |
 | `GET /api/signals?date=YYYY-MM-DD` | the day's signals with taken / skip_reason / review (`review.current` is false when the latest review step did not produce it), review_status |
 | `GET /api/shadow?by=strategy\|regime` | rows, updated_at |
 | `GET /api/events?as_of=&strategy=&symbol=&kind=&limit=` | events (decision receipts, newest first; `payload` is the JSON that decided each one), count |
 | `GET /api/alerts?hours=48` | alerts, newest first |
 | `POST /api/alerts/{event_id}/rate` `{"rating": "useful"\|"noise"\|"traded"}` | event_id, rating |
 | `GET /api/journal?date=YYYY-MM-DD` | date, markdown, available_dates |
+| `GET /api/studies` | studies (date, title, bytes), newest first |
+| `GET /api/studies/{YYYY-MM-DD}` | date, markdown, available_dates. The path part must be a calendar date; nothing else reaches the file name |
+| `GET /api/coverage?days=60` | tiles, days, strategies and symbols (`rows`: key, total, cells `{day: n}`) |
+| `GET /api/vocabulary` | rulings_for_everything, strategies, structure (section, kinds, definition, rulings), structure_doc |
 | `GET /api/replay` | runs, latest (`units: "fraction"`: returns, CAGR, drawdown and win rate as fractions) |
 | `POST /api/killswitch/trip` `{"confirm": "TRIP"}` | tripped, path |
 

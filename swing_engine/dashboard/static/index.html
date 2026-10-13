@@ -103,6 +103,8 @@
       <button role="tab" id="tab-alerts" aria-controls="panel-alerts" aria-selected="false" tabindex="-1" data-tab="alerts">Alerts <span id="alerts-count" class="tab-count" hidden></span></button>
       <button role="tab" id="tab-journal" aria-controls="panel-journal" aria-selected="false" tabindex="-1" data-tab="journal">Journal</button>
       <button role="tab" id="tab-replay" aria-controls="panel-replay" aria-selected="false" tabindex="-1" data-tab="replay">Replay</button>
+      <button role="tab" id="tab-studies" aria-controls="panel-studies" aria-selected="false" tabindex="-1" data-tab="studies">Studies</button>
+      <button role="tab" id="tab-vocabulary" aria-controls="panel-vocabulary" aria-selected="false" tabindex="-1" data-tab="vocabulary">Vocabulary</button>
       <button role="tab" id="tab-settings" aria-controls="panel-settings" aria-selected="false" tabindex="-1" data-tab="settings">Safety &amp; settings</button>
     </div>
   </nav>
@@ -154,6 +156,23 @@
           <p id="pos-note" class="data-note" hidden></p>
           <div id="positions-body" class="table-wrap"></div>
         </article>
+
+        <article class="card card--coverage" aria-labelledby="cv-title">
+          <header class="card__head card__head--wrap">
+            <h2 id="cv-title">Coverage <span id="cv-meta" class="card__meta"></span></h2>
+            <div class="card__tools">
+              <div class="seg" role="group" aria-label="Heatmap rows" id="cv-view">
+                <button type="button" data-view="strategies" aria-pressed="true">Strategies</button>
+                <button type="button" data-view="symbols" aria-pressed="false">Symbols</button>
+              </div>
+            </div>
+          </header>
+          <p class="card__intro">Decision receipts the engine has written: every fire, refusal and graded outcome. The grid counts receipts per day; click a strategy cell to list that day's receipts, or a symbol cell to open its chart.</p>
+          <div id="cv-tiles" class="stat-row"></div>
+          <p id="cv-note" class="data-note" hidden></p>
+          <div id="cv-heat" class="table-wrap"></div>
+          <div id="cv-events"></div>
+        </article>
       </div>
     </section>
 
@@ -177,12 +196,18 @@
             </div>
           </div>
         </header>
+        <div id="ch-layers" class="layers" role="group" aria-label="Chart layers"></div>
+        <p id="ch-status" class="data-note mono"></p>
         <div class="chart-layout">
           <div class="chart-wrap">
             <div id="ch-legend" class="chart-legend" aria-hidden="true"></div>
             <div id="ch-chart" class="chart chart--price" role="img" aria-label="Price chart"></div>
           </div>
-          <aside id="ch-side" class="chart-side" aria-label="Position levels"></aside>
+          <aside class="chart-side" aria-label="Position levels and inspector">
+            <div id="ch-side"></div>
+            <h3>Inspector</h3>
+            <div id="ch-inspector" aria-live="polite"></div>
+          </aside>
         </div>
         <div class="chart-key" aria-hidden="true">
           <span class="key key--sma20">SMA 20</span>
@@ -193,6 +218,43 @@
           <span class="key key--target">Target</span>
         </div>
         <p id="ch-note" class="data-note" hidden></p>
+      </article>
+
+      <article class="card" aria-labelledby="in-title">
+        <header class="card__head card__head--wrap">
+          <h2 id="in-title">Intraday <span id="in-sub" class="card__meta"></span></h2>
+          <div class="card__tools">
+            <div class="seg" role="group" aria-label="Market" id="in-symbols">
+              <button type="button" data-symbol="SPY" aria-pressed="true">SPY</button>
+              <button type="button" data-symbol="QQQ" aria-pressed="false">QQQ</button>
+              <button type="button" data-symbol="IWM" aria-pressed="false">IWM</button>
+              <button type="button" data-symbol="GLD" aria-pressed="false">GLD</button>
+              <button type="button" data-symbol="BTC-USD" aria-pressed="false">BTC/USD</button>
+            </div>
+            <label class="field"><span>Day</span><input type="date" id="in-day"></label>
+            <div class="seg" role="group" aria-label="Timeframe" id="in-tf">
+              <button type="button" data-tf="2m" aria-pressed="false">2m</button>
+              <button type="button" data-tf="5m" aria-pressed="true">5m</button>
+              <button type="button" data-tf="15m" aria-pressed="false">15m</button>
+              <button type="button" data-tf="30m" aria-pressed="false">30m</button>
+              <button type="button" data-tf="1h" aria-pressed="false">1h</button>
+              <button type="button" data-tf="4h" aria-pressed="false">4h</button>
+            </div>
+          </div>
+        </header>
+        <p class="card__intro">Market-structure events extracted from the day's bars on request. This is a vocabulary, not a strategy: nothing here has been shown to make money. An event is drawn where it became confirmable; its receipt carries both timestamps.</p>
+        <div id="in-layers" class="layers" role="group" aria-label="Intraday layers"></div>
+        <p id="in-status" class="data-note mono"></p>
+        <div class="chart-layout">
+          <div class="chart-wrap">
+            <div id="in-chart" class="chart chart--price" role="img" aria-label="Intraday price chart"></div>
+          </div>
+          <aside class="chart-side" aria-label="Inspector">
+            <h3>Inspector</h3>
+            <div id="in-inspector" aria-live="polite"></div>
+          </aside>
+        </div>
+        <p id="in-note" class="data-note" hidden></p>
       </article>
 
       <article class="card" aria-labelledby="ord-title">
@@ -341,6 +403,32 @@
           <div id="rp-regime" class="table-wrap"></div>
         </article>
       </div>
+    </section>
+
+    <!-- ===================== STUDIES ===================== -->
+    <section role="tabpanel" id="panel-studies" aria-labelledby="tab-studies" tabindex="0" class="panel" hidden>
+      <article class="card card--journal" aria-labelledby="st-title">
+        <header class="card__head">
+          <h2 id="st-title">Daily studies</h2>
+          <div class="card__tools">
+            <label class="sr-only" for="st-date">Study date</label>
+            <select id="st-date"></select>
+          </div>
+        </header>
+        <div id="study-body" class="markdown"></div>
+      </article>
+    </section>
+
+    <!-- ===================== VOCABULARY ===================== -->
+    <section role="tabpanel" id="panel-vocabulary" aria-labelledby="tab-vocabulary" tabindex="0" class="panel" hidden>
+      <article class="card" aria-labelledby="vc-title">
+        <header class="card__head">
+          <h2 id="vc-title">Tracked vocabulary</h2>
+          <span id="vc-meta" class="card__meta"></span>
+        </header>
+        <p class="card__intro">Every strategy the engine tracks with its written definition, the intraday market-structure event kinds, and the owner's dated operator rulings.</p>
+        <div id="vocab-body" class="markdown"></div>
+      </article>
     </section>
 
     <!-- ===================== SAFETY & SETTINGS ===================== -->

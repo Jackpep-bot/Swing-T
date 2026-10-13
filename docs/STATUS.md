@@ -1,4 +1,4 @@
-# Project status: RUNNING (third session, 2026-10-08)
+# Project status: IDLE, video-model P0 and P1 first pass done (2026-10-13)
 
 ## Done (committed)
 - Rounds 1-4: data, features, 7 strategies + 5 research strategies (shadow-only), backtester, ranker, risk,
@@ -58,7 +58,34 @@
 - install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
 - 2,229 tests pass.
 
-## Resume here (in order) - updated 2026-10-09 22:30 ET
+## Video-model work (2026-10-13, plan: docs/proposals/video-model-plan.md)
+No jobs in flight. Weekend research finished: corrected-universe leaderboard (3,214 trials) has no survivors; batch 3
+fails the alpha-vs-SPY rule. All strategies stay shadow-only.
+
+Plan P0 (farm features on the swing engine) is DONE and usable:
+- Receipts: `events` table (`ops/receipts.py`), every fire / refusal / exit / outcome with the deciding step and
+  inputs, stamped with `engine_sig` (`core/signature.py`). `swing receipts backfill|show`. Backfilled 953 rows.
+- Daily study: nightly `study` step writes `docs/studies/DATE.md` (`ops/study.py`, `swing study [--all]`), named in Telegram.
+- Dashboard (`dashboard/farm.py`): chart layer toggles + Inspector (receipt JSON), intraday chart 2m-4h with
+  market-structure layers, Studies tab, Vocabulary tab, coverage tiles and heatmap. Checked in the browser.
+- Vocabulary: `uv run python -m swing_engine.ops.vocabulary` -> docs/vocabulary.md; rulings in docs/rulings.md.
+
+Plan P1 (intraday lane) first pass is DONE:
+- `swing ingest-intraday` -> data/live/intraday.duckdb (free Alpaca SIP 1-minute, SPY QQQ IWM GLD from 2016, BTC/USD
+  from 2021, ~10M rows; resumable). `data/intraday.py` resamples without look-ahead.
+- `features/market_structure.py` (21 event kinds, docs/market-structure.md, truncation test).
+- Pre-registered docs/preregistration/2026-10-13-intraday-chains.md, run once by `research/intraday_chains.py`:
+  all 3 cards FAIL net of costs (results file beside it). Gross R is about zero; costs decide it. 6 trials logged.
+
+Open items:
+- Plan P2 (always-on host, intraday paper executor) WAITS for the owner's decision. Do not start it.
+- Not hooked into receipts: in-strategy filters (min_stop), broker-side stop/target fills, `swing paper --from-intents`.
+- Dashboard: zones are edge lines not boxes; max 300 line series per chart; old daily markers still shown beside layers.
+- The intraday chart extracts on New York calendar days; check `intraday_chains.py` uses the same day clock for PDH/PDL.
+- Any new intraday idea is a new pre-registration and new trials; never retune these three cards on the same windows.
+- Earlier leftovers: residual_momentum v2c-resmom re-replay not merged into the board; duplicate renamed tickers.
+
+## Older resume notes (superseded by the section above) - updated 2026-10-09 22:30 ET
 No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no
 window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
 (docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.

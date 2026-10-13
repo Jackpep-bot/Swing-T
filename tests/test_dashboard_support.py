@@ -46,7 +46,8 @@ def write_json(path: Path, payload: Any) -> Path:
 
 def make_settings(root: Path) -> Settings:
     return Settings.model_validate({
-        "data": {"store_path": str(root / "data" / "store.duckdb"), "event_log_path": str(root / "data" / "events.sqlite")},
+        "data": {"store_path": str(root / "data" / "store.duckdb"), "event_log_path": str(root / "data" / "events.sqlite"),
+                 "intraday_store_path": str(root / "data" / "intraday.duckdb")},
         "execution": {"ledger_file": str(root / "state" / "orders.sqlite")},
         "risk": {"kill_switch_file": str(root / "state" / "KILL")},
         "strategies": {"pullback_trend": {"enabled": True, "max_hold_days": 20}},
