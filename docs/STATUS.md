@@ -1,4 +1,24 @@
-# Project status: IDLE, queue of 2026-10-13 done, live store repaired, dividend card tested (2026-10-13 12:50 ET)
+# Project status: small-cap map WAITING FOR AC POWER (script armed); everything else idle (2026-10-13 13:05 ET)
+
+## Running / armed (2026-10-13 13:05 ET)
+- `scripts/run_smallcap_map.sh` (PID 58878, log data/logs/research/smallcap_map.log) waits for AC power, then runs
+  `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild` (every strategy on
+  the 2,500 stocks AFTER the 1,500 most liquid, 2024-26, about 6 hours on 2 lanes; progress in
+  data/logs/research/<run-id>.log), writes docs/edge_map_smallcap.md and Telegrams its top.
+  Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md. If the script is gone (restart), run it again
+  with nohup; an interrupted run resumes with `research run --resume latest --no-rebuild` (same settings file).
+- When it is done: commit docs/edge_map_smallcap.md. Candidates (t >= 2 in both halves, clearly more than luck
+  gives) go to a forward test only. Owner was asked (13:00 ET) whether the best candidates may trade on paper at a
+  quarter of normal risk; no answer yet, so until then they are shadow-only.
+
+Owner, 2026-10-13 12:48 ET: "double down on testing ... high priority to winning trade methods ... don't aim for
+perfection". Done since:
+- **Edge map** (docs/edge_map.md, `research/edge_map.py`): all strategies split by the stock's dollar volume, graded
+  against SPY. 0 of 711 cells are positive in both windows at t >= 1 (luck alone would give about 18): on the 1,500
+  most liquid stocks these methods are worse than nothing. 2,637 cells logged (6,742 trials).
+- Found: every replay so far used only the 1,500 most liquid names (`universe.max_symbols`). The small-cap run above
+  is the first look anywhere else. `universe.skip_top`, `research run --no-rebuild`, `edge_map --windows/--tag`.
+- `execution.reuse_exiting_slots` (replay only, default off) fixes half-invested monthly books for future cards.
 
 ## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, PR https://github.com/Jackpep-bot/Swing-T/pull/2; includes PR 1's commits)
 No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,574 tests pass. No strategy has
