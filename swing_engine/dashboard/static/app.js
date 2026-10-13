@@ -22,7 +22,7 @@
   const EVENT_DRIVEN_FEED = /account/i;   // trade-update feeds are silent until something fills: never "stale"
   const ET = "America/New_York";
   const TABS = ["overview", "charts", "signals", "shadow", "drift", "alerts", "journal", "replay", "studies", "vocabulary", "settings"];
-  const MAX_LAYER_LINES = 300;            // one chart series per drawn line: more than this makes the chart sluggish
+  const MAX_LAYER_LINES = 300;            // one chart series per drawn line (zones are not lines): more than this makes the chart sluggish
   const PICK_PX = 30;                     // a click this close to a drawn object selects it
   const MARKER_TEXT_MAX = 80;             // more markers than this are drawn without their text
   const THEME_KEY = "swing.theme";
@@ -1467,7 +1467,30 @@
 
   // Chart layers + Inspector (shared by the daily and the intraday chart) ---------------------------
   // A drawable object is {id, layer, shape: marker|line|zone|band, t, t2, price, price2, dir, text, ref};
-  // payload.receipts[ref] is the JSON the Inspector shows. Everything is drawn with chart-library series only.
+  // payload.receipts[ref] is the JSON the Inspector shows. Markers, lines and bands are chart-library series;
+  // zones are filled boxes painted by one series primitive on the candles (so they cost no series each).
+  const ZONE_FILL_ALPHA = 0.16, ZONE_EDGE_ALPHA = 0.55;
+  /** A lightweight-charts series primitive that paints `boxes` [{t1, t2 (null = right edge), lo, hi, fill, edge}] under the candles. */
+  function zonePrimitive(boxes) {
+    let chart = null, series = null;
+    const renderer = { draw: (target) => target.useBitmapCoordinateSpace((scope) => {
+      if (!chart || !series) return;
+      const ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, ts = chart.timeScale();
+      ctx.save();
+      ctx.lineWidth = Math.max(1, Math.floor(hr));
+      for (const b of boxes) {
+        const x1 = ts.timeToCoordinate(b.t1), x2 = b.t2 === null ? scope.mediaSize.width : ts.timeToCoordinate(b.t2);
+        const y1 = series.priceToCoordinate(b.hi), y2 = series.priceToCoordinate(b.lo);
+        if (x1 === null || x2 === null || y1 === null || y2 === null || x2 < 0 || x1 > scope.mediaSize.width) continue;
+        const x = Math.round(x1 * hr), y = Math.round(y1 * vr), w = Math.max(1, Math.round((x2 - x1) * hr)), h = Math.max(1, Math.round((y2 - y1) * vr));
+        ctx.globalAlpha = ZONE_FILL_ALPHA; ctx.fillStyle = b.fill; ctx.fillRect(x, y, w, h);
+        ctx.globalAlpha = ZONE_EDGE_ALPHA; ctx.strokeStyle = b.edge; ctx.strokeRect(x + 0.5, y + 0.5, w, h);
+      }
+      ctx.restore();
+    }) };
+    const view = { zOrder: () => "bottom", renderer: () => renderer };
+    return { attached: (p) => { chart = p.chart; series = p.series; }, detached: () => { chart = series = null; }, updateAllViews: () => {}, paneViews: () => [view] };
+  }
   const LAYER_COLORS = {
     taken: "--c-target", seen: "--c-sma50", refusals: "--c-stop", entries: "--c-account", stops: "--c-stop", targets: "--c-target",
     exits: "--orange", levels: "--c-entry", pools: "--c-entry", sweeps: "--orange", manip: "--c-stop", inducements: "--c-trail",
@@ -1498,6 +1521,7 @@
       (entry.overlay || []).forEach((s) => { try { entry.chart.removeSeries(s); } catch (e) { /* ignore */ } });
       entry.overlay = [];
       entry.drawn = [];
+      if (entry.zones) { try { entry.zones.series.detachPrimitive(entry.zones.prim); } catch (e) { /* series already removed */ } entry.zones = null; }
       if (entry.clickHandler) { try { entry.chart.unsubscribeClick(entry.clickHandler); } catch (e) { /* ignore */ } entry.clickHandler = null; }
     }
     const candles = entry && entry.series.candles;
@@ -1538,6 +1562,7 @@
     const markers = (entry.baseMarkers || []).slice();
     const layerMarkers = [];
     const bands = new Array(times.length).fill(null);
+    const boxes = [];
     for (const o of Array.isArray(payload.objects) ? payload.objects : []) {
       if (!o || !vis.has(o.layer) || o.t === null || o.t === undefined) continue;
       const end = o.t2 === null || o.t2 === undefined ? (o.shape === "marker" ? o.t : times[last]) : o.t2;
@@ -1562,10 +1587,10 @@
       const p1 = toNum(o.price), p2 = toNum(o.price2);
       if (i1 < 0 || p1 === null || p2 === null) continue;
       const zone = o.shape === "zone";
-      if (lines + (zone ? 2 : 1) > MAX_LAYER_LINES) { skipped += 1; continue; }
-      if (zone) {
-        addLine(color, i1, p1, i2, p1, LS.Dashed);
-        addLine(color, i1, p2, i2, p2, LS.Dashed);
+      if (!zone && lines + 1 > MAX_LAYER_LINES) { skipped += 1; continue; }
+      if (zone) { // fill by direction, edge in the layer's colour; an open zone (no t2) runs to the right edge
+        const open = o.t2 === null || o.t2 === undefined;
+        boxes.push({ t1: times[i1], t2: open ? null : times[i2], lo: Math.min(p1, p2), hi: Math.max(p1, p2), fill: o.dir === "bull" ? cssVar("--c-up") : o.dir === "bear" ? cssVar("--c-down") : color, edge: color });
         entry.drawn.push({ o: o, zone: true, i1: i1, i2: i2, lo: Math.min(p1, p2), hi: Math.max(p1, p2) });
       } else {
         addLine(color, i1, p1, i2, p2, o.layer === "levels" || o.layer === "pools" ? LS.Dotted : LS.Solid);
@@ -1578,6 +1603,7 @@
       shade.setData(times.map((t, i) => (bands[i] ? { time: t, value: 1, color: bands[i] } : { time: t })));
       entry.overlay.push(shade);
     }
+    if (boxes.length) { entry.zones = { series: candles, prim: zonePrimitive(boxes) }; candles.attachPrimitive(entry.zones.prim); }
     if (layerMarkers.length > MARKER_TEXT_MAX) layerMarkers.forEach((m) => { m.text = ""; });
     candles.setMarkers(markers.concat(layerMarkers).sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0)));
     status.textContent = label + (skipped ? " · " + fmtInt(skipped) + " lines not drawn (limit " + MAX_LAYER_LINES + "; untick a layer)" : "");
