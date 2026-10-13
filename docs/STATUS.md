@@ -1,6 +1,6 @@
 # Project status: IDLE, queue of 2026-10-13 worked through; decisions wait for the owner (2026-10-13 11:10 ET)
 
-## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, stacked on PR 1's branch)
+## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, PR https://github.com/Jackpep-bot/Swing-T/pull/2; includes PR 1's commits)
 No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,564 tests pass.
 
 Waiting for the owner (nothing else is blocked):
