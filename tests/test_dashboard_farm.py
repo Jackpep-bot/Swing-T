@@ -308,3 +308,27 @@ def test_live_coverage_and_vocabulary(live: tuple[DashboardApp, Path], tmp_path:
     assert all(set(r) == {"date", "text"} for r in vocab["rulings_for_everything"])
     fresh = DashboardApp(live_data(tmp_path / "fresh"), secrets=[])
     assert fresh.handle("GET", "/api/coverage", H).json()["ok"] is False  # no events table yet: a reason, not an error
+
+
+def test_intraday_chart_draws_the_chain_replay_rows(live: tuple[DashboardApp, Path]) -> None:
+    app, root = live
+    ts = lambda hhmm: pd.Timestamp(f"{DAY.isoformat()} {hhmm}", tz="America/New_York").tz_convert("UTC")  # noqa: E731
+    base = {"symbol": "SPY", "sweep_pool": "PDL", "mss_ts": pd.NaT, "zone_ts": pd.NaT, "retrace_ts": pd.NaT,
+            "trigger_ts": pd.NaT, "day": DAY}
+    trade = {**base, "card": "lit_chain_ob", "direction": "long", "refusal": None, "sweep_ts": ts("10:00"),
+             "entry_ts": ts("10:30"), "entry": 100.0, "stop": 99.0, "target": 102.0, "exit_ts": ts("11:00"), "exit": 101.0,
+             "net_r": 0.9, "lineage": "sweep PDL -> entry 100"}
+    refused = {**base, "card": "lit_chain_fvg", "direction": "short", "refusal": "no_retrace", "sweep_ts": ts("12:00"),
+               "mss_ts": ts("13:00"), "entry_ts": pd.NaT}
+    other = {**trade, "symbol": "QQQ"}
+    (root / "chains").mkdir()
+    pd.DataFrame([trade, other]).to_parquet(root / "chains" / "trades.parquet")
+    pd.DataFrame([refused]).to_parquet(root / "chains" / "refusals.parquet")
+    data = get(app, f"/api/intraday/SPY?day={DAY.isoformat()}&tf=5m")
+    counts = {layer["key"]: layer["count"] for layer in data["layers"]}
+    assert (counts["taken"], counts["stops"], counts["targets"], counts["seen"]) == (2, 1, 1, 1)  # marker + path
+    marker = next(o for o in data["objects"] if o["layer"] == "taken" and o["shape"] == "marker")
+    assert marker["text"] == "ob +0.9R" and marker["dir"] == "bull"
+    assert data["receipts"][marker["ref"]]["lineage"] == "sweep PDL -> entry 100"
+    seen = next(o for o in data["objects"] if o["layer"] == "seen")
+    assert seen["text"] == "no_retrace" and pd.Timestamp(seen["t"], unit="s").hour == 13  # where the chain stopped

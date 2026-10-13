@@ -30,6 +30,11 @@ SWING_LAYERS: tuple[tuple[str, str, bool], ...] = (
 )
 # key, label, features.market_structure kinds, part of the "declutter" preset (grouped as in the video)
 INTRADAY_LAYERS: tuple[tuple[str, str, tuple[str, ...], bool], ...] = (
+    # the pre-registered chain replay's rows (research.intraday_chains parquet), not extractor kinds
+    ("taken", "★ Trades (chain replay)", (), True),
+    ("stops", "Trade stops", (), True),
+    ("targets", "Trade targets", (), True),
+    ("seen", "○ Setups seen (refused)", (), False),
     ("pools", "Pools", ("pool_formed", "pool_swept"), False),
     ("sweeps", "Sweeps", ("sweep",), True),
     ("manip", "Manipulation legs", ("manip_leg",), True),
@@ -234,10 +239,61 @@ def intraday_window(symbol: str, day: date, tf: str) -> tuple[Any, Any, Any]:
     return (lo - pd.Timedelta(days=days)).tz_convert("UTC"), lo.tz_convert("UTC"), hi.tz_convert("UTC")
 
 
+CHAIN_STEP_COLUMNS = ("trigger_ts", "retrace_ts", "zone_ts", "mss_ts", "sweep_ts")  # latest first
+
+
+def chain_objects(trades: Any, refusals: Any, lo: Any, hi: Any, wall: Any) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Chart objects and receipts for one symbol's chain-replay rows inside [lo, hi): a trade is an entry marker,
+    its path to the exit and its stop / target lines; a refused chain is a marker on the bar where it stopped."""
+    import pandas as pd
+
+    def receipt(row: Mapping[str, Any]) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        for k, v in row.items():
+            if isinstance(v, pd.Timestamp):
+                out[k] = None if pd.isna(v) else v.tz_convert("UTC").isoformat()
+            elif isinstance(v, float):
+                out[k] = _f(v, 6)
+            else:
+                out[k] = None if v is None or v is pd.NaT else str(v) if isinstance(v, date) else v
+        return out
+
+    objects: list[dict[str, Any]] = []
+    receipts: dict[str, Any] = {}
+    if trades is not None and len(trades):
+        for n, r in enumerate(trades[(trades["entry_ts"] >= lo) & (trades["entry_ts"] < hi)].to_dict("records")):
+            rid = f"trade:{r['card']}:{n}"
+            receipts[rid] = receipt(r)
+            direction = "bull" if r["direction"] == "long" else "bear"
+            t1, t2 = wall(r["entry_ts"]), wall(r["exit_ts"])
+            entry, exit_ = _f(r["entry"]), _f(r["exit"])
+            objects.append(_obj(rid, "taken", "marker", t1, rid, direction=direction,
+                                text=f"{r['card'].replace('lit_chain_', '').replace('sweep_reversal_', '')} {r['net_r']:+.1f}R"))
+            objects.append(_obj(rid + ":path", "taken", "line", t1, rid, t2=t2, price=entry, price2=exit_, direction=direction))
+            for layer, key in (("stops", "stop"), ("targets", "target")):
+                if _f(r[key]) is not None:
+                    objects.append(_obj(f"{rid}:{key}", layer, "line", t1, rid, t2=t2, price=_f(r[key]), price2=_f(r[key]),
+                                        direction=direction, text=key))
+    if refusals is not None and len(refusals):
+        at = refusals[list(CHAIN_STEP_COLUMNS)].bfill(axis=1).iloc[:, 0]  # the last step the chain reached
+        inside = refusals[(at >= lo) & (at < hi)]
+        for n, (r, t) in enumerate(zip(inside.to_dict("records"), at[inside.index], strict=True)):
+            rid = f"setup:{r['card']}:{n}"
+            receipts[rid] = receipt(r)
+            objects.append(_obj(rid, "seen", "marker", wall(t), rid,
+                                direction="bull" if r["direction"] == "long" else "bear", text=str(r["refusal"])))
+    return objects, receipts
+
+
 def intraday_payload(symbol: str, day: date, tf: str, bars: Any, *, engine_sig: str | None = None,
-                     first_day: str | None = None, last_day: str | None = None) -> dict[str, Any]:
+                     first_day: str | None = None, last_day: str | None = None,
+                     chains: tuple[Any, Any] | None = None) -> dict[str, Any]:
     """Candles of ``day`` and the market-structure events whose ``ts_event`` falls inside it. ``bars`` are the
-    complete ``tf`` bars of the warm-up plus the day (data.intraday.read_bars columns, ``ts`` tz-aware)."""
+    complete ``tf`` bars of the warm-up plus the day (data.intraday.read_bars columns, ``ts`` tz-aware).
+
+    ETF structure is extracted from regular-hours bars only, as research.intraday_chains does, so a prior-day high
+    or low here is the same regular-session level the replay traded (pre- and post-market candles are still
+    drawn). ``chains``: that replay's (trades, refusals) rows for ``symbol``, drawn as their own layers."""
     import pandas as pd
 
     from swing_engine.features.market_structure import EXTRACTOR_VERSION, extract_events, extract_zones
@@ -260,8 +316,9 @@ def intraday_payload(symbol: str, day: date, tf: str, bars: Any, *, engine_sig: 
     objects: list[dict[str, Any]] = []
     receipts: dict[str, Any] = {}
     if len(in_day):
-        events = extract_events(frame, symbol, tf)
-        zones = extract_zones(frame, symbol, tf)
+        structure = frame if "/" in symbol else frame[frame["session"] == "rth"].reset_index(drop=True)
+        events = extract_events(structure, symbol, tf)
+        zones = extract_zones(structure, symbol, tf)
         zone_end = {(z.event_id, z.kind): z.ts_to for z in zones.itertuples()}
         layer_of = {kind: key for key, _label, kinds, _d in INTRADAY_LAYERS for kind in kinds}
         events = events[(events["ts_event"] >= lo) & (events["ts_event"] < hi)]
@@ -295,6 +352,10 @@ def intraday_payload(symbol: str, day: date, tf: str, bars: Any, *, engine_sig: 
                                     text=text))
     else:
         events = []
+    if chains is not None and len(in_day):
+        extra, extra_receipts = chain_objects(chains[0], chains[1], lo, hi, wall)
+        objects += extra
+        receipts.update(extra_receipts)
     return {"symbol": symbol, "day": day.isoformat(), "tf": tf, "tz": tz, "bars": out_bars,
             "layers": _layer_rows(INTRADAY_LAYERS, objects), "objects": objects, "receipts": receipts,
             "first_day": first_day, "last_day": last_day,

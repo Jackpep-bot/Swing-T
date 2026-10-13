@@ -327,6 +327,7 @@ def live_data(root: Path, *, broker: Any | None = "fake", http: Any | None = Non
     from swing_engine.dashboard.data import LiveData
 
     env = build_all(root)
+    kw.setdefault("chains_dir", root / "chains")  # never the repo's own replay files
     factory = (lambda: FakeBroker()) if broker == "fake" else broker
     return LiveData(None, settings=env["settings"], secrets=secrets or fake_secrets(), broker_factory=factory,
                     http_get=http or FakeHTTP(), journal_dirs=[env["journal"]], now=lambda: NOW, **kw)

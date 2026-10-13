@@ -602,6 +602,7 @@ class LiveData:
         http_get: Callable[..., tuple[int, Any]] | None = None,
         journal_dirs: list[Path] | None = None,
         studies_dir: Path | None = None,
+        chains_dir: Path | None = None,
         now: Callable[[], datetime] | None = None,
         duck_connect: Callable[..., Any] | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -636,6 +637,8 @@ class LiveData:
         self.intraday_path = _resolve(s.data.intraday_store_path)
         self.intraday_duck = DuckReader(self.intraday_path, connect=_open_store, clock=clock, sleep=sleep)
         self.studies_dir = studies_dir or _resolve(getattr(s.data, "studies_dir", "docs/studies"))
+        self.chains_dir = chains_dir or _resolve("data/research/intraday_chains")  # research.intraday_chains.DATA_DIR
+        self._chains: tuple[Any, Any] = (None, None)
         self.cache = TTLCache(clock)
         self._broker_factory = broker_factory or self._default_broker
         self._http_get = http_get or _httpx_get
@@ -1756,10 +1759,24 @@ class LiveData:
             sig = engine_signature(self.settings)
         except Exception:  # noqa: BLE001
             sig = None
-        data = farm.intraday_payload(symbol, want, tf, bars, engine_sig=sig, first_day=first, last_day=last)
+        data = farm.intraday_payload(symbol, want, tf, bars, engine_sig=sig, first_day=first, last_day=last,
+                                     chains=self._chain_rows(symbol))
         if stale is None:
             self.cache.put(key, data)
         return ok(data, stale=stale)
+
+    def _chain_rows(self, symbol: str) -> tuple[Any, Any] | None:
+        """(trades, refusals) of the intraday chain replay for ``symbol`` (research.intraday_chains parquet in
+        ``chains_dir``), or None when it has not been run. Read once per file change."""
+        paths = [self.chains_dir / "trades.parquet", self.chains_dir / "refusals.parquet"]
+        if not all(p.exists() for p in paths):
+            return None
+        stamp = tuple(p.stat().st_mtime_ns for p in paths)
+        if self._chains[0] != stamp:
+            import pandas as pd
+
+            self._chains = (stamp, [pd.read_parquet(p) for p in paths])
+        return tuple(f[f["symbol"] == symbol] for f in self._chains[1])  # type: ignore[return-value]
 
     def _study_dates(self) -> list[str]:
         try:
