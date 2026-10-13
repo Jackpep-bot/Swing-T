@@ -1,25 +1,31 @@
-# Project status: TWO RUNS GOING (small-cap map running, batch 5 starts behind it) (2026-10-13 15:59 ET)
+# Project status: BATCH 5 RUNNING; small-cap map done, no candidates (2026-10-13 19:30 ET)
 
-Branch `claude/project-thread-fesglg` continues from `claude/project-thread-4wq9xa` (PR 2, still open, ends at 62455ed).
+Branch `claude/project-thread-fesglg` (PR https://github.com/Jackpep-bot/Swing-T/pull/3) continues from
+`claude/project-thread-4wq9xa` (PR 2, still open, ends at 62455ed).
 
-## Running (started 2026-10-13 15:52 ET; the Mac went on AC power at 15:51)
-Both run under `scripts/on_power.sh` (owner: "start them I will plug in soon"): a job starts on AC or on a battery at
-or above 25% (`BATT_FLOOR`), is paused in place (SIGSTOP, Telegram notice) if the battery falls under that, and
-continues by itself on AC. The old wait-for-AC gate held both runs for almost three hours.
-1. `scripts/on_power.sh scripts/run_smallcap_map.sh` (PID 66729, log data/logs/research/smallcap_map.log): run id
-   20261013-155159, `swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild
-   --allow-battery --lanes 4` (every strategy on the 2,500 stocks AFTER the 1,500 most liquid, 2024-26; 10 chunks
-   on 4 lanes, about 3 GB a lane; progress in data/logs/research/20261013-155159.log), then writes
-   docs/edge_map_smallcap.md and Telegrams its top. Pre-registered: docs/preregistration/2026-10-13-smallcap-map.md.
-   Interrupted: `research run --resume latest --no-rebuild` with the same settings file, then the python block at
-   the end of the script.
-2. `scripts/on_power.sh scripts/run_batch5.sh` (PID 66425, log data/logs/research/batch5.log) waits for (1) to end,
-   then replays the 15 batch-5 cards on 2024-26 (3 at a time, logs data/logs/research/pr_prereg-b5-*.log), then
-   2017-24 for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
-   (docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
-   verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13). Expect most of a day.
-   Rerun is safe only for replays that did not finish (each replay logs a trial); check the logs first.
-If either is gone after a restart, start it again with nohup (see the script's header).
+## Small-cap map: DONE 2026-10-13 18:55 ET, nothing found (docs/edge_map_smallcap.md)
+Run 20261013-155159, every strategy on the 2,500 stocks after the 1,500 most liquid, 2024-26, 10/10 chunks.
+**0 of 870 cells** are positive against SPY in both halves, at t >= 2 or even at t >= 1 (luck alone would give about
+22 at t >= 1). Pooled, every liquidity band loses in both halves: net R -0.10 to -0.26, -0.17 to -0.39 against SPY.
+Small caps do not rescue these methods; they are worse there than on the liquid 1,500. 2,955 trials logged (9,707 in
+all). So there is no probation candidate, no reason to widen the nightly's universe, and nothing for the
+`event_avoid_filters` card to be applied to. The lane stores data/live/research_20261013-155159_l0..l3.duckdb
+(4 copies of the store) hold the ledgers; delete them with the other old copies when the owner says so.
+
+## Running
+`scripts/on_power.sh scripts/run_batch5.sh` (PID 66425, log data/logs/research/batch5.log), started 18:56 ET:
+replays the 15 batch-5 cards on 2024-26 (3 at a time, logs data/logs/research/pr_prereg-b5-*.log, empty until a
+replay ends), then 2017-24 for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
+(docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
+verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13). Expect most of a day.
+Rerun is safe only for replays that did not finish (each replay logs a trial); check the logs first.
+`scripts/on_power.sh` (owner: "start them I will plug in soon") starts a job on AC or on a battery at or above 25%
+(`BATT_FLOOR`), pauses it in place (SIGSTOP, Telegram notice) under that, and continues it on AC.
+If it is gone after a restart, start it again with nohup (see the script's header).
+
+When it is done: commit the results files and docs/income_view.md. A card that passes goes to a forward test only:
+`shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes) for ordinary swing
+signals the live sizer can trade.
 
 Fixed 2026-10-13 (commit c28625e): a limit entry could take a target its fill bar reached before the fill
 (`backtest._check_exit` sold at that bar's open; `shadow.grade_one` counted its high). On the fill bar of a limit
@@ -39,11 +45,6 @@ Other paper venues (owner: "begin other sandbox or paper trading sites as able")
 - IBKR paper: needs an open IBKR Pro account and a desktop gateway that is logged in by hand every day. No.
 - tastytrade sandbox: positions are wiped every 24 hours. Useless for swing holds.
 - No account needed: the shadow ledger already forward-tests every `shadow_only` strategy at next-open prices.
-
-When they are done: commit the results files, docs/edge_map_smallcap.md and docs/income_view.md. Candidates go to a
-forward test only: `shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes)
-for ordinary swing signals the live sizer can trade. A small-cap candidate also needs the nightly's universe
-widened (it screens the top 1,500). Then apply the `event_avoid_filters` card to the small-cap map's best rows.
 
 Batch 5 (owner 12:54 ET: "scrape as many possible online traders ... integrate as many more methodologies as
 possible"): the research thread checked 49 ideas, kept 15 strategies and one filter
