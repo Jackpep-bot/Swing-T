@@ -1,12 +1,11 @@
 #!/bin/zsh
-# Small-cap edge map (docs/preregistration/2026-10-13-smallcap-map.md). Waits for AC power (the Mac sleeps on
-# battery), replays every strategy on config/research_smallcap.yaml for 2024-26 without touching the main
-# leaderboard, writes docs/edge_map_smallcap.md and sends its top to Telegram. Run detached:
-#   nohup scripts/run_smallcap_map.sh > data/logs/research/smallcap_map.log 2>&1 &
+# Small-cap edge map (docs/preregistration/2026-10-13-smallcap-map.md). Power is scripts/on_power.sh's job (starts on
+# AC or a charged battery, pauses on a low one). Replays every strategy on config/research_smallcap.yaml for 2024-26
+# without touching the main leaderboard, writes docs/edge_map_smallcap.md and sends its top to Telegram. Run detached:
+#   nohup scripts/on_power.sh scripts/run_smallcap_map.sh > data/logs/research/smallcap_map.log 2>&1 &
 cd /Users/personal/Desktop/swing-engine
-until pmset -g batt | head -1 | grep -q "AC Power"; do sleep 60; done
-echo "on AC power $(date '+%F %H:%M'); starting"
-uv run swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild || echo "RUN FAILED (resume: swing --settings config/research_smallcap.yaml research run --resume latest --no-rebuild)"
+# 4 lanes: a 2024-26 replay of 16 strategies on this universe held 3.1 GB (measured 2026-10-13); auto sizes for 2017-24
+uv run swing --settings config/research_smallcap.yaml research run --windows short --no-rebuild --allow-battery --lanes ${LANES:-4} || echo "RUN FAILED (resume: swing --settings config/research_smallcap.yaml research run --resume latest --no-rebuild)"
 uv run python - <<'PY'
 import json, sys
 from pathlib import Path
