@@ -1,19 +1,28 @@
-# Project status: IDLE, queue of 2026-10-13 worked through; decisions wait for the owner (2026-10-13 11:10 ET)
+# Project status: IDLE, queue of 2026-10-13 done, live store repaired, dividend card tested (2026-10-13 12:50 ET)
 
 ## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, PR https://github.com/Jackpep-bot/Swing-T/pull/2; includes PR 1's commits)
-No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,564 tests pass.
+No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,574 tests pass. No strategy has
+passed anything: every pre-registered card to date is FAIL and the leaderboard has no survivors.
 
-Waiting for the owner (nothing else is blocked):
-1. **Apply the renamed-ticker merge to the live store?** `swing --settings config/live.yaml repair-store --duplicates`
-   (dry run), then `--apply`. Copy data/live/market.duckdb first. It was NOT applied: a session may not change the
-   live store without the owner's word. Until then BNY, EMBJ and 61 other renamed tickers have a hole or another
-   company's bars in their live history, and research ledgers are cleaned at read time instead.
-2. **Dividend data?** `dividend_month_premium` (project file research/strategies/) is the only candidate card never
-   replayed; it needs ex-dividend dates (Alpaca corporate actions, free) and total-return grading. New data source,
-   so it waits for a yes.
-3. Delete old lane store copies in data/live (replay*.duckdb, market_prerepair.duckdb, regrade_1r.duckdb: about
-   25 GB)? Keep research_20261010-033614_l0/l1 (the current board reads them) and replay_p3 (pre-reg base).
-4. Plan P2 (always-on host, intraday paper executor): still the owner's decision. Not started.
+Owner said yes to both questions on 2026-10-13 11:48 ET ("1 and 2 yes to both"):
+- **Live store repaired** 11:49 ET: `repair.merge_duplicates` on data/live/market.duckdb, run id
+  `20261013T154911779985Z` (373 merged, 315,230 duplicate bars deleted, 19,923 moved, 693 bars of earlier ticker
+  holders dropped; bars 15,842,907 -> 15,546,907). Copy from just before: data/live/market_premerge_20261013.duckdb.
+  Undo: `swing --settings config/live.yaml repair-store --undo 20261013T154911779985Z`. Unresolved, left alone:
+  EEQ~20181219 / EE~20181219.
+- **Dividends**: `swing ingest-dividends` -> `dividends` table in the live store (367,989 rows, 2016-01 on; rerun
+  to refresh). `data/dividends.py` maps a row to the store's series on its ex-date, split-adjusts rates, builds the
+  `div_season` flag and `total_return_adjust` (research copies only). data/live/replay_tr.duckdb is the
+  total-return copy (config/prereg_div.yaml).
+- **Dividend-month card**: pre-registered (docs/preregistration/2026-10-13-dividend-month.md, commit 433c292).
+  Run once 2026-10-13 (results file beside it): **FAIL**. Alpha vs total-return SPY +0.3% a year (t 0.11) in
+  2017-24, -1.5% (t -0.34) in 2024-26. The book ran about half invested (`no_free_slot`: a month's outgoing names
+  hold their slots when the next month's are sized); noted in the results, not re-run.
+
+Still waiting for the owner:
+1. Delete old lane store copies in data/live (replay*.duckdb except replay_p3 and replay_tr, market_prerepair.duckdb,
+   regrade_1r.duckdb: about 25 GB)? Keep research_20261010-033614_l0/l1 (the current board reads them).
+2. Plan P2 (always-on host, intraday paper executor): still the owner's decision. Not started.
 
 Done this session, in queue order:
 - **Residual momentum 2024-26** merged from the v2c-resmom re-replay (rows copied into lane 1's ledger, noted in the
@@ -56,11 +65,14 @@ Seen, not fixed:
   The next nightly's ingest catches up; or run `swing --settings config/live.yaml ingest` by hand.
 - Card front matter says `status: enabled` for the first five strategies; config/live.yaml enables none. The
   Vocabulary page shows the card's word.
+- Monthly books under-invest in replay: names sold at a month's first open still hold their slots when that
+  month's buys are sized (`no_free_slot`), so a full rotation fills about half the book (dividend card: 48% exposure;
+  batch 2 and 3 were less affected because they hold for months). An engine change; any re-test is a new trial.
 - Rename merge does not touch `panel` (nightly rebuilds it) or the event tables keyed by the old ticker.
 
-Next, when the owner has answered: apply the store merge, then `swing research run` on the repaired store only if a
-new candidate needs it (the read-time dedupe already gives the corrected board). After a yes on dividends: ingest,
-total-return grading, pre-register `dividend_month_premium`.
+Next: a `swing research run` on the repaired store only if a new candidate needs it (the read-time dedupe already
+gives the corrected board; lane stores of run 20261010-033614 predate the repair). Refresh dividends with
+`swing ingest-dividends` before any further dividend work; a bad row in the feed has ex_date 3026-03-31 (harmless).
 
 ## Done (committed)
 - Rounds 1-4: data, features, 7 strategies + 5 research strategies (shadow-only), backtester, ranker, risk,
