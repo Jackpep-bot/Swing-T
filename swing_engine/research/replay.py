@@ -48,6 +48,7 @@ from swing_engine.core.interfaces import Strategy
 from swing_engine.core.models import OrderIntent, Position, Signal
 from swing_engine.execution.position_manager import ExitKind, _Held, _review_one, build_strategies
 from swing_engine.execution.position_manager import ExitReason as PMExitReason
+from swing_engine.ops import receipts
 from swing_engine.research.backtest import (
     EQUITY_COLUMNS,
     TRADE_COLUMNS,
@@ -105,6 +106,8 @@ PM_TO_TRADE_REASON: dict[str, ExitReason] = {
     PMExitReason.STRATEGY_EXIT.value: ExitReason.RULE,
 }
 EXTRA_TRADE_COLUMNS = ["signal_date", "regime", "risk_mult"]
+#: backtest.ExitReason -> ops.receipts step of a replay exit event (anything else: 'rule')
+REPLAY_EXIT_STEPS = {"stop": "stop", "stop_gap": "stop", "trail_stop": "stop", "target": "target", "time": "time"}
 DAILY_COLUMNS = [
     "date", "regime", "allowed", "n_signals", "n_allowed_signals", "n_orders", "n_filled", "n_entry_skipped",
     "n_exits", "n_positions", "equity", "cash",
@@ -595,6 +598,7 @@ def run_replay(
     shadow_table: str = REPLAY_SHADOW_TABLE,
     trials_path: str | Path | None = DEFAULT_TRIALS_PATH,
     screen_universe: bool = True,
+    record_events: bool = False,
 ) -> ReplayResult:
     """Replay the engine over NYSE sessions ``start..end`` (inclusive) on ``store`` bars; see the module docstring.
 
@@ -604,7 +608,9 @@ def run_replay(
     one from the store), ``record_shadow`` / ``shadow_table`` (shadow ledger target, default
     ``shadow_signals_replay`` so the live nightly's ``shadow_signals`` is never touched; skipped on a read-only store),
     ``trials_path`` (None = do not log a trial) and ``screen_universe`` (False = every panel symbol is scanned and
-    counted in breadth, the pre-screen behaviour; for hand-built test panels).
+    counted in breadth, the pre-screen behaviour; for hand-built test panels). ``record_events`` (default off: a
+    research replay makes millions of decisions) writes one ``events`` row (ops.receipts, ``source='replay'``) per
+    fire, refusal and exit of this run into ``store``; nothing is written to a read-only store.
     """
     start_d, end_d = _as_date(start), _as_date(end)
     if end_d < start_d:
@@ -664,6 +670,13 @@ def run_replay(
     failures: Counter[str] = Counter()
     regimes: Counter[str] = Counter()
     n_signals = n_orders = 0
+    events: list[dict[str, Any]] = []
+    ev_stamp = receipts.stamp(settings, receipts.SOURCE_REPLAY) if record_events and not getattr(store, "read_only", False) else None
+
+    def receipt(kind: str, step: str, reason: str, on: date, strategy: str, symbol: str, **payload: Any) -> None:
+        if ev_stamp is not None:  # opt-in recording; never part of a replay decision
+            events.append(receipts.make_event(kind, step, reason, on, strategy, symbol, payload,
+                                              key=f"{ev_stamp['run_id']}|{on.isoformat()}", **ev_stamp))
 
     def close(sym: str, reason: ExitReason, raw: float, ts: pd.Timestamp) -> None:
         nonlocal cash
@@ -672,6 +685,8 @@ def run_replay(
         m = meta.pop(sym)
         record.update(signal_date=m.signal_date, regime=m.regime, risk_mult=m.risk_mult)
         trades.append(record)
+        receipt(receipts.EXIT, REPLAY_EXIT_STEPS.get(reason.value, "rule"), reason.value, ts.date(),
+                str(record.get("strategy") or pos.strategy), sym, trade=record)
         pending_exits.pop(sym, None)
 
     for i in range(i0, i1 + 1):
@@ -694,6 +709,8 @@ def run_replay(
             if pos is None:
                 skipped[why or "unknown"] += 1
                 n_skip += 1
+                receipt(receipts.REFUSAL, "fill", why or "unknown", day, order.signal.strategy, order.signal.symbol,
+                        signal=order.signal, regime=order.regime, multiplier=order.risk_mult)
                 continue
             positions[pos.symbol] = pos
             meta[pos.symbol] = _Meta(order.signal.as_of, order.regime, order.risk_mult)
@@ -762,6 +779,11 @@ def run_replay(
                     failures[name] += 1
             n_signals += len(day_signals)
             cands = [s for s in day_signals if allowed.get(s.strategy, 0.0) > 0]
+            if ev_stamp is not None:
+                for sig in day_signals:
+                    if allowed.get(sig.strategy, 0.0) <= 0:
+                        receipt(receipts.REFUSAL, "router", "strategy not allowed by the playbook in this regime", day,
+                                sig.strategy, sig.symbol, signal=sig, regime=label)
             cands.sort(key=lambda s: (-s.score, s.strategy, s.symbol))
             open_list = [p.to_position() for p in positions.values()]
             busy = set(positions)
@@ -772,9 +794,12 @@ def run_replay(
             for sig in cands:
                 if len(pending_entries) >= max_new:
                     skipped["daily_order_cap"] += 1
+                    receipt(receipts.REFUSAL, "daily_cap", "daily_order_cap", day, sig.strategy, sig.symbol, signal=sig,
+                            regime=label, max_new_orders_per_day=max_new)
                     continue
                 if sig.symbol in busy:
                     skipped["symbol_busy"] += 1
+                    receipt(receipts.REFUSAL, "slot", "symbol_busy", day, sig.strategy, sig.symbol, signal=sig, regime=label)
                     continue
                 mult = min(max(allowed[sig.strategy], 0.0), FULL_RISK)
                 scaled = risk_cfg.model_copy(update={"risk_per_trade_pct": risk_cfg.risk_per_trade_pct * mult})
@@ -782,15 +807,22 @@ def run_replay(
                 intent, why = size_signal_detail(sig, size_eq, scaled, open_list, None, rr_floor)
                 if intent is None:
                     skipped[_skip_bucket(why)] += 1
+                    receipt(receipts.REFUSAL, receipts.step_for(why), why, day, sig.strategy, sig.symbol, signal=sig,
+                            regime=label, multiplier=mult, sizing_equity=size_eq, min_reward_risk=rr_floor)
                     continue
                 order = _Order(sig, intent, label, mult)
                 pending_entries.append(order)
+                receipt(receipts.FIRE, "broker", "submitted", day, sig.strategy, sig.symbol, signal=sig, regime=label,
+                        multiplier=mult, sizing_equity=size_eq, intent=intent)
                 open_list.append(_pending_position(order))
                 busy.add(sig.symbol)
                 taken.add(signal_key(sig))
             n_orders += len(pending_entries)
             if shadow_on and day_signals:
                 record_signals(store, day_signals, taken, day, label, source=REPLAY_SOURCE, table=shadow_table)
+        if events:
+            receipts.write_events(store, events)
+            events.clear()
         daily.append(
             {
                 "date": day, "regime": label,
@@ -806,6 +838,7 @@ def run_replay(
     for sym in sorted(positions):
         raw = view.value("close", i1, view.sym_pos[sym])
         close(sym, ExitReason.END, raw if math.isfinite(raw) else positions[sym].last_close, view.dates[i1])
+    receipts.write_events(store, events)
     if curve:
         curve[-1].update(equity=cash, cash=cash, market_value=0.0, exposure=0.0, n_positions=0)
         daily[-1].update(equity=cash, cash=cash, n_positions=0)

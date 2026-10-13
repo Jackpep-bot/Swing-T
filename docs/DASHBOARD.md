@@ -101,6 +101,7 @@ parameters are HTTP 400, a non-local `Host` 403, unknown routes 404.
 | `GET /api/chart/{SYMBOL}?days=180` | bars (calendar days back from the last stored bar), sma20, sma50, levels, markers |
 | `GET /api/signals?date=YYYY-MM-DD` | the day's signals with taken / skip_reason / review (`review.current` is false when the latest review step did not produce it), review_status |
 | `GET /api/shadow?by=strategy\|regime` | rows, updated_at |
+| `GET /api/events?as_of=&strategy=&symbol=&kind=&limit=` | events (decision receipts, newest first; `payload` is the JSON that decided each one), count |
 | `GET /api/alerts?hours=48` | alerts, newest first |
 | `POST /api/alerts/{event_id}/rate` `{"rating": "useful"\|"noise"\|"traded"}` | event_id, rating |
 | `GET /api/journal?date=YYYY-MM-DD` | date, markdown, available_dates |

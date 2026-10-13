@@ -488,6 +488,38 @@ class DemoData:
         )
         return ok({"date": target, "markdown": md, "available_dates": dates})
 
+    def events(self, as_of: date | None = None, strategy: str | None = None, symbol: str | None = None,
+               kind: str | None = None, limit: int = 200) -> dict[str, Any]:
+        """Shaped like ops.receipts rows: one of each kind, with the step and the inputs that decided it."""
+        day = (as_of or DEMO_AS_OF).isoformat()
+        sig = {"entry": 48.2, "stop": 46.1, "target": 53.5, "reward_risk": 2.52, "side": "long", "score": 0.81}
+
+        def row(n: int, kind: str, strat: str, sym: str, step: str, reason: str, payload: dict[str, Any]) -> dict[str, Any]:
+            return {"event_id": f"{zlib.crc32(f'{day}:{n}'.encode()):08x}{n:024x}", "ts": _ts(DEMO_AS_OF, 10, 30 + n),
+                    "as_of": day, "kind": kind, "lane": "swing", "strategy": strat, "symbol": sym, "step": step,
+                    "reason": reason, "payload": payload, "engine_sig": "demo0000", "source": "live",
+                    "run_id": "demo"}
+
+        chain = {"regime": "narrow_uptrend", "multiplier": 0.5, "signal": sig}
+        rows = [
+            row(0, "fire", "pullback_trend", "ORCA", "broker", "submitted",
+                {**chain, "intent": {"qty": 118, "entry_limit": 48.68, "stop": 46.1, "target": 53.5},
+                 "order": {"client_order_id": f"swing-pullback_trend-ORCA-{day.replace('-', '')}-long",
+                           "broker_order_id": "demo-1", "status": "accepted"}}),
+            row(1, "refusal", "momentum_burst", "", "router", "multiplier 0 in this regime",
+                {"regime": "narrow_uptrend"}),
+            row(2, "refusal", "sr_bounce", "KITE", "reward_risk", "reward_risk 1.20 below min 2.0",
+                {**chain, "min_reward_risk": 2.0}),
+            row(3, "refusal", "sr_breakout", "LYNX", "daily_cap", "max_new_orders_per_day=3 reached", chain),
+            row(4, "exit", "pullback_trend", "HERON", "time", "time_stop: held 10 sessions", {"action": "close"}),
+            row(5, "outcome", "rsi2_meanrev", "FINCH", "target", "target_hit",
+                {"horizon": 5, "gross_r": 1.4, "cost_r": 0.09, "net_r": 1.31, "taken": False}),
+            row(6, "fire", "breakout_52w", "WREN", "scan", "shadow-only signal", {**chain, "shadow": True}),
+        ]
+        want = {"strategy": strategy, "symbol": symbol, "kind": kind}
+        rows = [r for r in rows if all(v is None or r[k] == v for k, v in want.items())][:limit]
+        return ok({"events": rows, "count": len(rows)})
+
     def replay(self) -> dict[str, Any]:
         """Shaped like ``swing replay`` output (research.replay): fractions, rows keyed by strategy / regime."""
         days = _sessions(date(2024, 10, 1), date(2026, 9, 30))

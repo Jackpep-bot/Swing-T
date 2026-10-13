@@ -66,6 +66,9 @@ EQUITY_PERIODS: dict[str, int | None] = {"1M": 31, "3M": 92, "6M": 183, "1Y": 36
 ALPACA_PERIODS = {"1M": "1M", "3M": "3M", "6M": "6M", "1Y": "1A", "ALL": "5A"}
 ORDER_STATUSES = ("open", "closed")
 SHADOW_GROUPS = ("strategy", "regime")
+EVENT_KINDS = ("fire", "refusal", "outcome", "exit", "note")  # ops.receipts.KINDS
+EVENTS_DEFAULT_LIMIT, EVENTS_MAX_LIMIT = 200, 2000
+STRATEGY_RE = re.compile(r"^[A-Za-z0-9_]{1,64}$")
 RATINGS = ("useful", "noise", "traded")
 TAKEN_STATUSES = frozenset({"submitted", "duplicate", "done"})
 SENT_LEDGER_STATUSES = frozenset(
@@ -117,6 +120,14 @@ def parse_symbol(value: str) -> str:
     if not SYMBOL_RE.match(sym):
         raise BadRequest("symbol must match ^[A-Z.-]{1,10}$")
     return sym
+
+
+def parse_strategy(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    if not STRATEGY_RE.match(value):
+        raise BadRequest("strategy must match ^[A-Za-z0-9_]{1,64}$")
+    return value
 
 
 def parse_event_id(value: str) -> str:
@@ -1615,6 +1626,33 @@ class LiveData:
                     cand = max(vals)
                     updated = cand if updated is None or cand > updated else updated
         return ok({"by": by, "rows": rows, "updated_at": iso_utc(updated), "signals": int(len(frame))}, stale=stale)
+
+    def events(self, as_of: date | None = None, strategy: str | None = None, symbol: str | None = None,
+               kind: str | None = None, limit: int = EVENTS_DEFAULT_LIMIT) -> dict[str, Any]:
+        """Decision receipts (ops.receipts ``events`` table), newest first; ``payload`` is parsed JSON."""
+        filters = {"as_of": as_of, "strategy": strategy, "symbol": symbol, "kind": kind}
+        where = [f"{col} = ?" for col, value in filters.items() if value is not None]
+        params = [value for value in filters.values() if value is not None]
+
+        def q(con: Any) -> Any:
+            if not duck_has_table(con, "events"):
+                raise Unavailable("no decision receipts yet (the nightly writes the events table; "
+                                  "`swing receipts backfill` fills in the history)")
+            sql = "SELECT * REPLACE (CAST(as_of AS VARCHAR) AS as_of) FROM events"
+            sql += (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY ts DESC, event_id LIMIT ?"
+            return con.execute(sql, [*params, int(limit)]).df()
+
+        try:
+            frame, stale = self.duck.read(f"events:{as_of}:{strategy}:{symbol}:{kind}:{limit}", q)
+        except Unavailable as exc:
+            return unavailable(str(exc))
+        rows = frame.to_dict(orient="records")
+        for rec in rows:
+            try:
+                rec["payload"] = json.loads(rec.get("payload") or "{}")
+            except ValueError:
+                rec["payload"] = {}
+        return ok(clean({"events": rows, "count": len(rows)}), stale=stale)
 
     def drift(self) -> dict[str, Any]:
         """research.drift over the store's live and replay shadow ledgers, as of the latest live signal."""

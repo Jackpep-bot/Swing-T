@@ -1688,7 +1688,19 @@ def _paper_pending(
              for i in intents]
     if plan:
         _print_frame("Staged plan", pd.DataFrame(plan))
-    report = run_pending(settings, secrets, as_of_d, _make_broker(broker_name, settings, secrets), approver)
+    store = None  # decision receipts (ops.receipts); a store locked by another writer only costs the receipts
+    if _store_path(settings).exists():
+        try:
+            store = _open_store(settings)
+        except Exception as e:  # noqa: BLE001
+            _console().print(f"decision receipts not recorded (store unavailable: {type(e).__name__})")
+    recorder = _load("ops.receipts.autopilot_recorder")(store, settings) if store is not None else None
+    try:
+        report = _call_supported(run_pending, settings, secrets, as_of_d, _make_broker(broker_name, settings, secrets),
+                                 approver, receipts=recorder)
+    finally:
+        if store is not None:
+            store.close()
     results = [r.model_dump(mode="json") for r in [*report.exits, *report.entries]]
     mode = str(getattr(report.mode, "value", report.mode))
     if results:
@@ -2323,6 +2335,63 @@ def research_rebuild(
     runner = importlib.import_module("swing_engine.research.runner")
     manifest = runner.load_manifest(_store_path(_state(ctx).settings).parent / RUNS_DIRNAME, run_id)
     _print_mapping("Research rebuild", runner.rebuild(manifest, runner.file_logger(manifest["run_id"])))
+
+
+receipts_app = typer.Typer(help="Decision receipts: every fire, refusal, exit and outcome (the events table).")
+app.add_typer(receipts_app, name="receipts")
+RECEIPT_COLUMNS = ["ts", "as_of", "kind", "strategy", "symbol", "step", "reason", "engine_sig", "source"]
+
+
+@receipts_app.command("backfill")
+def receipts_backfill(ctx: typer.Context) -> None:
+    """Turn the live shadow ledger and the order ledger into fire / refusal / outcome events (source=backfill).
+    Safe to repeat: event ids are stable, and signals that already have a live receipt are left alone."""
+    settings = _state(ctx).settings
+    ledger_path = _load("risk.killswitch.resolve_state_path")(settings.execution.ledger_file)
+    orders: list[dict[str, Any]] = []
+    if ledger_path.exists():
+        ledger = _load("execution.ledger.OrderLedger")(ledger_path)
+        try:
+            orders = ledger.all()
+        finally:
+            ledger.close()
+    store = _open_store(settings)
+    try:
+        counts = _load("ops.receipts.backfill")(store, settings, orders)
+    finally:
+        store.close()
+    _print_mapping(f"Receipts backfill ({len(orders)} ledger orders from {ledger_path})", counts)
+
+
+@receipts_app.command("show")
+def receipts_show(
+    ctx: typer.Context,
+    as_of: Annotated[str, typer.Option("--as-of", help="YYYY-MM-DD session")],
+    strategy: Annotated[str | None, typer.Option("--strategy")] = None,
+    symbol: Annotated[str | None, typer.Option("--symbol")] = None,
+    kind: Annotated[str | None, typer.Option("--kind", help="fire | refusal | outcome | exit | note")] = None,
+    payload: Annotated[bool, typer.Option("--payload", help="also print each event's payload JSON")] = False,
+) -> None:
+    """Print the decision receipts of one session."""
+    settings = _state(ctx).settings
+    path = _store_path(settings)
+    if not path.exists():
+        _fail(f"store {path} does not exist; run `swing ingest` first", EXIT_NO_DATA)
+    store = _load("data.store.Store")(str(path), read_only=True)
+    try:
+        frame = _load("ops.receipts.read_events")(
+            store, as_of=_parse_date(as_of), strategy=strategy, symbol=symbol.upper() if symbol else None, kind=kind
+        )
+    finally:
+        store.close()
+    if frame.empty:
+        _console().print(f"no events for {as_of}")
+        return
+    _print_frame(f"Events {as_of}", frame[RECEIPT_COLUMNS], limit=len(frame))
+    if payload:
+        for rec in frame.to_dict("records"):
+            _console().print(f"{rec['kind']} {rec['strategy']} {rec['symbol']} {rec['step']}: {rec['payload']}",
+                             markup=False, highlight=False)
 
 
 if __name__ == "__main__":  # pragma: no cover

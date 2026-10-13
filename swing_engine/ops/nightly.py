@@ -10,6 +10,11 @@ A failing step is recorded and the pipeline carries on with
 whatever the earlier steps produced (a broken ingest still scans yesterday's store; a broken scan leaves
 nothing to size). The run ends with a JSON report under `<store dir>/runs/nightly/YYYY-MM-DD.json`.
 
+Decision receipts (ops.receipts, the store's `events` table): each step queues a row for every decision it
+made (router block, sizer rejection, review veto, entries held, shadow-only fire, graded outcome) and the
+autopilot adds the fires, gate refusals and exits. Recording only: `_emit` runs after the decision and a failed
+write is logged and ignored.
+
 Hand-offs use the same `<store dir>/runs/<kind>/<date>.json` files as the CLI, so `swing size`, `swing paper`
 and `swing journal` can pick up where the nightly left off. The broker, when injected, supplies equity and
 open positions to `size` and `positions`. Orders leave this module only through `execute`, which hands the
@@ -56,6 +61,7 @@ from pydantic import BaseModel, Field
 from swing_engine.core import registry
 from swing_engine.core.config import ROOT, Secrets, Settings
 from swing_engine.core.models import OrderIntent, Review, ReviewDecision, Signal
+from swing_engine.ops import receipts
 
 log = structlog.get_logger(__name__)
 
@@ -430,6 +436,9 @@ class _Context:
     signal_day: date | None = None  # session of the bars the scan computed signals from (<= as_of)
     shadow_signals: list[Signal] = field(default_factory=list)  # shadow_only strategies: recorded, never sized
     notify_sender: Any | None = None  # ops.notify.Sender override (tests); None = Telegram from secrets
+    events: list[dict[str, Any]] = field(default_factory=list)  # receipts queued by the running step
+    stamp: dict[str, str] | None = None  # receipts.stamp for this run (engine_sig, source, run_id, lane)
+    chain: dict[str, dict[str, Any]] = field(default_factory=dict)  # client_order_id -> what led to the intent
 
     @property
     def history_start(self) -> date:
@@ -448,6 +457,39 @@ class Skip(Exception):
     """Raised inside a step to record it as skipped (with a reason) instead of failed."""
 
 
+def _stamp(ctx: _Context) -> dict[str, str]:
+    if ctx.stamp is None:
+        ctx.stamp = receipts.stamp(ctx.settings)
+    return ctx.stamp
+
+
+def _emit(
+    ctx: _Context, kind: str, step: str, reason: str, strategy: str | None = "", symbol: str | None = "",
+    payload: dict[str, Any] | None = None, *, as_of: date | None = None, key: str | None = None,
+) -> None:
+    """Queue one decision receipt; `_run_step` writes the queue when the step ends. Never raises."""
+    try:
+        ctx.events.append(receipts.make_event(kind, step, reason, as_of or ctx.as_of, strategy, symbol, payload,
+                                              key=key, **_stamp(ctx)))
+    except Exception as e:  # noqa: BLE001 - a receipt must not fail the step it describes
+        log.error("receipt_failed", step=step, error=_error_text(e))
+
+
+def _signal_receipt(ctx: _Context, s: Signal, **extra: Any) -> dict[str, Any]:
+    """The chain behind a signal's fate: regime -> allowed multiplier -> signal geometry and features."""
+    regime = regime_name(ctx.market_state) or (ctx.report.regime or {}).get("regime")
+    mult = None if ctx.risk_multipliers is None else ctx.risk_multipliers.get(s.strategy)
+    return {"regime": regime, "multiplier": mult, "signal": s, **extra}
+
+
+def _decline_intents(ctx: _Context, intents: list[OrderIntent], step: str, reason: str) -> None:
+    """A refusal receipt for each sized intent that `step` kept from reaching the broker today."""
+    for i in intents:
+        _emit(ctx, receipts.REFUSAL, step, reason, i.strategy, i.symbol,
+              {**ctx.chain.get(i.client_order_id, {}), "intent": i}, as_of=i.signal_as_of,
+              key=f"{i.client_order_id}|{ctx.as_of.isoformat()}")
+
+
 def _run_step(ctx: _Context, name: str, fn: Callable[[_Context], tuple[str, dict[str, Any]]]) -> StepResult:
     t0 = time.perf_counter()
     try:
@@ -461,6 +503,9 @@ def _run_step(ctx: _Context, name: str, fn: Callable[[_Context], tuple[str, dict
     result.elapsed_s = round(time.perf_counter() - t0, 3)
     log.info("nightly_step", step=name, status=result.status.value, elapsed_s=result.elapsed_s, detail=result.detail)
     ctx.report.steps.append(result)
+    if ctx.events:
+        receipts.write_events(ctx.store, ctx.events)
+        ctx.events = []
     return result
 
 
@@ -744,11 +789,15 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
     if payload is None or "allowed" not in payload:
         # fail closed: without the router every enabled strategy (including ones enabled only so the router can
         # see them) would run at full risk; playbook.enabled: false is the explicit opt-out
+        _emit(ctx, receipts.NOTE, "router", f"strategy routing unavailable ({router_note}); no strategies scanned")
         raise RuntimeError(
             f"strategy routing unavailable ({router_note}); no strategies scanned "
             "(set playbook.enabled: false to run every enabled strategy at 1.0)"
         )
     ctx.risk_multipliers = dict(payload["allowed"])
+    for name, why in (payload.get("blocked") or {}).items():  # the router blocked the strategy in this regime
+        _emit(ctx, receipts.REFUSAL, "router", why, name,
+              payload={"regime": payload.get("regime"), "market_state": payload.get("market_state")})
     names = [n for n in names if n in ctx.risk_multipliers]
     signals, per_strategy, failures = _run_strategies(ctx, names, panel, regime)
     if failures and len(failures) == len(names):
@@ -760,6 +809,11 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
     # never sized, reviewed or executed; a failure here never fails the scan
     shadow, shadow_counts, shadow_failures = _run_strategies(ctx, _shadow_only_strategies(ctx.settings), panel, regime)
     ctx.shadow_signals = shadow
+    for name, why in {**failures, **shadow_failures}.items():
+        _emit(ctx, receipts.NOTE, "scan", why, name)
+    for s in shadow:  # never sized or ordered: the receipt says so
+        _emit(ctx, receipts.FIRE, "scan", "shadow-only signal", s.strategy, s.symbol,
+              _signal_receipt(ctx, s, shadow=True), as_of=s.as_of)
     data = {
         "signals": len(signals), "per_strategy": per_strategy, "failures": failures, "universe": universe_size,
         "regime": regime, "market_regime": regime_name(state), "allowed": ctx.risk_multipliers,
@@ -845,9 +899,22 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
     intents: list[OrderIntent] = []
     skipped: dict[str, str] = {}
     multipliers = ctx.risk_multipliers  # None = unrouted: every strategy at full risk_per_trade_pct
+
+    def facts(s: Signal) -> dict[str, Any]:  # receipt payload only: the inputs the sizer saw
+        floor = floor_for(ctx.settings.strategies, s.strategy) if floor_for is not None else None
+        risk = ctx.settings.risk
+        return _signal_receipt(
+            ctx, s, equity=float(equity), sizing_equity=float(size_eq), open_positions=len(positions),
+            min_reward_risk=risk.min_reward_risk if floor is None else floor,
+            risk_per_trade_pct=risk.risk_per_trade_pct, max_open_positions=risk.max_open_positions,
+            max_position_pct=risk.max_position_pct,
+        )
+
     for s in ctx.signals:
         if multipliers is not None and s.strategy not in multipliers:
             skipped[f"{s.strategy}:{s.symbol}"] = "strategy not allowed by the playbook in this regime"
+            _emit(ctx, receipts.REFUSAL, "router", skipped[f"{s.strategy}:{s.symbol}"], s.strategy, s.symbol, facts(s),
+                  as_of=s.as_of)
             continue
         risk_cfg = _scaled_risk(ctx.settings.risk, MULTIPLIER_MAX if multipliers is None else multipliers[s.strategy])
         if size_detail is not None:
@@ -858,8 +925,11 @@ def _step_size(ctx: _Context) -> tuple[str, dict[str, Any]]:
             intent, reason = size_signal(s, size_eq, risk_cfg, positions), "rejected by risk.sizing"
         if intent is not None:
             intents.append(intent)
+            ctx.chain[intent.client_order_id] = facts(s)
         else:
             skipped[f"{s.strategy}:{s.symbol}"] = str(reason)
+            _emit(ctx, receipts.REFUSAL, receipts.step_for(str(reason)), str(reason), s.strategy, s.symbol, facts(s),
+                  as_of=s.as_of)
     ctx.intents = intents
     ctx.save(INTENTS_KIND, intents)
     data = {"equity": float(equity), "sizing_equity": float(size_eq), "intents": len(intents), "skipped": skipped, "open_positions": len(positions),
@@ -919,6 +989,12 @@ def _review_body(ctx: _Context) -> tuple[str, dict[str, Any]]:
     if ctx.intents:
         approved = {(r.symbol, r.strategy) for r in reviews if r.decision is ReviewDecision.APPROVE_FOR_RISK_CHECK}
         kept = [i for i in ctx.intents if (i.symbol, i.strategy) in approved]
+        verdicts = {(r.symbol, r.strategy): r.decision.value for r in reviews}
+        for i in ctx.intents:
+            if (i.symbol, i.strategy) not in approved:
+                verdict = verdicts.get((i.symbol, i.strategy))
+                why = f"review decision {verdict}" if verdict else "no review for the signal"
+                _decline_intents(ctx, [i], "review", why)
         dropped = len(ctx.intents) - len(kept)
         ctx.intents = kept
         ctx.save(INTENTS_KIND, kept)
@@ -947,6 +1023,7 @@ def _step_shadow(ctx: _Context) -> tuple[str, dict[str, Any]]:
     signals = [s if s.as_of == day else s.model_copy(update={"as_of": day}) for s in [*ctx.signals, *ctx.shadow_signals]]
     recorded = int(record_signals(ctx.store, signals, taken, day, regime) or 0) if signals else 0
     graded = int(grade_signals(ctx.store, ctx.as_of) or 0)
+    receipts.record_outcomes(ctx.store, ctx.as_of, **_stamp(ctx))  # one outcome receipt per newly final horizon
     data = {"recorded": recorded, "taken": sorted(taken), "graded": graded, "regime": regime,
             "signal_day": day.isoformat()}
     return f"{recorded} signals recorded ({len(taken)} taken, regime {regime or 'unknown'}); {graded} graded", data
@@ -1007,12 +1084,16 @@ def _veto_filtered(ctx: _Context, intents: list[OrderIntent]) -> list[OrderInten
 
 
 def _step_execute(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    not_sent = None
     if ctx.dry_run and not ctx.plan_on_dry_run:
-        raise Skip("dry run: no orders")
-    if not ctx.execute:
-        raise Skip("execution disabled (settings.execution.nightly_execute / --no-execute)")
-    if ctx.broker is None:
-        raise Skip("no broker: pass --broker (or set execution.broker) to execute")
+        not_sent = "dry run: no orders"
+    elif not ctx.execute:
+        not_sent = "execution disabled (settings.execution.nightly_execute / --no-execute)"
+    elif ctx.broker is None:
+        not_sent = "no broker: pass --broker (or set execution.broker) to execute"
+    if not_sent is not None:
+        _decline_intents(ctx, ctx.intents, "rule", not_sent)
+        raise Skip(not_sent)
     run_autopilot = _load("execution.autopilot.run_autopilot")
     intents = ctx.intents
     unreviewed = 0
@@ -1021,6 +1102,8 @@ def _step_execute(ctx: _Context) -> tuple[str, dict[str, Any]]:
         # signals in `swing autopilot` can hold more intents than agent.max_candidates_per_day reviewed)
         reviewed = {(r.symbol, r.strategy) for r in ctx.reviews}
         kept = [i for i in intents if (i.symbol, i.strategy) in reviewed]
+        _decline_intents(ctx, [i for i in intents if (i.symbol, i.strategy) not in reviewed], "review",
+                         "no review for the signal")
         unreviewed, intents = len(intents) - len(kept), kept
         if unreviewed:
             log.warning("execute_entries_held", reason="no review for the signal", intents=unreviewed)
@@ -1036,19 +1119,23 @@ def _step_execute(ctx: _Context) -> tuple[str, dict[str, Any]]:
         and review_step.status == StepStatus.FAIL
         and ctx.settings.execution.require_review_approval
     ):  # fail closed: a crashed review must not let unreviewed entries through; exits still run
+        _decline_intents(ctx, intents, "review", "review step failed")
         held, intents = len(intents), []
         log.warning("execute_entries_held", reason="review step failed", intents=held)
     if intents and ctx.review_hold and ctx.settings.execution.require_review_approval:
+        _decline_intents(ctx, intents, "review", ctx.review_hold)
         held, intents = len(intents), []  # run_cycle: the saved review of the signals' day failed or never finished
         log.warning("execute_entries_held", reason=ctx.review_hold, intents=held)
     held_positions = 0
     positions_step = ctx.report.step("positions")
     if intents and positions_step is not None and positions_step.status == StepStatus.FAIL:
+        _decline_intents(ctx, intents, "rule", "positions step failed")
         held_positions, intents = len(intents), []  # no exit decisions were made: add no new risk either
         log.warning("execute_entries_held", reason="positions step failed", intents=held_positions)
     report = run_autopilot(
         ctx.settings, ctx.secrets, ctx.as_of, ctx.broker, intents, ctx.reviews or None, ctx.exit_actions,
         dry_run=ctx.dry_run,
+        receipts=receipts.autopilot_recorder(ctx.store, ctx.settings, ctx.chain, run_id=_stamp(ctx)["run_id"]),
     )
     if report.audit_path:
         ctx.report.files["autopilot"] = str(report.audit_path)

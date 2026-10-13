@@ -45,6 +45,9 @@ from . import DEFAULT_HOST, DEFAULT_PORT
 from .data import (
     DEFAULT_CHART_DAYS,
     EQUITY_PERIODS,
+    EVENT_KINDS,
+    EVENTS_DEFAULT_LIMIT,
+    EVENTS_MAX_LIMIT,
     MAX_CHART_DAYS,
     MAX_HOURS,
     ORDER_STATUSES,
@@ -57,6 +60,7 @@ from .data import (
     parse_date,
     parse_event_id,
     parse_int,
+    parse_strategy,
     parse_symbol,
     unavailable,
 )
@@ -265,6 +269,7 @@ class DashboardApp:
             (re.compile(r"^/api/chart/(?P<symbol>[^/]+)$"), self._chart),
             (re.compile(r"^/api/signals$"), self._signals),
             (re.compile(r"^/api/shadow$"), self._shadow),
+            (re.compile(r"^/api/events$"), self._events),
             (re.compile(r"^/api/drift$"), self._drift),
             (re.compile(r"^/api/alerts$"), self._alerts),
             (re.compile(r"^/api/journal$"), self._journal),
@@ -379,6 +384,14 @@ class DashboardApp:
 
     def _shadow(self, q: dict[str, str]) -> Any:
         return self.provider.shadow(parse_choice(q.get("by"), "by", SHADOW_GROUPS, "strategy"))
+
+    def _events(self, q: dict[str, str]) -> Any:
+        return self.provider.events(
+            parse_date(q.get("as_of"), "as_of"), parse_strategy(q.get("strategy")),
+            parse_symbol(q["symbol"]) if q.get("symbol") else None,
+            parse_choice(q.get("kind"), "kind", EVENT_KINDS, "") or None,
+            parse_int(q.get("limit"), "limit", EVENTS_DEFAULT_LIMIT, 1, EVENTS_MAX_LIMIT),
+        )
 
     def _drift(self, q: dict[str, str]) -> Any:
         return self.provider.drift()

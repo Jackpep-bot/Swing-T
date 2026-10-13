@@ -460,3 +460,19 @@ def test_screened_symbol_prefilter_leaves_results_unchanged(monkeypatch):
     assert fast.summary["n_signals"] == full.summary["n_signals"] > 0
     pd.testing.assert_frame_equal(pd.DataFrame(fast.trades), pd.DataFrame(full.trades))
     pd.testing.assert_frame_equal(fast_shadow, full_shadow)
+
+
+def test_record_events_is_opt_in_and_matches_the_replay_counts(tmp_path):
+    from swing_engine.ops import receipts
+
+    store, sched, _ = _planted_store(0.08)
+    _replay(store, sched, tmp_path, record_shadow=False)
+    assert not store.has_table(receipts.EVENTS_TABLE)  # default: no per-signal rows from research replays
+    res = _replay(store, sched, tmp_path, record_shadow=False, record_events=True)
+    events = receipts.read_events(store)
+    assert set(events["source"]) == {"replay"} and events["run_id"].nunique() == 1
+    assert int((events["kind"] == "fire").sum()) == res.summary["n_orders"]
+    assert int((events["kind"] == "exit").sum()) == res.summary["trades"]
+    refusals = events.loc[events["kind"] == "refusal"]
+    assert len(refusals) == sum(res.summary["skip_reasons"].values()) and set(refusals["step"]) <= {
+        "daily_cap", "slot", "reward_risk", "sizing", "fill"}
