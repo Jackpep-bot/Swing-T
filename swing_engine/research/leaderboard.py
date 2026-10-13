@@ -4,11 +4,14 @@ Input: the replay shadow ledger (every signal graded at 5/10/20 sessions, ``rese
 strategy, window and horizon ``h``:
 
 * net R per traded signal = gross ``result_r_<h>d`` minus round-trip slippage (``research.cards.cost_r``);
+* the yardstick (default since 2026-10-13) is net R minus the market component: what SPY returned over the same
+  holding span on the same dollars (``research.cards.market_r``, beta 1). Every strategy here is long-only, and
+  docs/attribution.md showed most positive gross R was the index going up. ``--absolute`` grades plain net R;
 * signals are pooled into blocks of ``h`` sessions (by signal date), so overlapping holds do not count as
   independent bets; ``t`` = mean / sd x sqrt(blocks) over the block means, annual Sharpe = t / sqrt(years);
 * Harvey-Liu Bonferroni haircut over ``n_trials`` = max(logged trials, strategies x horizons x windows).
 
-A survivor has a positive haircut Sharpe at the same horizon in BOTH windows. Run::
+A survivor has a positive haircut Sharpe on the yardstick at the same horizon in BOTH windows. Run::
 
     uv run python -m swing_engine.research.leaderboard --settings config/replay.yaml --store ... > docs/leaderboard.md
 """
@@ -18,11 +21,22 @@ import argparse
 import math
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
-from swing_engine.research.cards import ROOT, WINDOWS, Window, cost_r, executable, read_shadow, with_costs
+from swing_engine.research.cards import (
+    MARKET_SYMBOL,
+    ROOT,
+    WINDOWS,
+    Window,
+    cost_r,
+    executable,
+    read_shadow,
+    relative_r,
+    with_costs,
+)
 from swing_engine.research.metrics import haircut_sharpe
 from swing_engine.research.shadow import DEFAULT_HORIZONS, TRADE_HITS, horizon_column
 from swing_engine.research.trials import iter_trials, log_trial, trial_count
@@ -37,19 +51,21 @@ def _sessions(dates: pd.Series) -> np.ndarray:
     return np.busday_count(np.datetime64("2000-01-03"), d)
 
 
-def edge_stats(frame: pd.DataFrame, horizon: int, years: float, n_trials: int) -> dict[str, float]:
-    """Net edge of one strategy in one window at one horizon (see the module docstring)."""
+def edge_stats(frame: pd.DataFrame, horizon: int, years: float, n_trials: int, relative: bool = False) -> dict[str, float]:
+    """Net edge of one strategy in one window at one horizon (see the module docstring). ``relative``: t, Sharpe
+    and haircut are taken on net R minus the market component (``rel_r``) instead of on net R."""
     hit, r = horizon_column("hit", horizon), horizon_column("result_r", horizon)
     traded = frame.loc[frame[hit].astype(str).isin(TRADE_HITS)] if hit in frame.columns else frame.iloc[0:0]
-    out = {"n": float(len(traded)), "gross_r": math.nan, "net_r": math.nan, "win": math.nan, "blocks": 0.0,
-           "t": math.nan, "sharpe": math.nan, "haircut_sharpe": math.nan}
+    out = {"n": float(len(traded)), "gross_r": math.nan, "net_r": math.nan, "mkt_r": math.nan, "rel_r": math.nan,
+           "win": math.nan, "blocks": 0.0, "t": math.nan, "sharpe": math.nan, "haircut_sharpe": math.nan}
     if traded.empty:
         return out
     net = traded[r].astype(float) - cost_r(traded).fillna(0.0)
+    mkt = relative_r(traded, horizon)
     block = _sessions(traded["as_of"]) // horizon
-    means = net.groupby(block).mean()
-    out.update(gross_r=float(traded[r].astype(float).mean()), net_r=float(net.mean()), win=float((net > 0).mean()),
-               blocks=float(len(means)))
+    means = (net - mkt if relative else net).groupby(block).mean()
+    out.update(gross_r=float(traded[r].astype(float).mean()), net_r=float(net.mean()), mkt_r=float(mkt.mean()),
+               rel_r=float((net - mkt).mean()), win=float((net > 0).mean()), blocks=float(len(means)))
     if len(means) >= MIN_BLOCKS and means.std(ddof=1) > 0:
         t = float(means.mean() / means.std(ddof=1) * math.sqrt(len(means)))
         sr = t / math.sqrt(years)
@@ -62,8 +78,10 @@ def leaderboard(
     windows: Iterable[Window] = WINDOWS,
     horizons: Sequence[int] = DEFAULT_HORIZONS,
     logged_trials: int = 0,
+    relative: bool = True,
 ) -> tuple[pd.DataFrame, int]:
-    """One row per (strategy, window, horizon) and the trial count used for the haircut."""
+    """One row per (strategy, window, horizon) and the trial count used for the haircut. ``relative``: grade
+    against SPY (``edge_stats``); a ledger without ``mkt_r_<h>d`` columns grades the same either way."""
     windows = list(windows)
     shadow = executable(shadow)
     strategies = sorted(set(shadow["strategy"].astype(str))) if not shadow.empty else []
@@ -76,8 +94,10 @@ def leaderboard(
         for strat, g in in_w.groupby("strategy", sort=True) if not in_w.empty else []:
             for h in horizons:
                 rows.append({"strategy": strat, "window": w.start.year, "horizon": h,
-                             **edge_stats(g, h, years, n_trials)})
-    return pd.DataFrame(rows), n_trials
+                             **edge_stats(g, h, years, n_trials, relative)})
+    board = pd.DataFrame(rows)
+    board.attrs["relative"] = relative
+    return board, n_trials
 
 
 def survivors(board: pd.DataFrame) -> pd.DataFrame:
@@ -95,21 +115,27 @@ def render(board: pd.DataFrame, n_trials: int, windows: Sequence[Window] = WINDO
     def f(x: float, spec: str = "+.3f") -> str:
         return "-" if x is None or not math.isfinite(x) else format(x, spec)
 
+    relative = bool(board.attrs.get("relative", False))
+    yard = (f"Yardstick: net R minus what {MARKET_SYMBOL} returned over the same days on the same dollars (`vs "
+            f"{MARKET_SYMBOL}`; beta 1, dividends ignored), so a long-only strategy gets no credit for the index "
+            "going up. " if relative else "Yardstick: plain net R (`--absolute`). ")
     lines = [
         "# Strategy leaderboard",
         "",
-        f"Generated by `swing_engine.research.leaderboard`. Net R per signal after a per-stock round-trip cost (half the estimated spread a side, floored at 10/20 bp); t-stats on "
-        f"non-overlapping blocks of the horizon; Harvey-Liu haircut over {n_trials} trials. A survivor needs a "
-        "positive haircut Sharpe at the same horizon in both windows.",
+        f"Generated by `swing_engine.research.leaderboard`. Net R per signal after a per-stock round-trip cost (half the estimated spread a side, floored at 10/20 bp). "
+        f"{yard}t-stats on non-overlapping blocks of the horizon; Harvey-Liu haircut over {n_trials} trials. "
+        "A survivor needs a positive haircut Sharpe at the same horizon in both windows. Signals doubled under "
+        "renamed tickers are counted once (`research.cards.drop_renamed`).",
         "",
         "## Survivors",
     ]
     surv = survivors(board)
+    edge = "rel_r" if relative else "net_r"
     if surv.empty:
         lines.append("None. No strategy keeps a positive net edge after the multiple-testing haircut in both windows.")
     else:
         for (strat, h), g in surv.groupby(["strategy", "horizon"]):
-            parts = "; ".join(f"{int(r.window)}: net {f(r.net_r)}R, haircut SR {f(r.haircut_sharpe, '.2f')}"
+            parts = "; ".join(f"{int(r.window)}: net {f(getattr(r, edge))}R, haircut SR {f(r.haircut_sharpe, '.2f')}"
                               for r in g.itertuples())
             lines.append(f"- **{strat}** at {h}d: {parts}")
     for w in windows:
@@ -119,11 +145,12 @@ def render(board: pd.DataFrame, n_trials: int, windows: Sequence[Window] = WINDO
         best = sub.sort_values("t", ascending=False).drop_duplicates("strategy")
         lines += ["", f"## {w.start} .. {w.end} ({w.label})", "",
                   "Best horizon per strategy by t (picking it is itself a look, already counted in the trials).", "",
-                  "| strategy | horizon | signals | win | gross R | net R | t | Sharpe | haircut SR |",
-                  "|---|---|---|---|---|---|---|---|---|"]
+                  f"| strategy | horizon | signals | win | gross R | net R | {MARKET_SYMBOL} R | vs {MARKET_SYMBOL} | t | Sharpe | haircut SR |",
+                  "|---|---|---|---|---|---|---|---|---|---|---|"]
         for r in best.itertuples():
             lines.append(f"| {r.strategy} | {r.horizon}d | {int(r.n)} | {f(r.win * 100, '.0f')}% | {f(r.gross_r)} | "
-                         f"{f(r.net_r)} | {f(r.t, '.2f')} | {f(r.sharpe, '.2f')} | {f(r.haircut_sharpe, '.2f')} |")
+                         f"{f(r.net_r)} | {f(r.mkt_r)} | {f(r.rel_r)} | {f(r.t, '.2f')} | {f(r.sharpe, '.2f')} | "
+                         f"{f(r.haircut_sharpe, '.2f')} |")
     return "\n".join(lines) + "\n"
 
 
@@ -138,19 +165,28 @@ def liquid_variant(shadow: pd.DataFrame, min_dollar_volume: float) -> pd.DataFra
     return keep
 
 
+YARDSTICK_RELATIVE = "vs_spy"
+
+
 def log_board_trials(board: pd.DataFrame) -> int:
     """Log each (strategy, window, horizon) look as a trial once, so research.metrics.multiple_testing and
-    `swing backtest` deflate by every look the leaderboard took, not only the runs logged elsewhere."""
-    seen = {(r.get("name"), (r.get("params") or {}).get("window"), (r.get("params") or {}).get("horizon"))
-            for r in iter_trials() if LEADERBOARD_TAG in (r.get("tags") or [])}
+    `swing backtest` deflate by every look the leaderboard took, not only the runs logged elsewhere. A look
+    under the SPY yardstick is a trial of its own (``params.yardstick``): it is a second look at the same data."""
+    yard = YARDSTICK_RELATIVE if board.attrs.get("relative") else None
+
+    def key_of(name: Any, params: dict[str, Any]) -> tuple[Any, ...]:
+        return (name, params.get("window"), params.get("horizon"), params.get("yardstick"))
+
+    seen = {key_of(r.get("name"), r.get("params") or {}) for r in iter_trials()
+            if LEADERBOARD_TAG in (r.get("tags") or [])}
     n = 0
     for r in board.itertuples():
-        key = (str(r.strategy), int(r.window), int(r.horizon))
-        if key in seen:
+        params = {"window": int(r.window), "horizon": int(r.horizon), **({"yardstick": yard} if yard else {})}
+        if key_of(str(r.strategy), params) in seen:
             continue
-        log_trial(key[0], {"window": key[1], "horizon": key[2]},
-                  {"n": float(r.n), "net_r": float(r.net_r), "t": float(r.t)}, tags=[LEADERBOARD_TAG],
-                  notes="research.leaderboard look (replay shadow ledger)")
+        log_trial(str(r.strategy), params,
+                  {"n": float(r.n), "net_r": float(r.net_r), "rel_r": float(r.rel_r), "t": float(r.t)},
+                  tags=[LEADERBOARD_TAG], notes="research.leaderboard look (replay shadow ledger)")
         n += 1
     return n
 
@@ -164,14 +200,18 @@ def main(argv: Sequence[str] | None = None) -> tuple[pd.DataFrame, int]:
     ap.add_argument("--out", default="docs/leaderboard.md")
     ap.add_argument("--min-dollar-volume", type=float, default=None,
                     help="variant: only signals whose 20-day dollar volume is at least this (counted as new trials)")
+    ap.add_argument("--absolute", action="store_true", help="grade plain net R instead of net R against SPY")
     args = ap.parse_args(argv)
     settings = load_settings.__wrapped__(Path(args.settings))
     shadow = with_costs(read_shadow([ROOT / settings.data.store_path, *(ROOT / s for s in args.store)]),
                         ROOT / settings.data.store_path)
     if args.min_dollar_volume is not None:
         shadow = liquid_variant(shadow, args.min_dollar_volume)
-    board, n_trials = leaderboard(shadow, logged_trials=trial_count(None))
+    relative = not args.absolute
+    # the looks this board is about to log count in its own haircut
+    board, _ = leaderboard(shadow, relative=relative)
     log_board_trials(board)
+    board, n_trials = leaderboard(shadow, logged_trials=trial_count(None), relative=relative)
     (ROOT / args.out).write_text(render(board, n_trials))
     print(f"{len(board)} rows, {n_trials} trials, {len(survivors(board))} survivor rows -> {args.out}")
     return board, n_trials

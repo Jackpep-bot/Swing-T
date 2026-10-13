@@ -152,23 +152,23 @@ orders for the intraday pivot cross.
 - O'Neil, *How to Make Money in Stocks* (not read directly)
 
 ## Empirical (replay)
-_Generated 2026-10-10 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-13 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the playbook router's labels on the signal day.
 About 141 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 27 | 2 | 48% | -0.15 | -0.23 | 32% | -0.18 | -0.27 | 24% | -0.32 | -0.41 | 0.62 |
-| narrow_uptrend | 5 | 0 | 20% | -0.55 | -0.65 | 0% | -0.85 | -0.96 | 0% | -0.97 | -1.08 | 0.00 |
-| **all** | 32 | 2 | 43% | -0.21 | -0.30 | 27% | -0.29 | -0.38 | 20% | -0.43 | -0.52 | 0.50 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 27 | 2 | 48% | -0.15 | -0.23 | -0.14 | 32% | -0.18 | -0.27 | -0.18 | 24% | -0.32 | -0.41 | -0.31 | 0.62 |
+| narrow_uptrend | 5 | 0 | 20% | -0.55 | -0.65 | -0.57 | 0% | -0.85 | -0.96 | -0.86 | 0% | -0.97 | -1.08 | -1.06 | 0.00 |
+| **all** | 32 | 2 | 43% | -0.21 | -0.30 | -0.21 | 27% | -0.29 | -0.38 | -0.29 | 20% | -0.43 | -0.52 | -0.44 | 0.50 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 126 | 1 | 48% | -0.08 | -0.18 | 49% | +0.07 | -0.03 | 44% | +0.17 | +0.08 | 1.34 |
-| narrow_uptrend | 29 | 0 | 48% | +0.12 | +0.02 | 48% | +0.17 | +0.08 | 52% | +0.16 | +0.07 | 1.34 |
-| **all** | 155 | 1 | 48% | -0.04 | -0.14 | 49% | +0.09 | -0.01 | 45% | +0.17 | +0.08 | 1.34 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 121 | 1 | 47% | -0.09 | -0.19 | -0.19 | 50% | +0.08 | -0.02 | -0.05 | 42% | +0.15 | +0.06 | -0.03 | 1.29 |
+| narrow_uptrend | 29 | 0 | 48% | +0.12 | +0.02 | +0.03 | 48% | +0.17 | +0.08 | +0.10 | 52% | +0.16 | +0.07 | +0.03 | 1.34 |
+| **all** | 150 | 1 | 47% | -0.05 | -0.15 | -0.15 | 50% | +0.09 | +0.00 | -0.02 | 44% | +0.15 | +0.06 | -0.02 | 1.30 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

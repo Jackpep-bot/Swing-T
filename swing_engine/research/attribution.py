@@ -24,7 +24,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from swing_engine.research.cards import ROOT, WINDOWS, Window, cost_r, executable, with_costs
+from swing_engine.research.cards import (
+    MARKET_SYMBOL,
+    ROOT,
+    WINDOWS,
+    Window,
+    cost_r,
+    executable,
+    market_r,
+    with_costs,
+)
 from swing_engine.research.leaderboard import MIN_BLOCKS, _sessions
 from swing_engine.research.shadow import (
     DEFAULT_HORIZONS,
@@ -34,7 +43,6 @@ from swing_engine.research.shadow import (
     horizon_column,
 )
 
-MARKET_SYMBOL = "SPY"
 MIX_HORIZON = 20  # exit mix and concentration are reported at the longest graded horizon
 TOP_SHARE = 0.05
 PRICE_EDGES = (10.0, 50.0)  # $ per share: <$10, $10-50, >$50
@@ -50,23 +58,6 @@ _PER_HORIZON = ("hit", "result_r", "mfe_r", "mae_r", "exit_date")
 
 
 # ----------------------------------------------------------------------------------------------- per signal
-
-
-def market_r(frame: pd.DataFrame, spy: pd.DataFrame, horizon: int) -> pd.Series:
-    """SPY's return over each signal's holding span in the signal's R units. ``spy``: ``open``/``close`` indexed
-    by session date. The span runs from the open of ``entry_date`` (the session after ``as_of`` when missing) to
-    the close of ``exit_date_<h>d``; NaN when either session has no SPY bar or the stop is not below the entry."""
-    sessions = pd.DatetimeIndex(pd.to_datetime(spy.index))
-    opens = pd.Series(spy["open"].to_numpy(float), index=sessions)
-    closes = pd.Series(spy["close"].to_numpy(float), index=sessions)
-    as_of = pd.to_datetime(frame["as_of"])
-    nxt = np.searchsorted(sessions.values, as_of.values.astype("datetime64[ns]"), side="right")
-    after = pd.Series(sessions.append(pd.DatetimeIndex([pd.NaT]))[np.minimum(nxt, len(sessions))], index=frame.index)
-    start = pd.to_datetime(frame["entry_date"]).fillna(after) if "entry_date" in frame.columns else after
-    end = pd.to_datetime(frame[horizon_column("exit_date", horizon)])
-    ret = end.map(closes).to_numpy(float) / start.map(opens).to_numpy(float) - 1.0
-    entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
-    return pd.Series(ret, index=frame.index) * entry / (entry - stop).where(entry > stop)
 
 
 def chunk_stats(frame: pd.DataFrame, spy: pd.DataFrame,

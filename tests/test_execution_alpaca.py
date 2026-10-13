@@ -153,3 +153,25 @@ def test_order_manager_end_to_end_with_mocked_alpaca(client, tmp_path):
     client.submit_order.assert_called_once()
     summary = manager.reconcile()
     assert summary["unknown_positions"] == ["AAPL"] and summary["open_orders"] == 1
+
+
+def test_open_orders_brings_back_the_held_stop_leg_of_a_filled_bracket(client):
+    """Alpaca's status=open listing shows only the working target of a filled bracket (paper, 2026-10-12)."""
+    target = {"id": "t1", "symbol": "BNS", "side": "sell", "type": "limit", "status": "new", "order_class": "bracket",
+              "limit_price": "91.14", "legs": None}
+    stop = {"id": "s1", "symbol": "BNS", "side": "sell", "type": "stop", "status": "held", "order_class": "bracket",
+            "stop_price": "84.07", "legs": None}
+    parent = {"id": "p1", "symbol": "BNS", "side": "buy", "type": "limit", "status": "filled",
+              "order_class": "bracket", "client_order_id": "swing-rsi2_meanrev-BNS-20261008-long", "legs": [target, stop]}
+    done = {**parent, "id": "p0", "legs": [{**target, "id": "t0", "status": "filled"}, {**stop, "id": "s0", "status": "canceled"}]}
+    resting = {"id": "e1", "symbol": "PFG", "side": "buy", "type": "limit", "status": "new", "order_class": "bracket",
+               "legs": [{**stop, "id": "s2", "symbol": "PFG"}]}
+    client.get_orders.side_effect = [[target, resting], [parent, done]]
+    broker = AlpacaBroker(paper=True, client=client)
+    orders = broker.open_orders()
+    assert [o["id"] for o in orders] == ["e1", "p1"]  # the lone target is now nested under its parent
+    assert [leg["id"] for leg in orders[1]["legs"]] == ["t1", "s1"]
+    assert client.get_orders.call_args_list[1].args[0].symbols == ["BNS"]
+    client.get_orders.side_effect = [[target, resting], [parent, done]]
+    with pytest.raises(ValueError, match="already has an open stop order s1"):
+        broker.place_stop("BNS", 84.5)

@@ -166,21 +166,21 @@ reference target or set 0.0 like `rsi2_meanrev`.
 - Repo: `docs/methods/05-qullamaggie-breakout.md`, `docs/methods.md` (1a #11, 6.5, 7b #4), `swing_engine/strategies/qullamaggie_flag.py`, `swing_engine/features/patterns2.py`
 
 ## Empirical (replay)
-_Generated 2026-10-10 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-13 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the playbook router's labels on the signal day.
 About 141 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 3 | 0 | 33% | -0.52 | -0.66 | 0% | -0.84 | -0.98 | 0% | -0.84 | -0.98 | 0.00 |
-| **all** | 3 | 0 | 33% | -0.52 | -0.66 | 0% | -0.84 | -0.98 | 0% | -0.84 | -0.98 | 0.00 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 3 | 0 | 33% | -0.52 | -0.66 | -0.55 | 0% | -0.84 | -0.98 | -1.07 | 0% | -0.84 | -0.98 | -1.07 | 0.00 |
+| **all** | 3 | 0 | 33% | -0.52 | -0.66 | -0.55 | 0% | -0.84 | -0.98 | -1.07 | 0% | -0.84 | -0.98 | -1.07 | 0.00 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| healthy_uptrend | 25 | 2 | 43% | +0.10 | -0.09 | 39% | +0.19 | +0.01 | 22% | -0.15 | -0.34 | 0.81 |
-| **all** | 25 | 2 | 43% | +0.10 | -0.09 | 39% | +0.19 | +0.01 | 22% | -0.15 | -0.34 | 0.81 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| healthy_uptrend | 23 | 1 | 45% | +0.12 | -0.07 | -0.08 | 41% | +0.24 | +0.06 | +0.11 | 23% | -0.11 | -0.30 | -0.33 | 0.86 |
+| **all** | 23 | 1 | 45% | +0.12 | -0.07 | -0.08 | 41% | +0.24 | +0.06 | +0.11 | 23% | -0.11 | -0.30 | -0.33 | 0.86 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).

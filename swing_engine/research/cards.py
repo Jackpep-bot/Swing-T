@@ -20,9 +20,15 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 
-from swing_engine.research.shadow import DEFAULT_HORIZONS, REPLAY_SHADOW_TABLE, summarize_outcomes
+from swing_engine.research.shadow import (
+    DEFAULT_HORIZONS,
+    REPLAY_SHADOW_TABLE,
+    horizon_column,
+    summarize_outcomes,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 CARDS_DIR = ROOT / "docs" / "strategies"
@@ -38,6 +44,10 @@ BPS = 1e4
 #: default) on the entry and the exit, expressed in R of the signal's own stop distance. Fees (SEC, TAF) are
 #: under 0.1 bp on these prices and are left out.
 NET_SLIPPAGE_BPS_PER_SIDE = 10.0
+#: The yardstick of the leaderboard, the cards and the reality check (owner, 2026-10-13): R beyond what the same
+#: dollars would have made in this symbol over the signal's holding span. Column ``mkt_r_<h>d`` (``with_costs``).
+MARKET_SYMBOL = "SPY"
+MARKET_R = "mkt_r"
 
 
 def executable(frame: pd.DataFrame) -> pd.DataFrame:
@@ -114,7 +124,7 @@ def shadow_table(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS
     groups = [*sorted(frame["regime"].fillna("unknown").astype(str).unique()), "all"]
     head = ["regime", "signals", "skipped"]
     for h in horizons:
-        head += [f"win {h}d", f"avg R {h}d", f"net R {h}d"]
+        head += [f"win {h}d", f"avg R {h}d", f"net R {h}d", f"vs SPY {h}d"]
     head += [f"PF {longest}d"]
     lines = ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)]
     for g in groups:
@@ -124,8 +134,8 @@ def shadow_table(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS
         first = stats[horizons[0]]
         cells += [str(int(first["n_signals"])), str(int(first["n_skipped"]))]
         for h in horizons:
-            net = _net_avg(sub, costs, h)
-            cells += [_pct(stats[h]["win_rate"]), _fmt(stats[h]["avg_r"], "+.2f"), _fmt(net, "+.2f")]
+            net, rel = _net_avg(sub, costs, h), _net_avg(sub, costs + relative_r(frame, h), h)
+            cells += [_pct(stats[h]["win_rate"]), _fmt(stats[h]["avg_r"], "+.2f"), _fmt(net, "+.2f"), _fmt(rel, "+.2f")]
         cells += [_fmt(stats[longest]["profit_factor"])]
         lines.append("| " + " | ".join(cells) + " |")
     return "\n".join(lines)
@@ -174,7 +184,9 @@ def render_section(
         "entered the next session by its entry type, exited at its own stop or target or at the horizon close. "
         "`avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread "
         "(Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp "
-        "otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.",
+        "otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same "
+        "days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the "
+        "playbook router's labels on the signal day.",
     ]
     if n_strategies:
         out.append(
@@ -233,8 +245,56 @@ def write_cards(
     return written
 
 
+def market_r(frame: pd.DataFrame, spy: pd.DataFrame, horizon: int) -> pd.Series:
+    """SPY's return over each signal's holding span in the signal's R units. ``spy``: ``open``/``close`` indexed
+    by session date. The span runs from the open of ``entry_date`` (the session after ``as_of`` when missing) to
+    the close of ``exit_date_<h>d``; NaN when either session has no SPY bar or the stop is not below the entry."""
+    sessions = pd.DatetimeIndex(pd.to_datetime(spy.index))
+    opens = pd.Series(spy["open"].to_numpy(float), index=sessions)
+    closes = pd.Series(spy["close"].to_numpy(float), index=sessions)
+    as_of = pd.to_datetime(frame["as_of"])
+    nxt = np.searchsorted(sessions.values, as_of.values.astype("datetime64[ns]"), side="right")
+    after = pd.Series(sessions.append(pd.DatetimeIndex([pd.NaT]))[np.minimum(nxt, len(sessions))], index=frame.index)
+    start = pd.to_datetime(frame["entry_date"]).fillna(after) if "entry_date" in frame.columns else after
+    end = pd.to_datetime(frame[horizon_column("exit_date", horizon)])
+    ret = end.map(closes).to_numpy(float) / start.map(opens).to_numpy(float) - 1.0
+    entry, stop = frame["entry"].astype(float), frame["stop"].astype(float)
+    return pd.Series(ret, index=frame.index) * entry / (entry - stop).where(entry > stop)
+
+
+def relative_r(frame: pd.DataFrame, horizon: int) -> pd.Series:
+    """The market component to subtract from each signal's R at ``horizon``: ``mkt_r_<h>d`` (0 where unknown or
+    not attached)."""
+    col = horizon_column(MARKET_R, horizon)
+    return frame[col].astype(float).fillna(0.0) if col in frame.columns else pd.Series(0.0, index=frame.index)
+
+
+def drop_renamed(shadow: pd.DataFrame, dups: pd.DataFrame, cutoff: date | None = None) -> pd.DataFrame:
+    """``shadow`` without the signals a replay doubled or broke on renamed tickers (``data.repair.find_duplicates``
+    rows of the store it ran on): a merged-away symbol's signal when the surviving symbol has the same strategy
+    and day (same bars, same signal), and every signal of the new ticker of a rename inside the Massive window
+    from ``cutoff`` on (its series had a hole or another company's bars until the store was repaired)."""
+    from swing_engine.data.delisted import MASSIVE_WINDOW_START
+
+    if shadow.empty or dups.empty:
+        return shadow
+    to = dict(zip(dups["symbol"], dups["new_symbol"], strict=True))
+    renamed = set(dups.loc[dups["handoff"].notna(), "new_symbol"])
+    sym = shadow["symbol"].astype(str)
+    sub = shadow.loc[sym.isin(set(to) | set(to.values())), ["strategy", "symbol", "as_of"]].astype({"symbol": str})
+    sub["as_of"] = pd.to_datetime(sub["as_of"])
+    broken = sub["symbol"].isin(renamed) & (sub["as_of"] >= pd.Timestamp(cutoff or MASSIVE_WINDOW_START))
+    keys = pd.MultiIndex.from_frame(sub.loc[~broken].astype({"strategy": str}))
+    twin = pd.MultiIndex.from_arrays([sub["strategy"].astype(str), sub["symbol"].map(to), sub["as_of"]])
+    drop = broken | (sub["symbol"].isin(to) & twin.isin(keys))
+    return shadow.drop(index=sub.index[drop.to_numpy()])
+
+
 def with_costs(shadow: pd.DataFrame, store_path: Path) -> pd.DataFrame:
-    """Attach per-signal ``cost_bps`` (research.costs) from the bars in ``store_path``."""
+    """Prepare a replay ledger for grading from the bars in ``store_path``: drop the duplicate signals of renamed
+    tickers (``drop_renamed``), attach per-signal ``cost_bps`` (research.costs) and SPY's R over each graded
+    holding span (``mkt_r_<h>d``, ``market_r``)."""
+    from swing_engine.data.repair import find_duplicates
     from swing_engine.data.store import Store
     from swing_engine.research.costs import attach_costs, cost_table
 
@@ -242,11 +302,19 @@ def with_costs(shadow: pd.DataFrame, store_path: Path) -> pd.DataFrame:
         return shadow
     store = Store(str(store_path), read_only=True)
     try:
+        shadow = drop_renamed(shadow, find_duplicates(store))
         d = pd.to_datetime(shadow["as_of"]).dt.date
         bars = store.read_bars(sorted(set(shadow["symbol"].astype(str))), min(d) - pd.Timedelta(days=60), max(d))
+        spy = store.read_bars([MARKET_SYMBOL])
     finally:
         store.close()
-    return attach_costs(shadow, cost_table(bars))
+    out = attach_costs(shadow, cost_table(bars))
+    spy = spy.assign(d=pd.to_datetime(spy["ts"]).dt.date).set_index("d")[["open", "close"]].sort_index()
+    if len(spy) and {"entry", "stop"} <= set(out.columns):
+        for h in DEFAULT_HORIZONS:
+            if horizon_column("exit_date", h) in out.columns:
+                out[horizon_column(MARKET_R, h)] = market_r(out, spy, h)
+    return out
 
 
 def read_shadow(paths: Iterable[Path]) -> pd.DataFrame:
@@ -289,4 +357,4 @@ if __name__ == "__main__":
     main()
 
 
-__all__ = ["WINDOWS", "render_section", "replace_section", "write_cards"]
+__all__ = ["WINDOWS", "drop_renamed", "market_r", "relative_r", "render_section", "replace_section", "write_cards"]

@@ -960,13 +960,25 @@ def repair_store(
     ctx: typer.Context,
     apply: Annotated[bool, typer.Option("--apply/--dry-run", help="write the repair (default: dry run, no writes)")] = False,
     undo: Annotated[str | None, typer.Option("--undo", help="reverse one applied run by its run_id")] = None,
+    duplicates: Annotated[
+        bool, typer.Option("--duplicates", help="instead: merge series duplicated under renamed tickers (BK/BNY)")
+    ] = False,
 ) -> None:
-    """Drop pre-2024-10-07 zero-volume filler and split ticker-reuse joins into TICKER~YYYYMMDD keys
+    """Drop pre-2024-10-07 zero-volume filler and split ticker-reuse joins into TICKER~YYYYMMDD keys; with
+    --duplicates, merge the series Alpaca filed under both names of a renamed ticker into one
     (data.repair; every change logged in `repairs`). Run on a backup copy first."""
     store = _open_store(_state(ctx).settings)
     repair = importlib.import_module("swing_engine.data.repair")
     if undo:
         _print_mapping(f"Repair {undo} reverted", repair.undo_repair(store, undo))
+        return
+    if duplicates:
+        result = repair.merge_duplicates(store) if apply else {"duplicates": (found := repair.find_duplicates(store)),
+                                                               "merged": 0, "found": len(found),
+                                                               "unresolved": found.attrs["unresolved"]}
+        _print_frame("Duplicate series (symbol merges into new_symbol)", result["duplicates"])
+        _print_mapping("Duplicate merge" + (" APPLIED" if apply else " (dry run, nothing written)"),
+                       {k: v for k, v in result.items() if k != "duplicates"})
         return
     result = repair.apply(store) if apply else repair.plan(store)
     _print_frame("Zero-volume filler by symbol", result["filler"])

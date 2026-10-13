@@ -29,7 +29,7 @@ import numpy as np
 import pandas as pd
 from scipy.stats import kurtosis, skew
 
-from swing_engine.research.cards import ROOT, WINDOWS, Window, cost_r, executable, with_costs
+from swing_engine.research.cards import ROOT, WINDOWS, Window, cost_r, executable, relative_r, with_costs
 from swing_engine.research.leaderboard import MIN_BLOCKS, SESSIONS_PER_YEAR, _sessions
 from swing_engine.research.metrics import (
     DEFAULT_CSCV_PARTITIONS,
@@ -42,7 +42,7 @@ DEFAULT_BOOTSTRAPS = 2000
 DEFAULT_SEED = 20261009
 TOP_N = 10
 #: ledger columns the block matrix needs (the full ledger is ~40 columns x 10M rows)
-_BASE_COLUMNS = ("strategy", "symbol", "as_of", "entry", "stop", "entry_price")
+_BASE_COLUMNS = ("strategy", "symbol", "as_of", "entry", "stop", "entry_price", "entry_date")
 DAILY_COLUMNS = ("strategy", "as_of", "horizon", "total", "n")
 
 
@@ -50,8 +50,9 @@ DAILY_COLUMNS = ("strategy", "as_of", "horizon", "total", "n")
 
 
 def daily_net(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS) -> pd.DataFrame:
-    """``strategy, as_of, horizon, total, n``: sum and count of net R (result_r - cost_r) over the executable
-    signals of each strategy-day that became trades at the horizon (leaderboard.edge_stats' definition)."""
+    """``strategy, as_of, horizon, total, n``: sum and count of net R (result_r - cost_r, minus the market
+    component ``mkt_r_<h>d`` when ``cards.with_costs`` attached it: the leaderboard's yardstick) over the
+    executable signals of each strategy-day that became trades at the horizon."""
     frame = executable(frame)
     if frame.empty:
         return pd.DataFrame(columns=list(DAILY_COLUMNS))
@@ -62,7 +63,7 @@ def daily_net(frame: pd.DataFrame, horizons: Sequence[int] = DEFAULT_HORIZONS) -
         if hit not in frame.columns:
             continue
         traded = frame[hit].astype(str).isin(TRADE_HITS) & frame[r].notna()
-        net = (frame.loc[traded, r].astype(float) - cost[traded]).rename("net")
+        net = (frame.loc[traded, r].astype(float) - cost[traded] - relative_r(frame, h)[traded]).rename("net")
         keys = [frame.loc[traded, "strategy"].astype(str), pd.to_datetime(frame.loc[traded, "as_of"])]
         g = net.groupby(keys).agg(total="sum", n="count").reset_index()
         out.append(g.assign(horizon=int(h)))
@@ -77,7 +78,7 @@ def load_daily(paths: Iterable[Path], cost_store: Path, horizons: Sequence[int] 
     is taken from the last one listed (research.cards.read_shadow keeps the last duplicate signal)."""
     import duckdb
 
-    wanted = [*_BASE_COLUMNS, *(horizon_column(k, h) for h in horizons for k in ("hit", "result_r"))]
+    wanted = [*_BASE_COLUMNS, *(horizon_column(k, h) for h in horizons for k in ("hit", "result_r", "exit_date"))]
     parts = []
     for order, path in enumerate(paths):
         con = duckdb.connect(str(path), read_only=True)
@@ -238,7 +239,8 @@ def render(results: Sequence[dict[str, Any]], top: int = TOP_N) -> str:
         "a matrix of mean net R per non-overlapping block of the horizon (rows) by strategy (columns, 0 when it did "
         "not trade; strategies with fewer than "
         f"{MIN_BLOCKS} traded blocks left out), resampled with a stationary block bootstrap. `RC p` (White) and "
-        "`SPA p` (Hansen) are the p-values of \"the best strategy has no edge over not trading\"; small means some "
+        "`SPA p` (Hansen) are the p-values of \"the best strategy has no edge over holding SPY on the same dollars and days\" (net R is "
+        "measured against SPY, as on the leaderboard); small means some "
         "strategy has one. `PBO` is the share of half/half splits in which the in-sample best ranks below the "
         "median out of sample (0.5 = picking the best is a coin flip; a low value says the ranking persists, which "
         "it also does when the best is merely the least bad, so read it with the p-values). In the tables `p adj` is the Romano-Wolf "

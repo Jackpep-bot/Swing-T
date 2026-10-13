@@ -78,29 +78,29 @@ Same-day stop-out rate > 55%; average trade < round-trip cost.
   (different, forex-adapted version)
 
 ## Empirical (replay)
-_Generated 2026-10-10 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. Regimes are the playbook router's labels on the signal day.
+_Generated 2026-10-13 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the playbook router's labels on the signal day.
 About 141 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
 
 ### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| choppy | 3621 | 292 | 38% | +0.12 | -0.22 | 32% | +0.22 | -0.12 | 26% | +0.33 | -0.01 | 1.39 |
-| correction | 305 | 28 | 28% | -0.11 | -0.67 | 27% | +0.04 | -0.51 | 22% | +0.17 | -0.38 | 1.22 |
-| healthy_uptrend | 8486 | 636 | 35% | +0.12 | -0.25 | 26% | +0.02 | -0.36 | 19% | +0.04 | -0.34 | 1.04 |
-| high_vol_selloff | 2106 | 119 | 32% | -0.12 | -0.40 | 37% | +0.09 | -0.19 | 31% | +0.07 | -0.21 | 1.09 |
-| narrow_uptrend | 1363 | 87 | 18% | -0.54 | -0.88 | 12% | -0.63 | -0.97 | 8% | -0.71 | -1.06 | 0.34 |
-| **all** | 15881 | 1162 | 34% | +0.03 | -0.32 | 28% | +0.03 | -0.33 | 22% | +0.06 | -0.30 | 1.06 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 3609 | 291 | 38% | +0.12 | -0.22 | -0.46 | 32% | +0.22 | -0.12 | -0.43 | 26% | +0.33 | -0.01 | -0.49 | 1.39 |
+| correction | 305 | 28 | 28% | -0.11 | -0.67 | -0.35 | 27% | +0.04 | -0.51 | -0.48 | 22% | +0.17 | -0.38 | -1.08 | 1.22 |
+| healthy_uptrend | 8469 | 633 | 35% | +0.13 | -0.25 | -0.31 | 26% | +0.03 | -0.35 | -0.40 | 19% | +0.04 | -0.34 | -0.42 | 1.04 |
+| high_vol_selloff | 2097 | 115 | 32% | -0.13 | -0.41 | -0.27 | 37% | +0.09 | -0.19 | -0.32 | 31% | +0.07 | -0.20 | -0.40 | 1.10 |
+| narrow_uptrend | 1359 | 87 | 18% | -0.55 | -0.89 | -0.68 | 12% | -0.63 | -0.97 | -0.75 | 8% | -0.71 | -1.06 | -0.83 | 0.34 |
+| **all** | 15839 | 1154 | 34% | +0.03 | -0.32 | -0.37 | 28% | +0.03 | -0.32 | -0.42 | 22% | +0.06 | -0.30 | -0.48 | 1.07 |
 
 Portfolio replay: no trades taken (every signal lost the slot race or was skipped).
 
 ### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
-| regime | signals | skipped | win 5d | avg R 5d | net R 5d | win 10d | avg R 10d | net R 10d | win 20d | avg R 20d | net R 20d | PF 20d |
-|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| choppy | 10367 | 544 | 37% | +0.14 | -0.19 | 32% | +0.22 | -0.11 | 25% | +0.30 | -0.03 | 1.36 |
-| correction | 5288 | 240 | 43% | +0.26 | -0.08 | 35% | +0.31 | -0.02 | 28% | +0.37 | +0.04 | 1.44 |
-| healthy_uptrend | 30057 | 1307 | 33% | -0.06 | -0.43 | 26% | -0.07 | -0.44 | 20% | -0.05 | -0.42 | 0.94 |
-| high_vol_selloff | 11667 | 665 | 40% | +0.11 | -0.20 | 35% | +0.17 | -0.14 | 28% | +0.13 | -0.17 | 1.16 |
-| narrow_uptrend | 7804 | 390 | 37% | +0.11 | -0.23 | 31% | +0.14 | -0.20 | 24% | +0.13 | -0.22 | 1.15 |
-| **all** | 65183 | 3146 | 36% | +0.05 | -0.30 | 30% | +0.07 | -0.27 | 23% | +0.09 | -0.25 | 1.11 |
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 10117 | 528 | 37% | +0.14 | -0.20 | -0.39 | 31% | +0.22 | -0.12 | -0.43 | 25% | +0.29 | -0.04 | -0.46 | 1.35 |
+| correction | 5188 | 238 | 43% | +0.25 | -0.08 | -0.33 | 35% | +0.31 | -0.03 | -0.33 | 28% | +0.37 | +0.04 | -0.24 | 1.44 |
+| healthy_uptrend | 29151 | 1274 | 33% | -0.06 | -0.43 | -0.47 | 26% | -0.07 | -0.44 | -0.49 | 20% | -0.05 | -0.42 | -0.53 | 0.94 |
+| high_vol_selloff | 11332 | 641 | 40% | +0.11 | -0.20 | -0.30 | 35% | +0.17 | -0.14 | -0.26 | 28% | +0.14 | -0.17 | -0.28 | 1.17 |
+| narrow_uptrend | 7606 | 381 | 37% | +0.11 | -0.23 | -0.32 | 31% | +0.14 | -0.20 | -0.33 | 24% | +0.13 | -0.21 | -0.37 | 1.16 |
+| **all** | 63394 | 3062 | 36% | +0.05 | -0.30 | -0.40 | 30% | +0.07 | -0.27 | -0.41 | 23% | +0.09 | -0.25 | -0.43 | 1.11 |
 
 Portfolio replay (net of costs, slots shared with its run): 1 trades, win 0%, avg -1.03R, PF 0.00, P&L $-289 on $100k, avg hold 2.0 bars.

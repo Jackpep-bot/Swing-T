@@ -11,6 +11,10 @@
      must stay > 0 after costs, and planning uses the haircut Sharpe, never the raw one. For a rule taken from a
      paper or book, also assume the live edge is at most half the published edge (McLean-Pontiff post-publication
      decay, catalog `post_publication_haircut`).
+   - Yardstick (owner, 2026-10-13): on the leaderboard, the cards and the reality check the edge is net R minus
+     what SPY returned over the same holding span on the same dollars (`research.cards.market_r`, beta 1), because
+     every strategy is long-only and most positive gross R was the index going up (docs/attribution.md).
+     Pre-registered portfolio tests keep their own registered rule (alpha vs SPY with a Bonferroni t).
    - CZ check (manual, catalog `open_factor_benchmark_cz`): for any signal that re-implements a published
      predictor (momentum, reversal, 52-week high, insider, accruals...), download the matching monthly long-short
      portfolio returns from Chen-Zimmermann Open Source Asset Pricing (openassetpricing.com) and compare them with

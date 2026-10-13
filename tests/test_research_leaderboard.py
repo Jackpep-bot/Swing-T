@@ -57,3 +57,21 @@ def test_liquid_variant_filters_and_renames() -> None:
     shadow = frame("s", "2024-01-02", 0.1).assign(dollar_volume=[1e6, 6e7] * 200)
     out = lb.liquid_variant(shadow, 5e7)
     assert len(out) == 200 and set(out["strategy"]) == {"s@liq50"}
+
+
+def test_spy_yardstick_takes_the_market_out_and_is_logged_as_its_own_trial(tmp_path, monkeypatch) -> None:
+    from swing_engine.research import trials
+
+    # +0.5R gross, of which +0.5R was the index: no edge against SPY, a clear one in absolute terms
+    drift = frame("drift", "2024-01-02", 0.5).assign(**{f"mkt_r_{h}d": 0.5 for h in (5, 10, 20)})
+    rel, _ = lb.leaderboard(drift, WINDOWS[:1])
+    plain, _ = lb.leaderboard(drift, WINDOWS[:1], relative=False)
+    r, a = rel.loc[rel.horizon == 5].iloc[0], plain.loc[plain.horizon == 5].iloc[0]
+    assert abs(r.rel_r - (r.net_r - 0.5)) < 1e-9 and r.net_r == a.net_r
+    assert a.t > 4 and abs(r.t) < 2.5  # same noise, mean shifted down by 0.5R
+    assert lb.survivors(rel).empty and not lb.survivors(plain).empty
+    assert "vs SPY" in lb.render(rel, 3, WINDOWS[:1]) and "--absolute" in lb.render(plain, 3, WINDOWS[:1])
+    path = tmp_path / "trials.jsonl"
+    monkeypatch.setattr(lb, "iter_trials", lambda: trials.iter_trials(path))
+    monkeypatch.setattr(lb, "log_trial", lambda *a, **k: trials.log_trial(*a, path=path, **k))
+    assert lb.log_board_trials(plain) == 3 and lb.log_board_trials(rel) == 3 and lb.log_board_trials(rel) == 0

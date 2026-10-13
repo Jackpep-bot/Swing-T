@@ -276,3 +276,66 @@ def test_one_rejected_symbol_does_not_stop_the_chunk() -> None:
 
     out = dl._fetch_bars(Alp(), ["AAA", "BAD", "CCC"], date(2020, 1, 1))
     assert sorted(out["symbol"]) == ["AAA", "CCC"]
+
+
+# ----------------------------------------------------------------------------------------------- duplicate series
+
+
+def _renamed_store() -> Store:
+    """OLDT renamed NEWT on 2025-06-02 (NEWT was a $10 fund until then); DEAD~20200630 is the delisted key of a
+    ticker that was renamed LIVE; SOLO is nobody's twin. Alpaca filed each history under both names."""
+    store = Store()
+    store.write_bars(pd.concat([
+        _bars("OLDT", "2023-01-03", "2024-10-04", close=50.0),
+        _bars("OLDT", "2024-10-07", "2025-05-30", close=55.0),
+        _bars("OLDT", "2026-03-02", "2026-03-31", close=5.0),  # the ticker's next owner
+        _bars("NEWT", "2023-01-03", "2024-10-04", close=50.0),
+        _bars("NEWT", "2024-10-07", "2025-05-30", close=10.0),
+        _bars("NEWT", "2025-06-02", "2025-12-31", close=60.0),
+        _bars("DEAD~20200630", "2019-01-02", "2020-06-30", close=30.0),
+        _bars("LIVE", "2019-02-01", "2024-12-31", close=30.0),
+        _bars("SOLO", "2023-01-03", "2024-12-31", close=50.0, volume=2e6),
+    ], ignore_index=True))
+    return store
+
+
+def test_find_duplicates_pairs_renames_and_names_the_survivor():
+    dups = repair.find_duplicates(_renamed_store()).set_index("symbol")
+    assert set(dups.index) == {"OLDT", "DEAD~20200630"} and dups.attrs["unresolved"] == []
+    assert dups.at["OLDT", "new_symbol"] == "NEWT" and dups.at["OLDT", "handoff"] == date(2025, 5, 30)
+    assert dups.at["DEAD~20200630", "new_symbol"] == "LIVE" and dups.at["DEAD~20200630", "handoff"] is None
+    assert dups.at["DEAD~20200630", "date_from"] == date(2019, 2, 1)
+
+
+def test_merge_duplicates_leaves_one_series_and_undo_restores_the_store():
+    store = _renamed_store()
+    snapshot = store.read_bars()
+    res = repair.merge_duplicates(store)
+    newt = store.read_bars(["NEWT"]).set_index("ts")["close"]
+    assert len(newt) == len(trading_days(date(2023, 1, 3), date(2025, 12, 31)))  # no gap, no doubled day
+    assert newt[session_ts("2025-01-06")] == 55.0  # the bank's bars, not the fund's
+    assert res["foreign_rows"] == len(trading_days(date(2024, 10, 7), date(2025, 5, 30)))
+    assert store.read_bars(["OLDT"])["ts"].min() == session_ts("2026-03-02")  # the next owner keeps the ticker
+    assert store.read_bars(["DEAD~20200630"]).empty
+    assert store.read_bars(["LIVE"])["ts"].min() == session_ts("2019-01-02")  # earlier history moved over
+    assert set(store.read_table("repairs")["action"]) == {"merge_duplicate", "drop_foreign"}
+    assert repair.find_duplicates(store).empty  # idempotent
+    store.write_bars(_bars("NEWT", "2026-01-02", "2026-01-02", close=61.0))  # ingested after the merge
+    repair.undo_repair(store, res["run_id"])
+    after = store.read_bars()
+    kept = after["ts"] == session_ts("2026-01-02")
+    assert kept.sum() == 1
+    pd.testing.assert_frame_equal(after.loc[~kept].reset_index(drop=True), snapshot.reset_index(drop=True))
+
+
+def test_merge_duplicates_follows_a_second_rename_in_the_window():
+    store = Store()
+    store.write_bars(pd.concat([
+        *(_bars(s, "2023-01-03", "2024-10-04", close=40.0) for s in ("AAA", "BBB", "CCC")),
+        _bars("AAA", "2024-10-07", "2025-03-31", close=41.0),
+        _bars("BBB", "2025-04-01", "2025-09-30", close=42.0),
+        _bars("CCC", "2025-10-01", "2025-12-31", close=43.0),
+    ], ignore_index=True))
+    res = repair.merge_duplicates(store)
+    assert res["merged"] == 2 and store.symbols() == ["CCC"]
+    assert len(store.read_bars(["CCC"])) == len(trading_days(date(2023, 1, 3), date(2025, 12, 31)))

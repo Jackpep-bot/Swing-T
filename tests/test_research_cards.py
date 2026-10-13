@@ -59,3 +59,22 @@ def test_planned_r_rescales_gap_fills_onto_the_stop() -> None:
     out = cards.planned_r(frame.copy())
     # (95 - 90) / (100 - 90) = 0.5 -> 2.0R on filled risk is 1.0R on planned risk
     assert out["result_r_5d"].tolist() == pytest.approx([0.5, 1.0])
+
+
+def test_drop_renamed_keeps_one_signal_per_security() -> None:
+    from swing_engine.research.cards import drop_renamed
+
+    dups = pd.DataFrame({"symbol": ["OLDT", "DEAD~20200630"], "new_symbol": ["NEWT", "LIVE"],
+                         "handoff": [date(2025, 5, 30), None]})
+    rows = [("s", "OLDT", "2023-03-01"), ("s", "NEWT", "2023-03-01"),  # the same signal twice: OLDT's goes
+            ("s", "OLDT", "2025-02-03"),                               # the old ticker in the window: stays
+            ("s", "NEWT", "2025-02-03"), ("s", "NEWT", "2025-09-01"),  # the new ticker's broken series: both go
+            ("t", "OLDT", "2023-03-01"),                               # no twin for strategy t: stays
+            ("s", "DEAD~20200630", "2020-01-06"), ("s", "LIVE", "2020-01-06"), ("s", "DEAD~20200630", "2019-01-07"),
+            ("s", "SOLO", "2023-03-01")]
+    shadow = pd.DataFrame(rows, columns=["strategy", "symbol", "as_of"]).assign(as_of=lambda f: pd.to_datetime(f.as_of).dt.date)
+    kept = drop_renamed(shadow, dups)
+    assert [tuple(r) for r in kept.assign(as_of=kept.as_of.astype(str)).to_numpy()] == [
+        ("s", "NEWT", "2023-03-01"), ("s", "OLDT", "2025-02-03"), ("t", "OLDT", "2023-03-01"),
+        ("s", "LIVE", "2020-01-06"), ("s", "DEAD~20200630", "2019-01-07"), ("s", "SOLO", "2023-03-01")]
+    assert drop_renamed(shadow, dups.iloc[0:0]) is shadow
