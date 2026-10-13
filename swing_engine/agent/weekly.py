@@ -2,7 +2,8 @@
 
 Sections: what traded on paper this week (order ledger rows created this week, autopilot audit and `swing paper`
 run files), the live shadow ledger (top / bottom strategies by net R this week and to date), drift against the
-replay (research.drift) and a rules-based recommendations list. Written by `swing weekly-report` and by the
+replay (research.drift), the research verdicts written this week with what waits for the owner, and a rules-based
+recommendations list. Written by `swing weekly-report` and by the
 nightly on the last session of each ISO week.
 """
 from __future__ import annotations
@@ -217,6 +218,45 @@ def recommendations(drift: pd.DataFrame, settings: Settings) -> list[str]:
     return out
 
 
+RESULTS_GLOB = "docs/preregistration/*-results.md"
+STATUS_FILE = "docs/STATUS.md"
+WAITING_MARKER = "waiting for the owner"  # the STATUS.md paragraph that lists the owner's open decisions
+VERDICT_WORDS = ("PASS", "FAIL", "Nothing passes")
+
+
+def research_section(start: date, end: date, settings: Settings, root: Path = ROOT) -> list[str]:
+    """Research this week, read from the repo's own files: the verdict lines of every pre-registered results file
+    written in ``start..end``, the strategies on paper probation, and STATUS.md's list of open decisions."""
+    lines = ["## Research this week", ""]
+    found = False
+    for path in sorted(root.glob(RESULTS_GLOB)):
+        if not start <= date.fromtimestamp(path.stat().st_mtime) <= end:
+            continue
+        text = path.read_text(encoding="utf-8").splitlines()
+        verdicts = [ln.strip().lstrip("-").strip() for ln in text
+                    if any(w in ln for w in VERDICT_WORDS) and (ln.startswith("- **") or ln.startswith("**"))][:6]
+        lines.append(f"- `{path.name}`: " + ("; ".join(verdicts) if verdicts else "no verdict line found"))
+        found = True
+    if not found:
+        lines.append("No pre-registered result was written this week.")
+    probation = sorted(n for n, c in settings.strategies.items() if (c or {}).get("probation"))
+    lines += ["", "On paper probation (" + f"{settings.risk.probation_risk_mult:g}" + " of normal risk): "
+              + (", ".join(f"`{n}`" for n in probation) if probation else "none") + "."]
+    status = root / STATUS_FILE
+    if status.exists():
+        text = status.read_text(encoding="utf-8").splitlines()
+        at = next((i for i, ln in enumerate(text) if WAITING_MARKER in ln.lower()), None)
+        if at is not None:
+            block = []
+            for ln in text[at + 1:]:
+                if not ln.strip():
+                    break
+                block.append(ln)
+            if block:
+                lines += ["", "### Waiting for you", "", *block]
+    return [*lines, ""]
+
+
 def render_report(
     as_of: date,
     settings: Settings,
@@ -224,6 +264,7 @@ def render_report(
     replay: pd.DataFrame,
     orders: Sequence[dict[str, Any]],
     actions: Sequence[dict[str, Any]],
+    research: Sequence[str] = (),
 ) -> str:
     start = as_of - timedelta(days=as_of.weekday())
     drift = drift_table(live, replay, as_of)
@@ -235,6 +276,7 @@ def render_report(
         *_trading_section(orders, actions),
         *_shadow_section(live, start, as_of),
         *_drift_section(drift),
+        *research,
         "## Recommendations", "",
         *([f"- {r}" for r in recs] or ["None: no enabled strategy drifts below its replay and no shadow-only "
                                        "strategy has earned a walk-forward yet."]),
@@ -248,6 +290,7 @@ def write_report(settings: Settings, as_of: date, store: Any, root: Path | None 
     text = render_report(
         as_of, settings, store.read_table(SHADOW_TABLE), store.read_table(REPLAY_SHADOW_TABLE),
         ledger_orders(settings, start, as_of), paper_actions(settings, start, as_of),
+        research_section(start, as_of, settings),
     )
     path = weekly_path(as_of, root)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -256,4 +299,5 @@ def write_report(settings: Settings, as_of: date, store: Any, root: Path | None 
     return path
 
 
-__all__ = ["is_last_session_of_week", "iso_week", "recommendations", "render_report", "weekly_path", "write_report"]
+__all__ = ["is_last_session_of_week", "iso_week", "recommendations", "render_report", "research_section", "weekly_path",
+           "write_report"]

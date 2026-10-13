@@ -122,6 +122,10 @@ TAKEN_KEY_SEP = ":"  # research.shadow `taken` keys are "strategy:symbol" (resea
 # strategies.<name>: {enabled: false, shadow_only: true} -> scanned every night and recorded in the shadow ledger
 # (never sized, reviewed or executed): how a strategy collects evidence before docs/gates.md lets it trade
 SHADOW_ONLY_KEY = "shadow_only"
+# strategies.<name>: {enabled: false, probation: true} -> a candidate on a forward test: scanned and sized like an
+# enabled strategy but at risk.probation_risk_mult, in every regime (its evidence is a --no-router replay), and only
+# ever on a paper broker (execution.autopilot's own gate). Owner's yes: 2026-10-13.
+PROBATION_KEY = "probation"
 STRATEGY_META_KEYS = frozenset({"enabled", SHADOW_ONLY_KEY})
 
 
@@ -311,7 +315,14 @@ def _enabled_strategies(settings: Settings) -> list[str]:
 def _shadow_only_strategies(settings: Settings) -> list[str]:
     """Disabled strategies flagged `shadow_only`: scanned and recorded in the shadow ledger, never traded."""
     return [n for n, cfg in settings.strategies.items()
-            if not (cfg or {}).get("enabled", True) and (cfg or {}).get(SHADOW_ONLY_KEY)]
+            if not (cfg or {}).get("enabled", True) and (cfg or {}).get(SHADOW_ONLY_KEY)
+            and not (cfg or {}).get(PROBATION_KEY)]
+
+
+def _probation_strategies(settings: Settings) -> list[str]:
+    """Disabled strategies flagged `probation`: traded on paper at `risk.probation_risk_mult`, router bypassed."""
+    return [n for n, cfg in settings.strategies.items()
+            if not (cfg or {}).get("enabled", True) and (cfg or {}).get(PROBATION_KEY)]
 
 
 def _strategy_params(settings: Settings, name: str) -> dict[str, Any]:
@@ -774,8 +785,9 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
     # sizing an older day's saved signals as the latest ones
     ctx.save(SIGNALS_KIND, [])
     names = _enabled_strategies(ctx.settings)
-    if not names and not _shadow_only_strategies(ctx.settings):
-        raise Skip("no strategies enabled or shadow-only in settings")
+    probation = _probation_strategies(ctx.settings)
+    if not names and not probation and not _shadow_only_strategies(ctx.settings):
+        raise Skip("no strategies enabled, on probation or shadow-only in settings")
     full = _panel_for(ctx)
     panel, universe_size = _screened(ctx, full)
     ctx.signal_day = _latest_session(panel, ctx.as_of)
@@ -801,8 +813,11 @@ def _step_scan(ctx: _Context) -> tuple[str, dict[str, Any]]:
         _emit(ctx, receipts.REFUSAL, "router", why, name,
               payload={"regime": payload.get("regime"), "market_state": payload.get("market_state")})
     names = [n for n in names if n in ctx.risk_multipliers]
+    for n in probation:  # a forward test runs in every regime, at a fraction of the risk
+        ctx.risk_multipliers[n] = float(ctx.settings.risk.probation_risk_mult)
+    names += probation
     signals, per_strategy, failures = _run_strategies(ctx, names, panel, regime)
-    if failures and len(failures) == len(names):
+    if names and failures and len(failures) == len(names):
         raise RuntimeError(f"every strategy failed: {failures}")
     signals.sort(key=lambda s: s.score, reverse=True)
     ctx.signals = signals

@@ -34,6 +34,9 @@ class Secrets(BaseSettings):
 class RiskConfig(BaseModel):
     account_equity_override: float | None = None
     risk_per_trade_pct: float = 1.0
+    #: Share of risk_per_trade_pct for a strategy on paper probation (`strategies.<name>: {probation: true}`): a
+    #: forward test of a candidate that has not passed docs/gates.md (owner, 2026-10-13: a quarter of normal risk).
+    probation_risk_mult: float = Field(default=0.25, gt=0.0, le=1.0)
     max_position_pct: float = 10.0
     max_open_positions: int = 8
     max_sector_pct: float = 30.0

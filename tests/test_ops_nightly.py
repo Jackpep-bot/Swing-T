@@ -474,3 +474,17 @@ def test_float_step_refreshes_small_cap_candidates_incrementally(tmp_path: Path,
         assert calls == []
         detail, data = nightly._step_float(ctx)
         assert calls == [["TINY"]] and data["written"] == 1, detail
+
+
+def test_probation_strategies_are_sized_at_a_quarter_risk_in_any_regime(tmp_path: Path, contract: ContractStubs) -> None:
+    """Strategies on probation, none enabled: they are scanned and sized at risk.probation_risk_mult, the router's
+    table is not asked about them, and they are not also recorded as shadow-only."""
+    names = ("sr_bounce", "pullback_trend", "rsi2_meanrev")
+    settings = make_settings(tmp_path, strategies={
+        n: {"enabled": False, "probation": True, "shadow_only": True, "min_reward_risk": 0.0} for n in names})
+    report = run_nightly(settings, no_secrets(), AS_OF, "sample", EQUITY, True, journal_root=tmp_path)
+    scan, size = report.step("scan"), report.step("size")
+    assert scan.status == "ok" and set(scan.data["per_strategy"]) == set(names) and scan.data["shadow_only"] == {}
+    assert scan.data["allowed"] == dict.fromkeys(names, 0.25) and size.data["risk_multipliers"] == dict.fromkeys(names, 0.25)
+    intents = [OrderIntent.model_validate(r) for r in json.loads(run_file(tmp_path, "intents").read_text())]
+    assert intents and all(i.risk_dollars <= EQUITY * settings.risk.risk_per_trade_pct / 100 * 0.25 + 1e-9 for i in intents)

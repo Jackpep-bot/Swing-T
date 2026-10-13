@@ -149,6 +149,8 @@ class AutopilotReport(BaseModel):
 # ----------------------------------------------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------------------------------------------
+PROBATION_KEY = "probation"  # strategies.<name>.probation (ops.nightly): quarter-risk forward test, paper only
+
 def is_paper_broker(broker: Any) -> bool:
     """Fail closed: only the in-memory simulator and an Alpaca session constructed with paper=True count."""
     if isinstance(broker, PaperSimBroker):
@@ -474,6 +476,14 @@ def run_autopilot(
         approved_by=approver, dry_run=dry_run, started_at=datetime.now(UTC),
         max_new_orders_per_day=cfg.max_new_orders_per_day,
     )
+    if not paper:  # a probation strategy is a forward test of an unproven candidate: paper accounts only, always
+        probation = {n for n, c in settings.strategies.items() if (c or {}).get(PROBATION_KEY)}
+        dropped = [i for i in intents_l if i.strategy in probation]
+        if dropped:
+            intents_l = [i for i in intents_l if i.strategy not in probation]
+            report.errors.append(f"{len(dropped)} intents of probation strategies dropped: paper brokers only "
+                                 f"({', '.join(sorted({i.symbol for i in dropped}))})")
+            log.error("autopilot_probation_on_live_refused", symbols=sorted({i.symbol for i in dropped}))
     with _exclusive(lock_path(settings)) as locked:
         if not locked:
             report.mode, report.approved_by = AutopilotMode.ABORTED, None

@@ -11,6 +11,21 @@
   gives) go to a forward test only. Owner was asked (13:00 ET) whether the best candidates may trade on paper at a
   quarter of normal risk; no answer yet, so until then they are shadow-only.
 
+Owner's answers, 2026-10-13 12:53 ET (his words are in the thread; summary):
+- **Paper probation: yes**, about a quarter of normal risk. Built: `strategies.<name>: {enabled: false, probation: true}`
+  is scanned and sized at `risk.probation_risk_mult` (0.25) in every regime, and `execution.autopilot` drops such
+  intents on anything but a paper broker. Nothing is on probation yet: no candidate exists until the small-cap map.
+  A small-cap candidate also needs the live scan to cover that universe (the nightly screens the top 1,500).
+- **Winning** = consistent revenue he can scale, not "beat SPY" as such. Report money made and size of drops first,
+  the SPY comparison beside it. About a $10k account; small or thin stocks are fine.
+- **Weekly one-page report: yes.** The nightly already writes and Telegrams it on the week's last session
+  (`agent/weekly.py`); it now also lists the week's research verdicts, probation strategies and the
+  "waiting for the owner" lines of this file.
+- **Method sweep**: "scrape as many possible online traders ... integrate as many more methodologies as possible".
+  Handed to a cloud research thread through the coordinator (13:00 ET); cards are to arrive on branch
+  `claude/batch5-cards` under docs/proposals/swing-methods-2026-10/batch5/ with index.json. Then: pre-register the
+  batch as a map (as the small-cap one), implement with the add-strategy skill, replay on both universes.
+
 Owner, 2026-10-13 12:48 ET: "double down on testing ... high priority to winning trade methods ... don't aim for
 perfection". Done since:
 - **Edge map** (docs/edge_map.md, `research/edge_map.py`): all strategies split by the stock's dollar volume, graded
@@ -40,9 +55,10 @@ Owner said yes to both questions on 2026-10-13 11:48 ET ("1 and 2 yes to both"):
   hold their slots when the next month's are sized); noted in the results, not re-run.
 
 Still waiting for the owner:
-1. Delete old lane store copies in data/live (replay*.duckdb except replay_p3 and replay_tr, market_prerepair.duckdb,
+1. Always-on free host (Oracle Always Free VM) for the nightly and forward tests: yes or no? He quoted the question
+   on 2026-10-13 without answering it. Not started.
+2. Delete old lane store copies in data/live (replay*.duckdb except replay_p3 and replay_tr, market_prerepair.duckdb,
    regrade_1r.duckdb: about 25 GB)? Keep research_20261010-033614_l0/l1 (the current board reads them).
-2. Plan P2 (always-on host, intraday paper executor): still the owner's decision. Not started.
 
 Done this session, in queue order:
 - **Residual momentum 2024-26** merged from the v2c-resmom re-replay (rows copied into lane 1's ledger, noted in the
