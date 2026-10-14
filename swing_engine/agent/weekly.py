@@ -265,6 +265,7 @@ def render_report(
     orders: Sequence[dict[str, Any]],
     actions: Sequence[dict[str, Any]],
     research: Sequence[str] = (),
+    books: Sequence[str] = (),
 ) -> str:
     start = as_of - timedelta(days=as_of.weekday())
     drift = drift_table(live, replay, as_of)
@@ -276,6 +277,7 @@ def render_report(
         *_trading_section(orders, actions),
         *_shadow_section(live, start, as_of),
         *_drift_section(drift),
+        *books,
         *research,
         "## Recommendations", "",
         *([f"- {r}" for r in recs] or ["None: no enabled strategy drifts below its replay and no shadow-only "
@@ -284,13 +286,25 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
+def _books_section(settings: Settings) -> list[str]:
+    """ops.shadow_books' forward record of the watched weights cards (none: no section)."""
+    try:
+        from swing_engine.ops.nightly import store_dir
+        from swing_engine.ops.shadow_books import summary_lines
+
+        return summary_lines(store_dir(settings))
+    except Exception as e:  # noqa: BLE001 - the report goes out without the section
+        log.warning("agent.weekly.books_failed", error=str(e))
+        return []
+
+
 def write_report(settings: Settings, as_of: date, store: Any, root: Path | None = None) -> Path:
     """Gather this week's inputs, render, write `<root>/data/journal/weekly-<ISO week>.md`; returns the path."""
     start = as_of - timedelta(days=as_of.weekday())
     text = render_report(
         as_of, settings, store.read_table(SHADOW_TABLE), store.read_table(REPLAY_SHADOW_TABLE),
         ledger_orders(settings, start, as_of), paper_actions(settings, start, as_of),
-        research_section(start, as_of, settings),
+        research_section(start, as_of, settings), _books_section(settings),
     )
     path = weekly_path(as_of, root)
     path.parent.mkdir(parents=True, exist_ok=True)

@@ -42,6 +42,12 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   deepest drop (beta 0.12, alpha t 0.45; turnover 327% a year vs the card's 150-250%). industry_neutral_momentum_sp500
   +12.7% vs SPY +13.6% (alpha t -0.57); batch 9's replica on the same pooled window: +19.0%, alpha t 1.51
   (descriptive). CZ check not run (needs a downloaded file; ask the owner first).
+- Shadow book (no orders), from 2026-10-14: batch 9's sp500_momentum_index_replica is followed forward by the
+  nightly's new `books` step (`ops/shadow_books.py`; research thread's recommended option, relayed by the
+  coordinator while the owner's answer is pending). State: data/live/runs/shadow_books/sp500_momentum_index_replica.json
+  (first book = the September 2026 selection: 100 names, AAPL 9%, MU 8.3%, AMD 5.9% ...; bought at the open after
+  2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
+  minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Grader fix 2026-10-14 (docs/gates.md, Bill rate): alpha regresses (r - BIL) on (SPY - BIL). Price-only BIL barely
   moves, so it changed no verdict (re-graded batches 5-8, alphas moved 0.1% a year at most).
 - Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`

@@ -101,7 +101,7 @@ ERROR_PREVIEW_CHARS = 200
 
 STEP_NAMES = (
     "ingest", "float", "features", "scan", "rank", "size", "review", "shadow", "positions", "execute", "journal",
-    "reconcile", "weekly", "study", "notify",
+    "reconcile", "books", "weekly", "study", "notify",
 )
 REVIEW_RUNNING, REVIEW_OK, REVIEW_SKIP, REVIEW_FAIL = "running", "ok", "skip", "fail"
 CYCLE_STEP_NAMES = ("size", "positions", "execute")
@@ -1255,6 +1255,21 @@ def _step_reconcile(ctx: _Context) -> tuple[str, dict[str, Any]]:
             f"{data['by_step'] or ''}").rstrip(), data
 
 
+def _step_books(ctx: _Context) -> tuple[str, dict[str, Any]]:
+    """ops.shadow_books: the no-order forward record of the weights cards being watched (today batch 9's momentum
+    replica). Adds a March / September book when one is due (a few minutes over the whole history). Any problem is a
+    skip, never a failure."""
+    try:
+        books = importlib.import_module("swing_engine.ops.shadow_books")
+        rec = books.update(ctx.store, store_dir(ctx.settings), ctx.as_of)
+    except Exception as e:  # noqa: BLE001 - recording only
+        raise Skip(f"could not update the shadow books: {_error_text(e)}") from e
+    if not rec:
+        return f"{books.BOOK}: no forward session yet (starts after {books.START})", {}
+    return (f"{books.BOOK}: {rec['book_return']:+.2%} since {books.START} vs SPY "
+            f"{rec['spy_return']:+.2%}" if rec.get("spy_return") is not None else f"{books.BOOK}: {rec['book_return']:+.2%}"), rec
+
+
 def _step_study(ctx: _Context) -> tuple[str, dict[str, Any]]:
     """ops.study's daily markdown study from the `events` table (no LLM call). Any problem is a skip, never a
     failure: a study that cannot be written must not mark the nightly failed."""
@@ -1390,6 +1405,7 @@ STEPS: tuple[tuple[str, Callable[[_Context], tuple[str, dict[str, Any]]]], ...] 
     ("execute", _step_execute),
     ("journal", _step_journal),
     ("reconcile", _step_reconcile),
+    ("books", _step_books),
     ("weekly", _step_weekly),
     ("study", _step_study),
     ("notify", _step_notify),
