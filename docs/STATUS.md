@@ -1,4 +1,4 @@
-# Project status: BATCH 7 RUNNING; batch 5 2017-24 extras running (2026-10-14 09:45 ET)
+# Project status: BATCH 7 RUNNING; batch 5 2017-24 extras running (2026-10-14 09:31 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -15,7 +15,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
 
 ## Running (Mac on AC)
 1. Batch 7: `scripts/on_power.sh scripts/run_prereg_batch.sh b7 2026-10-14 merger_target_spread_capture,
-   seo_marketed_offer_rebound` (PID 93768, log data/logs/research/batch7.log), started 09:45 ET; pre-registered in
+   seo_marketed_offer_rebound` (PID 93768, log data/logs/research/batch7.log), started 09:31 ET; pre-registered in
    docs/preregistration/2026-10-14-batch7.md (commit de53150). Store data/live/replay_b7.duckdb
    (scripts/build_b7_store.py: the batch-6 store + `form_events` from EDGAR).
 2. `scripts/on_power.sh scripts/run_prereg_batch.sh b5 2026-10-13 <15 slugs>` with ALWAYS_LONG = the three yearly
