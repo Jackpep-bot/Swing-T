@@ -1,0 +1,24 @@
+{
+  "batch": "batch19",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(2)=2.241",
+  "cards": [
+    {
+      "slug": "sp500_earnings_surprise_drift",
+      "source": "Bernard & Thomas (1989); Livnat & Mendenhall (2006)",
+      "universe": "500 largest by mcap_pit, close >= $5",
+      "holding_period": "quarterly (end Mar/May/Aug/Nov)",
+      "data_needed": "daily bars, mcap_pit, XBRL diluted EPS with avail_ts",
+      "rule": "Surprise = (EPS q - EPS q-4) / close, latest filing within 100 sessions; top 100 (buffer 150), mcap weights cap 5%; unused weight in SPY.",
+      "card": "sp500_earnings_surprise_drift.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "earnings_surprise",
+      "family_trials": 2,
+      "expected_turnover": "200-300%/yr"
+    }
+  ]
+}
