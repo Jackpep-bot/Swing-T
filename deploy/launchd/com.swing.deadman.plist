@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  swing-engine dead-man alert as a per-user LaunchAgent: at 08:30 local Mon-Fri it Telegrams when the morning's
+  nightly has not finished (swing_engine.ops.deadman; silent on market holidays). Installed only with
+  scripts/install-launchd.sh --deadman. Placeholders (@@...@@) are filled by the installer.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.swing.deadman</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>@@UV_DIR@@/uv</string>
+    <string>run</string>
+    <string>python</string>
+    <string>-m</string>
+    <string>swing_engine.ops.deadman</string>
+    <string>--settings</string>
+    <string>@@SWING_SETTINGS@@</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>@@REPO_DIR@@</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>@@UV_DIR@@:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>@@HOME@@</string>
+    <key>SWING_SETTINGS</key>
+    <string>@@SWING_SETTINGS@@</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>PYTHONUNBUFFERED</key>
+    <string>1</string>
+  </dict>
+
+  <!-- 08:30 local, two hours after the nightly; fixed here (the installer's --hour/--minute move the nightly only). -->
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <!-- A calendar job must not be KeepAlive'd: it exits on purpose. -->
+  <key>KeepAlive</key>
+  <false/>
+
+  <key>ExitTimeOut</key>
+  <integer>120</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>@@REPO_DIR@@/data/logs/deadman.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@@REPO_DIR@@/data/logs/deadman.err.log</string>
+</dict>
+</plist>

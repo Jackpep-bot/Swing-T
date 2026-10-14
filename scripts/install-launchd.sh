@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install (or re-install) the swing-engine LaunchAgents for the current macOS user. Idempotent, no sudo.
 #
-#   scripts/install-launchd.sh [--monitor] [--nightly] [--hour H] [--minute M]
+#   scripts/install-launchd.sh [--monitor] [--nightly] [--deadman] [--hour H] [--minute M]
 #                              [--hc-monitor URL] [--hc-nightly URL] [--settings PATH] [--dry-run]
 #
 # With neither --monitor nor --nightly both agents are installed. --dry-run renders the plists to stdout
@@ -25,6 +25,7 @@ ET_ZONE="America/New_York"
 
 want_monitor=0
 want_nightly=0
+want_deadman=0
 dry_run=0
 hour=$DEFAULT_HOUR
 minute=$DEFAULT_MINUTE
@@ -38,6 +39,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --monitor) want_monitor=1 ;;
     --nightly) want_nightly=1 ;;
+    --deadman) want_deadman=1 ;;
     --hour) hour="$2"; shift ;;
     --minute) minute="$2"; shift ;;
     --hc-monitor) hc_monitor="$2"; shift ;;
@@ -49,7 +51,7 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
-if [ "$want_monitor" -eq 0 ] && [ "$want_nightly" -eq 0 ]; then
+if [ "$want_monitor" -eq 0 ] && [ "$want_nightly" -eq 0 ] && [ "$want_deadman" -eq 0 ]; then
   want_monitor=1
   want_nightly=1
 fi
@@ -131,6 +133,7 @@ install_agent() {
 
 [ "$want_monitor" -eq 1 ] && install_agent com.swing.monitor
 [ "$want_nightly" -eq 1 ] && install_agent com.swing.nightly
+[ "$want_deadman" -eq 1 ] && install_agent com.swing.deadman
 
 if [ "$dry_run" -eq 0 ]; then
   echo
