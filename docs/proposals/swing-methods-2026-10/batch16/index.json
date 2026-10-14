@@ -1,0 +1,24 @@
+{
+  "batch": "batch16",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(7)=2.690",
+  "cards": [
+    {
+      "slug": "sp500_momentum_profitability_replica",
+      "source": "S&P Momentum Indices methodology; Novy-Marx (2013); batch 14 French premise check",
+      "universe": "as sp500_momentum_index_replica",
+      "holding_period": "semiannual (Mar/Sep)",
+      "data_needed": "daily bars, mcap_pit, XBRL gross profit and total assets",
+      "rule": "Replica rules with score = z of (momentum z + GP/A z)/2; missing GP -> g = 0; unused weight in SPY.",
+      "card": "sp500_momentum_profitability_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "momentum",
+      "family_trials": 7,
+      "expected_turnover": "60-120%/yr"
+    }
+  ]
+}
