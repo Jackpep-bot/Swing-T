@@ -56,8 +56,9 @@ def plan(universes: dict[date, pd.DataFrame], first_day: date, sign: float = 1.0
     return orders
 
 
-def run(store_path: str | Path, out: str | Path = OUT, trials_path: str | Path = DEFAULT_TRIALS_PATH,
-        counts_only: bool = False) -> dict[str, Any]:
+def build_universes(store_path: str | Path) -> tuple[Any, ...]:
+    """(bars, closes, opens, delist, sessions, universes): the card's universe with ``surprise`` per rebalance session
+    (NaN: not eligible). Shared with batch 21."""
     from swing_engine.data.b5_fundamentals import _read_facts, event_values
     from swing_engine.data.fundamentals import _norm_ts, share_issuance_features
     from swing_engine.data.store import Store
@@ -90,6 +91,14 @@ def run(store_path: str | Path, out: str | Path = OUT, trials_path: str | Path =
         # EPS on today's split basis over the split-adjusted close: the same ratio as as-traded EPS / as-traded close
         surprise = (latest["eps_q"] - latest["eps_q_year_ago"]).reindex(s.index) / closes.loc[ref].reindex(s.index)
         universes[sessions[k + 1]] = s.assign(surprise=surprise.replace([np.inf, -np.inf], np.nan))
+    return bars, closes, opens, delist, sessions, universes
+
+
+def run(store_path: str | Path, out: str | Path = OUT, trials_path: str | Path = DEFAULT_TRIALS_PATH,
+        counts_only: bool = False) -> dict[str, Any]:
+    from swing_engine.data.store import Store
+
+    bars, closes, opens, delist, sessions, universes = build_universes(store_path)
     orders = plan(universes, sessions[0])
     if counts_only:
         books = [w for d, w in orders.items() if d != sessions[0]]
