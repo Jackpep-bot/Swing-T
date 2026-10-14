@@ -65,6 +65,13 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   Of 208 published predictors, 23 have t >= 2 since 2017 (about 5 by luck); the value-weighted gross profitability
   long-short (GP) is the strongest large-cap one (+15.1% a year, t 2.5). Candidate leads for the research thread:
   earnings-surprise streaks, big-firm earnings surprise, net payout yield, net external financing.
+- Tiingo provider (`data/tiingo.py`, registered `tiingo`; key slot TIINGO_API_KEY, the owner signs up and adds it):
+  delisted tickers, free caps enforced in code (41 requests an hour, 500 distinct symbols a month ledger under
+  data/raw/tiingo). Plan for a 2010-2026 research store from it plus EDGAR: docs/plan-store-2010.md (about two months
+  of free quota; grading on the early years needs the owner's word).
+- After-tax line in the weekly report: the shadow book's forward record now tracks FIFO lots and reports realized
+  short- / long-term gains and an after-tax return at illustrative 24% / 15% federal rates
+  (`ops/shadow_books.realized_gains`, constants TAX_SHORT_TERM / TAX_LONG_TERM).
 - Dead-man alert (`ops/deadman.py`, deploy/launchd/com.swing.deadman.plist): Telegram "Nightly missing" at 08:30 on
   weekdays when the morning's nightly has not finished. Built and tested; NOT installed (installing a launchd job
   needs the owner's yes: `scripts/install-launchd.sh --deadman --settings config/live.yaml`).

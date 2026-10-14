@@ -31,6 +31,9 @@ log = structlog.get_logger(__name__)
 BOOK = b9.MOMENTUM
 START = date(2026, 10, 14)  # the forward record starts here
 SUBDIR = Path("runs") / "shadow_books"
+#: after-tax line of the weekly report: illustrative US federal rates (owner's bracket unknown; a state tax would add),
+#: gains on lots held more than LONG_TERM_DAYS are long-term. Losses net within each kind first, then across.
+TAX_SHORT_TERM, TAX_LONG_TERM, LONG_TERM_DAYS = 0.24, 0.15, 365
 
 
 def book_path(store_dir: Path, book: str = BOOK) -> Path:
@@ -90,9 +93,54 @@ def record(store: Any, state: dict[str, Any], as_of: date) -> dict[str, Any] | N
         return None
     book = simulate(opens.loc[first:as_of], span, None, plan)
     spy = closes[b9.MARKET]
-    return {"as_of": str(span.index[-1]), "sessions": len(book), "book_return": float((1.0 + book["ret"]).prod() - 1.0),
+    gains = realized_gains(plan, opens.loc[first:as_of], span)
+    book_return = float((1.0 + book["ret"]).prod() - 1.0)
+    return {"as_of": str(span.index[-1]), "sessions": len(book), "book_return": book_return,
+            "realized_short_term": gains["short_term"], "realized_long_term": gains["long_term"],
+            "unrealized": gains["unrealized"], "after_tax_return": book_return - gains["tax"],
             "spy_return": float(spy.loc[span.index[-1]] / spy.loc[START] - 1.0) if START in spy.index else None,
             "names": int(book["n_held"].iloc[-1]) if len(book) else 0}
+
+
+def realized_gains(plan: dict[date, pd.Series], opens: pd.DataFrame, closes: pd.DataFrame) -> dict[str, float]:
+    """Gains of $1 run through ``plan`` (weights traded at each day's open, FIFO lots, no costs): realized short- and
+    long-term, unrealized at the last close, and the tax on the realized part at TAX_SHORT_TERM / TAX_LONG_TERM."""
+    lots: dict[str, list[list[Any]]] = {}  # symbol -> [buy day, shares, price]
+    cash, short, long_ = 1.0, 0.0, 0.0
+    for d in sorted(plan):
+        px = opens.loc[d]
+        value = cash + sum(sh * px[s] for s, held in lots.items() for _, sh, _ in held if pd.notna(px.get(s)))
+        want = {s: float(w) * value / px[s] for s, w in plan[d].items() if pd.notna(px.get(s)) and px[s] > 0}
+        for s in sorted(set(lots) | set(want)):
+            if pd.isna(px.get(s)):
+                continue  # no price today: the holding stays as it is
+            have = sum(sh for _, sh, _ in lots.get(s, []))
+            sell = have - want.get(s, 0.0)
+            while sell > 1e-12 and lots.get(s):
+                day, sh, cost = lots[s][0]
+                q = min(sh, sell)
+                gain = q * (px[s] - cost)
+                if (d - day).days > LONG_TERM_DAYS:
+                    long_ += gain
+                else:
+                    short += gain
+                cash += q * px[s]
+                sell -= q
+                lots[s][0][1] -= q
+                if lots[s][0][1] <= 1e-12:
+                    lots[s].pop(0)
+        for s, sh in want.items():
+            have = sum(x for _, x, _ in lots.get(s, []))
+            if sh - have > 1e-12:
+                lots.setdefault(s, []).append([d, sh - have, float(px[s])])
+                cash -= (sh - have) * px[s]
+    last = closes.iloc[-1]
+    unrealized = sum(sh * (last[s] - cost) for s, held in lots.items() for _, sh, cost in held if pd.notna(last.get(s)))
+    st, lt = short, long_
+    if st < 0 < lt or lt < 0 < st:  # net losses of one kind against gains of the other
+        st, lt = (0.0, lt + st) if st < 0 else (st + lt, 0.0)
+    tax = max(st, 0.0) * TAX_SHORT_TERM + max(lt, 0.0) * TAX_LONG_TERM
+    return {"short_term": short, "long_term": long_, "unrealized": float(unrealized), "tax": tax}
 
 
 def update(store: Any, store_dir: Path, as_of: date) -> dict[str, Any]:
@@ -124,9 +172,15 @@ def summary_lines(store_dir: Path) -> list[str]:
     if not rec:
         return [*head, "No forward session yet.", ""]
     spy = rec.get("spy_return")
-    return [*head, f"Through {rec['as_of']} ({rec['sessions']} sessions, {rec['names']} names): book "
-            f"{rec['book_return']:+.2%}, SPY {spy:+.2%}." if spy is not None else
-            f"Through {rec['as_of']}: book {rec['book_return']:+.2%}.", ""]
+    lines = [*head, f"Through {rec['as_of']} ({rec['sessions']} sessions, {rec['names']} names): book "
+             f"{rec['book_return']:+.2%}, SPY {spy:+.2%}." if spy is not None else
+             f"Through {rec['as_of']}: book {rec['book_return']:+.2%}."]
+    if rec.get("after_tax_return") is not None:
+        lines.append(f"After tax (realized gains taxed at {TAX_SHORT_TERM:.0%} short-term, {TAX_LONG_TERM:.0%} long-term; "
+                     f"illustrative federal rates): {rec['after_tax_return']:+.2%}. Realized per $1: short-term "
+                     f"{rec['realized_short_term']:+.4f}, long-term {rec['realized_long_term']:+.4f}; unrealized "
+                     f"{rec['unrealized']:+.4f} (taxed only when sold).")
+    return [*lines, ""]
 
 
 __all__ = ["BOOK", "START", "book_path", "compute_orders", "needed_days", "record", "summary_lines", "update"]

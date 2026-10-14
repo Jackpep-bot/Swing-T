@@ -27,3 +27,21 @@ def test_forward_record_beside_spy_and_the_summary(tmp_path):
     lines = sb.summary_lines(tmp_path)
     assert lines[0] == "## Shadow books (no orders)" and "SPY +" in lines[3]
     assert sb.summary_lines(tmp_path / "nothing") == []
+
+
+def test_realized_gains_split_short_and_long_term():
+    from datetime import date
+
+    import pandas as pd
+    import pytest
+
+    from swing_engine.ops import shadow_books as sb
+
+    days = [date(2024, 1, 2), date(2024, 6, 3), date(2025, 6, 2)]
+    opens = pd.DataFrame({"A": [10.0, 20.0, 40.0], "B": [10.0, 10.0, 10.0]}, index=days)
+    plan = {days[0]: pd.Series({"A": 1.0}), days[1]: pd.Series({"A": 0.5, "B": 0.5}), days[2]: pd.Series({"B": 1.0})}
+    g = sb.realized_gains(plan, opens, opens)
+    # day 1: $1 buys 0.1 A at 10, worth $2; half sold (0.05 A, +0.5 short-term); day 2: rest sold +1.5 long-term
+    assert g["short_term"] == pytest.approx(0.5) and g["long_term"] == pytest.approx(1.5)
+    assert g["unrealized"] == pytest.approx(0.0)
+    assert g["tax"] == pytest.approx(0.5 * sb.TAX_SHORT_TERM + 1.5 * sb.TAX_LONG_TERM)
