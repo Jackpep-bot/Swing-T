@@ -4,7 +4,7 @@ Graded per docs/preregistration/2026-10-13-batch6.md (n_trials = 5). Net of repl
 
 | strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| residual_reversal_ff3_etf | 2024 | 0 | - | - | - | - | - | - | - | - | - |
+| residual_reversal_ff3_etf | 2024 | 928 | -0.020 | -1.20 | -0.23 | -0.23 | 0.06 | 20.1% | 22 | -264% | -8.5% |
 | residual_reversal_ff3_etf | 2017 | - | - | - | - | - | - | - | - | - | - |
 | within_industry_reversal_no_news | 2024 | 801 | -0.032 | -1.66 | -0.34 | -0.34 | 0.05 | 21.7% | 23 | -218% | -10.3% |
 | within_industry_reversal_no_news | 2017 | - | - | - | - | - | - | - | - | - | - |
@@ -19,7 +19,7 @@ Daily net return minus SPY close-to-close return on the same sessions. Pass rule
 
 | strategy | window | excess / yr | IR | haircut IR | alpha / yr | alpha t | beta | exposure | net Sharpe | SPY Sharpe | turnover / yr |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| residual_reversal_ff3_etf | 2024 | - | - | - | - | - | - | - | - | - | - |
+| residual_reversal_ff3_etf | 2024 | -20.4% | -1.70 | -1.70 | -14.2% | -1.92 | 0.64 | 78% | -0.23 | 1.03 | 904% |
 | residual_reversal_ff3_etf | 2017 | - | - | - | - | - | - | - | - | - | - |
 | within_industry_reversal_no_news | 2024 | -21.6% | -1.87 | -1.87 | -14.4% | -2.20 | 0.58 | 70% | -0.34 | 1.03 | 796% |
 | within_industry_reversal_no_news | 2017 | - | - | - | - | - | - | - | - | - | - |
