@@ -1,4 +1,4 @@
-# Project status: IDLE, waiting for batch 13; batches 5-12 all done, nothing passed (2026-10-14 15:20 ET)
+# Project status: batches 5-14 all done, nothing passed; batch 15 and the total-return figures next (2026-10-14 15:30 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -42,6 +42,19 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   deepest drop (beta 0.12, alpha t 0.45; turnover 327% a year vs the card's 150-250%). industry_neutral_momentum_sp500
   +12.7% vs SPY +13.6% (alpha t -0.57); batch 9's replica on the same pooled window: +19.0%, alpha t 1.51
   (descriptive). CZ check not run (needs a downloaded file; ask the owner first).
+- Batch 13 (docs/preregistration/2026-10-14-batch13-results.md, `research/b13_books.py`): mispricing exclusion books
+  **both FAIL**. The large book (top 500 minus its worst 100 by a five-signal mispricing score) tracked SPY: +13.2% vs
+  +13.6% a year pooled; the mid book +8.0%. Leaving the worst names out added about 0.3% a year over the same universe
+  unscreened (descriptive).
+- Batch 14 (docs/preregistration/2026-10-14-batch14-results.md, `research/b14_books.py`): **both FAIL**.
+  sp500_four_signal_composite (momentum, profitability, buybacks, value) +12.3% vs SPY +13.6% pooled, alpha t -0.35;
+  value dragged it (book-to-market alone +7.7%). vol_scaled_momentum_replica +13.3%, alpha t 0.68, deepest drop -32%
+  vs SPY -34%; scaling cut the unscaled replica's +19.0% more than its drops. The 60-year premise check on Ken French
+  data is SUPPORTED (large-cap momentum + profitability blend alpha +1.9% a year, t 3.71 since 1963) but weakest
+  since 2017 (t 1.14); our books move with it (correlation 0.62).
+- Dead-man alert (`ops/deadman.py`, deploy/launchd/com.swing.deadman.plist): Telegram "Nightly missing" at 08:30 on
+  weekdays when the morning's nightly has not finished. Built and tested; NOT installed (installing a launchd job
+  needs the owner's yes: `scripts/install-launchd.sh --deadman --settings config/live.yaml`).
 - Shadow book (no orders), from 2026-10-14: batch 9's sp500_momentum_index_replica is followed forward by the
   nightly's new `books` step (`ops/shadow_books.py`; research thread's recommended option, relayed by the
   coordinator while the owner's answer is pending). State: data/live/runs/shadow_books/sp500_momentum_index_replica.json
@@ -49,7 +62,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
-  batch): 42 cards. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  batch): 46 cards after batch 14. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
   had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
   -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
   momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
