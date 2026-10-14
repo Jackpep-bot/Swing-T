@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
+from pathlib import Path
 
 import pandas as pd
 
@@ -24,6 +25,8 @@ from swing_engine.core.config import ROOT
 CZ_DIR = ROOT / "data" / "research" / "chen_zimmermann"
 LIST_OUT = "docs/preregistration/2026-10-14-batch18-list.md"
 SELECT_OUT = "docs/preregistration/2026-10-14-batch18-selection.md"
+SELECT_VW_OUT = "docs/preregistration/2026-10-14-batch18-selection-vwforce.md"  # amendment 1
+VWFORCE_FILE = "PredictorAltPorts_LiqScreen_VWforce.zip"
 CUTOFF = "2016-12"  # card: post-publication evidence through 2016-12 only; nothing later is read
 MIN_MONTHS, MIN_T, MAX_SELECTED = 60, 2.0, 10  # card
 #: card: price-momentum predictors (any whose definition is a past-return sort) and GP are excluded by family
@@ -230,9 +233,20 @@ def build_list(doc: pd.DataFrame) -> list[str]:
     return lines + [""]
 
 
-def selection(doc: pd.DataFrame, returns: pd.DataFrame) -> pd.DataFrame:
+def vwforce_returns(path: Path) -> pd.DataFrame:
+    """The VWforce file's long-short rows (port "LS"), wide by predictor, date index, percent; rows after CUTOFF are
+    dropped while reading."""
+    df = pd.read_csv(path, usecols=["signalname", "port", "date", "ret"], dtype={"port": str})
+    df = df.loc[(df["port"] == "LS") & (df["date"].str[:7] <= CUTOFF)]
+    wide = df.pivot(index="date", columns="signalname", values="ret")
+    wide.index = pd.to_datetime(wide.index)
+    return wide
+
+
+def selection(doc: pd.DataFrame, returns: pd.DataFrame, vwforce: bool = False) -> pd.DataFrame:
     """Step 2 on every buildable predictor; ``returns``: CZ long-short monthly returns (percent), date index. Rows
-    after CUTOFF are dropped before anything is computed."""
+    after CUTOFF are dropped before anything is computed. ``vwforce``: the returns are CZ's value-weighted rebuild of
+    every predictor (amendment 1), so the original weighting no longer excludes."""
     from swing_engine.research.premise_library import mean_t
 
     p = predictors(doc)
@@ -243,7 +257,7 @@ def selection(doc: pd.DataFrame, returns: pd.DataFrame) -> pd.DataFrame:
         if not BUILDABLE[a][0]:
             continue
         why = ("excluded by family (card)" if a in EXCLUDED else
-               "equal-weighted original series (no VWforce file)" if d["Stock Weight"] != "VW" else
+               "equal-weighted original series (no VWforce file)" if d["Stock Weight"] != "VW" and not vwforce else
                "no returns in the CZ file" if a not in r.columns else "")
         s = r[a] if a in r.columns else pd.Series(dtype=float)
         post = s.loc[f"{int(d['Year']) + 1}-01":].dropna()
@@ -266,9 +280,14 @@ def _f(x: float, spec: str) -> str:
     return "-" if pd.isna(x) else format(x, spec)
 
 
-def selection_lines(table: pd.DataFrame) -> list[str]:
+def selection_lines(table: pd.DataFrame, vwforce: bool = False) -> list[str]:
     chosen = table.loc[table["selected"]].sort_values("post_t", ascending=False)
-    lines = ["# Batch 18, step 2: the blind selection", "",
+    head = (["# Batch 18, step 2 rerun (amendment 1): the blind selection on VWforce series", "",
+             "Step 2 was rerun once after the first pass (VW originals only, `2026-10-14-batch18-selection.md`) came back "
+             f"empty; amendment `2026-10-14-batch18-amendment.md` was committed first. Series: CZ `{VWFORCE_FILE}` "
+             "(long-short, value-weighted rebuild of every predictor). Everything else as below.", ""] if vwforce else
+            ["# Batch 18, step 2: the blind selection", ""])
+    lines = [*head,
              f"Committed 2026-10-14 before the book is built. Rule (card, fixed before any statistic): among the step-1 "
              f"buildable predictors (`{LIST_OUT}`), value-weighted original CZ series only (no VWforce file on the Mac), "
              f"momentum family and GP excluded; mean monthly long-short return from January after publication through "
@@ -286,7 +305,7 @@ def selection_lines(table: pd.DataFrame) -> list[str]:
 
 def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--step", choices=["list", "select"], required=True)
+    ap.add_argument("--step", choices=["list", "select", "select-vwforce"], required=True)
     args = ap.parse_args(argv)
     doc = pd.read_csv(CZ_DIR / "SignalDoc.csv")
     if args.step == "list":
@@ -298,6 +317,10 @@ def main(argv: Sequence[str] | None = None) -> None:
         lines = selection_lines(selection(doc, ret))
         (ROOT / SELECT_OUT).write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n".join(lines[:7]))
+    elif args.step == "select-vwforce":
+        lines = selection_lines(selection(doc, vwforce_returns(CZ_DIR / VWFORCE_FILE), vwforce=True), vwforce=True)
+        (ROOT / SELECT_VW_OUT).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("\n".join(lines[:9]))
 
 
 if __name__ == "__main__":
