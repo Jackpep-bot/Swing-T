@@ -1,4 +1,4 @@
-# Project status: IDLE, waiting for batch 11; batches 5-10 all done, nothing passed (2026-10-14 12:45 ET)
+# Project status: IDLE, waiting for batch 12; batches 5-11 all done, nothing passed (2026-10-14 13:30 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -32,6 +32,12 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   closed trades were completed deals (the card needed over half). Its first start failed on a settings `extends`
   chain deeper than five levels (amendment in the pre-registration); keep book configs within
   prereg_<tag>.yaml -> prereg_b6.yaml -> live.yaml.
+- Batch 11 (docs/preregistration/2026-10-14-batch11-results.md, `research/b11_books.py`; first batch under the
+  full-period test): dividend_increase_drift and russell_recon_migrant_drift **both FAIL** on both routes (pooled
+  alpha -5.0% and -6.6% a year, t -1.68 and -1.25). The dividend book turned over about 1,050% a year (weekly equal
+  weights over a 63-session window) and paid 3.3% a year in costs.
+- Grader fix 2026-10-14 (docs/gates.md, Bill rate): alpha regresses (r - BIL) on (SPY - BIL). Price-only BIL barely
+  moves, so it changed no verdict (re-graded batches 5-8, alphas moved 0.1% a year at most).
 - Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
   $3,300 trillion on 2019-08-30; also HXL, TXNM, VCEL, HL, CPK). Batches 3, 5, 6 and 8 rank or filter on `mcap_pit`
   without a guard (a handful of names misranked; not re-run). Batch 9/10 drop names whose `mcap_pit` exceeds 10,000 x
