@@ -64,6 +64,9 @@ EVENT_COLUMNS: list[str] = ["f7", "equity", "ocf_ttm", "code33"]  # per filing, 
 #: (assets / assets four quarters earlier - 1), accruals ((TTM net income - TTM operating cash flow) / mean of the two),
 #: gross profit / assets and ROA, each with the latest total assets; NaN where an input is missing or assets <= 0
 MISPRICING_COLUMNS: list[str] = ["asset_growth", "accruals", "gp_assets", "roa", "assets"]
+#: batch 19: the reported quarter's diluted EPS and the same quarter a year earlier (today's split basis; a fiscal Q4
+#: is the annual figure minus the three quarters before it; NaN when any piece is missing)
+EPS_QUARTER_COLUMNS: list[str] = ["eps_q", "eps_q_year_ago"]
 
 QUARTER_DAYS = 365.25 / 4
 YEAR_QUARTERS = 4
@@ -123,7 +126,8 @@ def event_values(facts: pd.DataFrame, events: pd.DataFrame, splits: pd.DataFrame
         old = ev["filed"] < pd.Timestamp(first)
         last_old = ev["filed"].where(old).groupby(ev["sym"], sort=False).transform("max")
         ev = ev.loc[~old | (ev["filed"] == last_old)]
-    out = ev[["symbol", "filed", "avail_ts"]].assign(**{c: np.nan for c in (*EVENT_COLUMNS, *MISPRICING_COLUMNS)})
+    out = ev[["symbol", "filed", "avail_ts"]].assign(**{c: np.nan for c in (*EVENT_COLUMNS, *MISPRICING_COLUMNS,
+                                                                                *EPS_QUARTER_COLUMNS)})
     ev = ev.loc[ev["code"].notna()]
     if ev.empty:
         return out.reset_index(drop=True)
@@ -187,6 +191,8 @@ def event_values(facts: pd.DataFrame, events: pd.DataFrame, splits: pd.DataFrame
     out.loc[ev.index, "equity"] = equity
     out.loc[ev.index, "ocf_ttm"] = ocf
     out.loc[ev.index, "code33"] = np.where(seen, code33.astype(float), np.nan)
+    out.loc[ev.index, "eps_q"] = e[0]
+    out.loc[ev.index, "eps_q_year_ago"] = e[YEAR_QUARTERS]
     with np.errstate(divide="ignore", invalid="ignore"):
         pos, pos_1 = assets > 0, (assets > 0) & (assets_1 > 0)
         out.loc[ev.index, "assets"] = np.where(pos, assets, np.nan)

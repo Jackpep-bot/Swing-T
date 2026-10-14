@@ -210,3 +210,13 @@ def test_event_values_mispricing_inputs_by_hand():
     assert good["gp_assets"] == pytest.approx(sum(GP[12:]) / 1000.0)
     bank = at(B.event_values(fund, events_of(fund)), "BANK", TEN_K_2025)
     assert np.isnan(bank["gp_assets"]) and bank["roa"] == pytest.approx(ni / 1000.0)  # scored on the others
+
+
+def test_event_values_quarter_eps_with_q4_from_the_annual_figure():
+    fund = filings("GOOD")
+    vals = B.event_values(fund, events_of(fund))
+    q4 = at(vals, "GOOD", TEN_K_2025)  # the 10-K gives only the annual 7.0: Q4 = 7.0 - (1.2 + 1.5 + 1.9)
+    assert q4["eps_q"] == pytest.approx(2.4) and q4["eps_q_year_ago"] == pytest.approx(1.0)
+    q2 = at(vals, "GOOD", date(2025, 6, 30) + FILING_LAG)
+    assert q2["eps_q"] == pytest.approx(1.5) and q2["eps_q_year_ago"] == pytest.approx(1.0)
+    assert np.isnan(at(vals, "GOOD", date(2022, 6, 30) + FILING_LAG)["eps_q_year_ago"])  # no year-ago quarter
