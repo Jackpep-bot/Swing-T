@@ -52,6 +52,9 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   vs SPY -34%; scaling cut the unscaled replica's +19.0% more than its drops. The 60-year premise check on Ken French
   data is SUPPORTED (large-cap momentum + profitability blend alpha +1.9% a year, t 3.71 since 1963) but weakest
   since 2017 (t 1.14); our books move with it (correlation 0.62).
+- Batch 15 (docs/preregistration/2026-10-14-batch15-results.md, `research/b15_books.py`): sp500_quality_index_replica
+  **FAIL**: +14.9% vs SPY +13.6% a year pooled, beat SPY in both halves, alpha +0.6% (t 0.32), turnover 188% a year
+  (card guessed 40-70%). Its daily excess correlates only 0.26 with the momentum replica's (a diversifier, descriptive).
 - Dead-man alert (`ops/deadman.py`, deploy/launchd/com.swing.deadman.plist): Telegram "Nightly missing" at 08:30 on
   weekdays when the morning's nightly has not finished. Built and tested; NOT installed (installing a launchd job
   needs the owner's yes: `scripts/install-launchd.sh --deadman --settings config/live.yaml`).
@@ -62,7 +65,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
-  batch): 46 cards after batch 14. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  batch): 47 cards after batch 15. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
   had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
   -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
   momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
