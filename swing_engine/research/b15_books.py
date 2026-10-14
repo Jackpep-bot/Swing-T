@@ -122,7 +122,7 @@ def run(store_path: str | Path, out: str | Path = OUT, trials_path: str | Path =
     if counts_only:
         books = [w for d, w in orders.items() if d != sessions[0]]
         names = [len(set(w.index) - {MARKET}) for w in books]
-        changes = [len(set(b.index) ^ set(a.index)) // 2 for a, b in zip(books, books[1:])]
+        changes = [len(set(b.index) ^ set(a.index)) // 2 for a, b in zip(books, books[1:], strict=False)]
         print(CARD, "rebalances", len(books), "first", min(d for d in orders if d != sessions[0]), "names min/median/max",
               min(names), int(np.median(names)), max(names), "universe min", min(len(u) for u in universes.values()),
               "names changed per rebalance median", int(np.median(changes)), "largest weight",

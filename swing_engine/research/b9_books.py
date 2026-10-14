@@ -146,10 +146,12 @@ def caps_for(cap_weight: pd.Series, max_weight: float = MAX_WEIGHT, mult: float 
 
 def momentum_orders(closes: pd.DataFrame, mcap_at: Any, sessions: Sequence[date], *, first: int = 1,
                     last: int = UNIVERSE_N, hold: int = HOLD_N, enter: int = ENTER_RANK, stay: int = KEEP_RANK,
-                    screen: Any = None, universes: dict[date, pd.Series] | None = None) -> dict[date, pd.Series]:
+                    screen: Any = None, universes: dict[date, pd.Series] | None = None,
+                    combine: Any = None) -> dict[date, pd.Series]:
     """Target weights at each rebalance session (``mcap_at(ref) -> Series`` of point-in-time market caps). The
     universe is market-cap ranks ``first``..``last`` of the eligible names, then, with ``screen(ref) -> set``, only
-    the names in that set; ``universes`` (when given) collects it per rebalance session, with the caps."""
+    the names in that set; ``universes`` (when given) collects it per rebalance session, with the caps.
+    ``combine(ref, uni, z) -> z``: replaces the momentum z before selection and the score map (batch 16)."""
     orders: dict[date, pd.Series] = {}
     current: set[str] = set()
     for ref in reference_days(sessions):
@@ -164,6 +166,9 @@ def momentum_orders(closes: pd.DataFrame, mcap_at: Any, sessions: Sequence[date]
         if universes is not None:
             universes[day] = uni
         z, score = scores(values.reindex(uni.index))
+        if combine is not None:
+            z = combine(ref, uni, z)
+            score = pd.Series(np.where(z > 0, 1.0 + z, 1.0 / (1.0 - z)), index=z.index)
         held = select(z, current, hold, enter, stay)
         caps = caps_for((uni / uni.sum()).reindex(held))
         orders[day] = capped_weights(uni.reindex(held) * score.reindex(held), caps)
