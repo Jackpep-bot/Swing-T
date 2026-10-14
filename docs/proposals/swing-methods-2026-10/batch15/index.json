@@ -1,0 +1,24 @@
+{
+  "batch": "batch15",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 4,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL)",
+  "cards": [
+    {
+      "slug": "sp500_quality_index_replica",
+      "source": "S&P Quality Indices methodology; SPHQ",
+      "universe": "500 largest by mcap_pit, close >= $10",
+      "holding_period": "semiannual (Jun/Dec)",
+      "data_needed": "daily bars, mcap_pit, XBRL EPS/shares/equity/assets/OCF",
+      "rule": "Top 100 by mean z of ROE, -accruals, -assets/equity; buffer 80/120; weights mcap x score map, caps 5% and 3x cap weight; unused in SPY.",
+      "card": "sp500_quality_index_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "profitability_quality",
+      "family_trials": 3,
+      "expected_turnover": "40-70%/yr"
+    }
+  ]
+}
