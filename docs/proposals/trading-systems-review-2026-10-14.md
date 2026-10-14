@@ -111,6 +111,41 @@ Value for this project first, then effort.
 What I'd **not** do: add ML/RL frameworks, intraday/SMC lanes, crypto bots, or more parameter sweeps. Each one
 adds trials faster than it adds evidence.
 
+## Addendum: the history limit, and free data from before 2016
+
+The Mac's scoreboard (docs/research_scoreboard.md, 42 cards) says the binding limit is history: with a store that
+starts in 2016, even a 10-point-a-year edge scores only about t 1.5. That matches the arithmetic above (t is
+about IR x sqrt(years)), and it means **more years of data raise the reachable t faster than any new signal
+does**. Doubling history multiplies t by about 1.4; sixty years instead of ten multiplies it by about 2.5.
+
+Free options, best first:
+
+1. **Ken French Data Library, already approved (round 1, "Fama-French").** Monthly returns from 1927 (profitability
+   and investment sorts from 1963) for size x momentum, size x profitability, size x value and size x investment
+   portfolios, built from CRSP with delisted stocks included and NYSE breakpoints. The "Big / High momentum" and
+   "Big / Robust profitability" portfolios are long-only large-cap books. A blend of them over 1963-2026 tests the
+   *premise* of the combined book over 60+ years at no cost and with no new approval. Limits: no trading costs,
+   monthly only, French's construction rather than ours, so it proves the idea, not our code. Pair it with the
+   10-year implementation test and check that the two move together (the same logic as the CZ check).
+2. **AQR datasets** (free download, no signup): Quality Minus Junk, Betting Against Beta, Value and Momentum
+   Everywhere, time-series momentum, mostly from the 1980s or earlier. Same use: long-history evidence for a
+   premise. A new download, so Jack's word first.
+3. **Chen-Zimmermann Open Source Asset Pricing**: monthly long-short returns for 200+ published predictors, most
+   from the 1960s or earlier. Already named in gates.md as the CZ check; still waiting on Jack's OK to download.
+4. **Stock-level prices 2009-2015 with delisted names**: Tiingo's free plan is reported to include delisted
+   securities and 30+ years of end-of-day history, capped at 500 unique symbols and 50 requests an hour (needs a
+   free signup by Jack; delisted coverage should be spot-checked before relying on it). Paired with EDGAR XBRL
+   fundamentals, which Swing T already reads and which start around 2009-2011, this could push the stock-level
+   store back to about 2010, roughly 16 years instead of 10. At the hourly cap a ~6,000-name backfill would take
+   days of throttled pulls, which is fine for a one-off.
+5. **Not good enough:** Quandl/Nasdaq WIKI prices (frozen since April 2018, delisted coverage unclear), Yahoo and
+   Stooq (survivors only, as far as I could find), FMP free (lists delisted symbols, but free history depth is not
+   stated). True point-in-time fundamentals before 2009 are effectively paid only (Sharadar from 1990,
+   Norgate for prices and index membership, CRSP/Compustat through a university).
+
+Recommendation: start with item 1 now, since it's already approved, then ask Jack about AQR + CZ downloads and a
+free Tiingo signup together.
+
 ## Sources
 
 - [Is there a replication crisis? (Swedroe, summarizing Chen-Zimmermann, McLean-Pontiff, Jensen-Kelly-Pedersen)](https://www.evidenceinvestor.com/post/is-there-a-replication-crisis-1)
@@ -132,4 +167,8 @@ adds trials faster than it adds evidence.
 - [Norgate data toolkit (Concretum)](https://concretumgroup.com/the-complete-norgate-data-toolkit-three-python-workflows-every-quant-researcher-needs/)
 - [Sharadar via QuantRocket](https://www.quantrocket.com/pricing/data/sharadar)
 - [Renaissance Technologies case (Harvard D3)](https://d3.harvard.edu/platform-digit/submission/renaissance-technologies-generating-alpha-without-wall-street-veterans-or-mbas/)
+- [Ken French: 6 portfolios on size and momentum](https://mba.tuck.dartmouth.edu/pages/faculty/ken.French/Data_Library/det_6_port_form_sz_pr_12_2.html)
+- [12 EOD stock data APIs compared (Business Quant, vendor-authored)](https://businessquant.com/resources/eod-stock-data-apis)
+- [Quandl WIKI status (MarketParquet, vendor-authored)](https://marketparquet.com/vs/quandl)
+- [FMP free API and delisted companies](https://site.financialmodelingprep.com/how-to/how-to-handle-delisted-companies-and-historical-symbols-with-a-free-api)
 - [Alpaca market data docs](https://docs.alpaca.markets/us/docs/about-market-data-api)
