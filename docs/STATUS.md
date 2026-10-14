@@ -1,4 +1,4 @@
-# Project status: BATCH 7 BEING PREPARED; batch 6 card re-run and batch 5 2017-24 extras running (2026-10-14 08:10 ET)
+# Project status: BATCH 7 RUNNING; batch 5 2017-24 extras running (2026-10-14 09:45 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -7,31 +7,25 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
 - Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
 - Batch 5 (15 cards, docs/preregistration/2026-10-13-batch5-results.md): **all FAIL** on 2024-26. Best books:
   piotroski_fscore8_small_value +12.2%, clenow_stocks_on_the_move_midcap +11.8%, double_surprise_smallmid +8.0%
-  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade (its rank >= 3,200 rule is
-  probably out of reach among the ~2,800 names with a filed share count; not checked further).
-- Batch 6 (docs/preregistration/2026-10-13-batch6-results.md, -vrp-results.md): the SVXY overlay and three stock
-  cards **FAIL**; `residual_reversal_ff3_etf` made no signal (harness bug: the replay hands signals() 300 sessions,
-  the module fitted 756). Fixed as a panel feature (`etf3_resid_rev_756_21_22_500`), amendment written in the
-  pre-registration, re-running now.
+  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade in 2024-26 (its rank >= 3,200
+  rule is probably out of reach among the ~2,800 names with a filed share count; not checked further).
+- Batch 6 (docs/preregistration/2026-10-13-batch6-results.md, -vrp-results.md): **all five FAIL**. The SVXY overlay
+  trailed SPY by 4.7% a year in 2024-26; `residual_reversal_ff3_etf`, re-run after the harness fix (amendment in
+  the pre-registration), lost 8.5% over 2024-26 with alpha t -1.92.
 
-## Running (started 2026-10-14 08:00 ET, Mac on AC)
-1. `scripts/on_power.sh scripts/run_prereg_batch.sh b6 2026-10-13 <4 slugs>` (PID 85644, log
-   data/logs/research/batch6.log): replays residual_reversal_ff3_etf on 2024-26 (the other three are skipped as
-   finished), 2017-24 only if it meets the rule, re-grades all four, Telegrams. The no-signal run's file is kept as
-   data/live/runs/replay/...residual_reversal_ff3_etf.json.no-signals; its trial stays in data/trials.jsonl.
+## Running (Mac on AC)
+1. Batch 7: `scripts/on_power.sh scripts/run_prereg_batch.sh b7 2026-10-14 merger_target_spread_capture,
+   seo_marketed_offer_rebound` (PID 93768, log data/logs/research/batch7.log), started 09:45 ET; pre-registered in
+   docs/preregistration/2026-10-14-batch7.md (commit de53150). Store data/live/replay_b7.duckdb
+   (scripts/build_b7_store.py: the batch-6 store + `form_events` from EDGAR).
 2. `scripts/on_power.sh scripts/run_prereg_batch.sh b5 2026-10-13 <15 slugs>` with ALWAYS_LONG = the three yearly
-   cards (PID 85665, log data/logs/research/batch5.log): their 2017-24 replays, descriptive only (they can never
-   pass), which run_batch5.sh skipped (its 2017 step lacked --out; fixed). One at a time on a 30 GB budget; a
-   2017-24 replay held 3.6 GB after 9 minutes, so a restart with GB17=10 would run all three at once.
-3. `uv run python scripts/build_b7_store.py` (log data/logs/research/b7_store.log): data/live/replay_b7.duckdb =
-   the batch-6 store + table `form_events` (DEFM14A, SC TO-T, 424B from EDGAR, 2015 on). About 50 minutes.
+   cards and GB17=10 (PID 86616, log data/logs/research/batch5.log): their 2017-24 replays, descriptive only
+   (run_batch5.sh skipped them: its 2017 step lacked --out, fixed). russell_recon_deletion_rebound's is done; the
+   other two run side by side (3.8 GB each). It then re-grades batch 5 and Telegrams.
+Watcher lesson: a background `until pgrep -f ...` loop whose own command line contains `--tag prereg-` matches
+itself and blocks every runner's `drain` (it held batch 5 for 40 minutes on 2026-10-14). Watch log files instead.
 
 ## Next
-- Batch 7 (docs/proposals/swing-methods-2026-10/batch7/, merged @ f141623): merger_target_spread_capture and
-  seo_marketed_offer_rebound are coded and tested (commit 7aa1c53). When the b7 store is built: harness check
-  (signal counts), fill the harness section of docs/preregistration/2026-10-14-batch7.md, commit it, then queue
-  `WAIT_FOR="run_prereg_batch.sh b6" N_TRIALS=2 nohup scripts/on_power.sh scripts/run_prereg_batch.sh b7 2026-10-14
-  merger_target_spread_capture,seo_marketed_offer_rebound > data/logs/research/batch7.log 2>&1 &`.
 - New batches arrive daily from the research thread's routine (branch `claude/batchN-cards`, relayed by the
   coordinator). For each: merge the cards, code them (add-strategy skill; a weights card gets a research module, as
   research/vrp_overlay.py), commit a pre-registration BEFORE any run, harness-check signal counts ON A
