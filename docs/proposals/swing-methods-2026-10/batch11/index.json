@@ -1,0 +1,37 @@
+{
+  "batch": "batch11",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 5,
+  "grading": "two halves plus pooled 2017-01-01..2026-10-05 (docs/gates.md Full-period test)",
+  "cards": [
+    {
+      "slug": "dividend_increase_drift",
+      "source": "Michaely, Thaler & Womack (1995); Grullon, Michaely & Swaminathan (2002)",
+      "universe": "top 1,500 by mcap_pit, close >= $5",
+      "holding_period": "63 sessions from ex-date, weekly rebalance",
+      "data_needed": "daily bars, mcap_pit, dividends (Alpaca, approved)",
+      "rule": "Equal-weight (cap 4%) names whose regular dividend rose >= 10% (<= 3x) or was initiated, ex-date in last 63 sessions; unused weight in SPY.",
+      "card": "dividend_increase_drift.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "dividend_change",
+      "family_trials": 1
+    },
+    {
+      "slug": "russell_recon_migrant_drift",
+      "source": "Chang, Hong & Liskovich (2015); Cai & Houge (2008)",
+      "universe": "mcap rank 1-1,000 last April -> 1,001-1,300 this April",
+      "holding_period": "one year, from the session after the last Friday of June",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Equal-weight (cap 3%) migrants from the large-cap band to the top of the small-cap band; unused weight and pre-first-cohort period in SPY.",
+      "card": "russell_recon_migrant_drift.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "index_membership",
+      "family_trials": 1
+    }
+  ]
+}
