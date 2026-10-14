@@ -97,14 +97,16 @@ def scores(values: pd.Series) -> tuple[pd.Series, pd.Series]:
     return z, pd.Series(np.where(z > 0, 1.0 + z, 1.0 / (1.0 - z)), index=z.index)
 
 
-def select(z: pd.Series, current: set[str]) -> list[str]:
-    """100 names: holdings ranked in the top 120 stay; new names only from the top 80; then fill by rank."""
+def select(z: pd.Series, current: set[str], hold: int = HOLD_N, enter: int = ENTER_RANK,
+           stay: int = KEEP_RANK) -> list[str]:
+    """``hold`` names (100): holdings ranked in the top ``stay`` (120) stay; new names only from the top ``enter``
+    (80); then fill by rank."""
     order = list(z.sort_values(ascending=False, kind="mergesort").index)
     rank = {s: i + 1 for i, s in enumerate(order)}
-    keep = [s for s in order if s in current and rank[s] <= KEEP_RANK][:HOLD_N]
-    for pool in ([s for s in order if rank[s] <= ENTER_RANK], order):
+    keep = [s for s in order if s in current and rank[s] <= stay][:hold]
+    for pool in ([s for s in order if rank[s] <= enter], order):
         for s in pool:
-            if len(keep) >= HOLD_N:
+            if len(keep) >= hold:
                 break
             if s not in keep:
                 keep.append(s)
@@ -142,19 +144,27 @@ def caps_for(cap_weight: pd.Series) -> pd.Series:
     return np.minimum(MAX_WEIGHT, hi * cap_weight)
 
 
-def momentum_orders(closes: pd.DataFrame, mcap_at: Any, sessions: Sequence[date]) -> dict[date, pd.Series]:
-    """Target weights at each rebalance session (``mcap_at(ref) -> Series`` of point-in-time market caps)."""
+def momentum_orders(closes: pd.DataFrame, mcap_at: Any, sessions: Sequence[date], *, first: int = 1,
+                    last: int = UNIVERSE_N, hold: int = HOLD_N, enter: int = ENTER_RANK, stay: int = KEEP_RANK,
+                    screen: Any = None, universes: dict[date, pd.Series] | None = None) -> dict[date, pd.Series]:
+    """Target weights at each rebalance session (``mcap_at(ref) -> Series`` of point-in-time market caps). The
+    universe is market-cap ranks ``first``..``last`` of the eligible names, then, with ``screen(ref) -> set``, only
+    the names in that set; ``universes`` (when given) collects it per rebalance session, with the caps."""
     orders: dict[date, pd.Series] = {}
     current: set[str] = set()
     for ref in reference_days(sessions):
         day = rebalance_day(ref, sessions)
         values = momentum_values(closes, ref)
         mcap = mcap_at(ref).reindex(values.index).dropna()
-        if day is None or len(mcap) < UNIVERSE_N:
+        if day is None or len(mcap) < last:
             continue
-        uni = mcap.sort_values(ascending=False, kind="mergesort").iloc[:UNIVERSE_N]
+        uni = mcap.sort_values(ascending=False, kind="mergesort").iloc[first - 1:last]
+        if screen is not None:
+            uni = uni.loc[uni.index.isin(screen(ref))]
+        if universes is not None:
+            universes[day] = uni
         z, score = scores(values.reindex(uni.index))
-        held = select(z, current)
+        held = select(z, current, hold, enter, stay)
         caps = caps_for((uni / uni.sum()).reindex(held))
         orders[day] = capped_weights(uni.reindex(held) * score.reindex(held), caps)
         current = set(held)
@@ -214,29 +224,30 @@ def switch_orders(states: pd.Series, start: date) -> dict[date, pd.Series]:
 
 
 # ------------------------------------------------------------------------------------------------ run
-def grade(book: pd.DataFrame, spy: pd.Series) -> dict[str, Any]:
+def grade(book: pd.DataFrame, spy: pd.Series, n_trials: int = N_GROUP_TRIALS) -> dict[str, Any]:
     spy = spy.reindex(book.index)
-    return {"stats": stats(book["ret"], N_GROUP_TRIALS), "spy_stats": stats(spy, N_GROUP_TRIALS),
-            "vs": _vs_benchmark(book["ret"], spy, N_GROUP_TRIALS), "start": book.index[0],
+    return {"stats": stats(book["ret"], n_trials), "spy_stats": stats(spy, n_trials),
+            "vs": _vs_benchmark(book["ret"], spy, n_trials), "start": book.index[0],
             "turnover_ann": float(book["turnover"].sum() / (len(book) / 252.0)),
             "cost_ann": float(book["cost"].mean() * 252.0), "orders": int((book["turnover"] > 0).sum()),
             "avg_held": float(book["n_held"].mean())}
 
 
-def verdict(res: dict[str, dict[str, Any]]) -> tuple[list[bool], str]:
-    crit = alpha_t_critical(N_GROUP_TRIALS)
+def verdict(res: dict[str, dict[str, Any]], n_trials: int = N_GROUP_TRIALS) -> tuple[list[bool], str]:
+    crit = alpha_t_critical(n_trials)
     rules = [all(res[w]["stats"]["haircut_sharpe"] > 0 for w in WINDOWS),
              all(res[w]["vs"].get("alpha_ann", -1.0) > 0 for w in WINDOWS),
              all(res[w]["vs"].get("alpha_t", -1.0) >= crit for w in WINDOWS)]
     return rules, "PASS" if all(rules) else "FAIL"
 
 
-def render(results: dict[str, dict[str, dict[str, Any]]]) -> list[str]:
-    crit = alpha_t_critical(N_GROUP_TRIALS)
-    lines = ["# Batch 9 results", "", f"Spec: `{SPEC}`. Generated by `swing_engine.research.b9_books`; net of costs, "
+def render(results: dict[str, dict[str, dict[str, Any]]], n_trials: int = N_GROUP_TRIALS, title: str = "Batch 9",
+           spec: str = SPEC, module: str = "b9_books") -> list[str]:
+    crit = alpha_t_critical(n_trials)
+    lines = [f"# {title} results", "", f"Spec: `{spec}`. Generated by `swing_engine.research.{module}`; net of costs, "
              "price-only bars (dividends credited neither to the books nor to SPY).", ""]
     for card, res in results.items():
-        rules, word = verdict(res)
+        rules, word = verdict(res, n_trials)
         lines += [f"## `{card}`: {word}", "",
                   f"haircut Sharpe > 0 in both windows: {'yes' if rules[0] else 'no'}; alpha > 0 in both: "
                   f"{'yes' if rules[1] else 'no'}; alpha t >= {crit:.2f} in both: {'yes' if rules[2] else 'no'}.", "",
@@ -252,7 +263,7 @@ def render(results: dict[str, dict[str, dict[str, Any]]]) -> list[str]:
                 lines.append(f"| {w} | {r['start']} | {label} | {_pct(s['cagr'])} | {_pct(-s['max_dd'])} | "
                              f"{_pct(s['worst_month'])} | {_pct(s['months_up'], '.0%')} | {s['sharpe']:.2f} | " + extra)
         lines.append("")
-    lines += ["## Verdicts", *[f"- **{card}**: {verdict(res)[1]}" for card, res in results.items()]]
+    lines += ["## Verdicts", *[f"- **{card}**: {verdict(res, n_trials)[1]}" for card, res in results.items()]]
     return lines
 
 
