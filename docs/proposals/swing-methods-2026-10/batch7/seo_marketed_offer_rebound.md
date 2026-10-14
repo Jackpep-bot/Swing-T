@@ -1,7 +1,7 @@
 ---
 slug: seo_marketed_offer_rebound
 name: Buy after a marketed follow-on stock offering that pushed the price down beforehand; hold 7 sessions
-originators: [Price pressure and overnight seasoned equity offerings (Penn State; JFQA), sample 2000-2014; Corwin, "The determinants of underpricing for seasoned equity offers", JF 2003]
+originators: [Price pressure and overnight seasoned equity offerings (Penn State research portal, abstract), sample 2000-2014; Corwin, "The determinants of underpricing for seasoned equity offers", JF 2003]
 category: strategy
 decision: implement
 holding_period_days: [7, 7]
