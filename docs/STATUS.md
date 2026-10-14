@@ -1,4 +1,4 @@
-# Project status: IDLE, waiting for batch 12; batches 5-11 all done, nothing passed (2026-10-14 13:30 ET)
+# Project status: IDLE, waiting for batch 13; batches 5-12 all done, nothing passed (2026-10-14 14:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -36,6 +36,12 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   full-period test): dividend_increase_drift and russell_recon_migrant_drift **both FAIL** on both routes (pooled
   alpha -5.0% and -6.6% a year, t -1.68 and -1.25). The dividend book turned over about 1,050% a year (weekly equal
   weights over a 63-session window) and paid 3.3% a year in costs.
+- Batch 12 (docs/preregistration/2026-10-14-batch12-results.md, `research/b12_books.py`; store
+  data/live/replay_b12.duckdb = batch 9's + 2016 bars for EFA, EEM, VNQ, IEF, DBC, UUP via
+  scripts/extend_research_store.py): **both FAIL**. multi_asset_trend_long_flat made +2.2% a year pooled with a -7.7%
+  deepest drop (beta 0.12, alpha t 0.45; turnover 327% a year vs the card's 150-250%). industry_neutral_momentum_sp500
+  +12.7% vs SPY +13.6% (alpha t -0.57); batch 9's replica on the same pooled window: +19.0%, alpha t 1.51
+  (descriptive). CZ check not run (needs a downloaded file; ask the owner first).
 - Grader fix 2026-10-14 (docs/gates.md, Bill rate): alpha regresses (r - BIL) on (SPY - BIL). Price-only BIL barely
   moves, so it changed no verdict (re-graded batches 5-8, alphas moved 0.1% a year at most).
 - Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
