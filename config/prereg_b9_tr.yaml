@@ -1,0 +1,6 @@
+# Total-return copy of batch 9's research store (scripts/build_tr_store.py): every bar back-adjusted for the cash
+# dividends in the Alpaca feed, stocks and ETFs (SPY, BIL) alike. For the dividend-inclusive figures reported BESIDE
+# the registered price-only grades (docs/gates.md, "Total return"); never a registered grade on its own.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_b9_tr.duckdb

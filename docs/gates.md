@@ -33,6 +33,10 @@
      bars are price-only and BIL's price barely moves (91.38 in January 2016, 91.51 in October 2026), so with this
      store the change is about nil: re-grading batches 5-8 moved no alpha by more than 0.1% a year and changed no
      verdict. What price-only data still leaves out on both sides: dividends, and interest on a book's idle cash.
+   - Total return (build, 2026-10-14; coordinator's survey item b): dividend-inclusive figures are reported BESIDE the
+     registered price-only grade, never instead of it, until the owner says otherwise. Store: data/live/replay_b9_tr.duckdb
+     (scripts/build_tr_store.py, config/prereg_b9_tr.yaml); summary docs/total_return/README.md. On it SPY made
+     +15.3% a year pooled vs +13.6% price-only; no verdict changes.
    - CZ check (manual, catalog `open_factor_benchmark_cz`): for any signal that re-implements a published
      predictor (momentum, reversal, 52-week high, insider, accruals...), download the matching monthly long-short
      portfolio returns from Chen-Zimmermann Open Source Asset Pricing (openassetpricing.com) and compare them with
