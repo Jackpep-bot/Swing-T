@@ -1,0 +1,10 @@
+# Book of merger_target_spread_capture in batch 7 (docs/preregistration/2026-10-14-batch7.md). Fixed before any run.
+# 15 positions, equal risk: 1% of equity at risk on the 15% break stop, capped at 6.67% per name.
+extends: prereg_b7.yaml
+risk:
+  risk_per_trade_pct: 1.0
+  max_position_pct: 6.67
+  max_open_positions: 15
+execution:
+  max_new_orders_per_day: 15
+  reuse_exiting_slots: true

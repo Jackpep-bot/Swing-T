@@ -408,9 +408,9 @@ class Edgar:
                 return None
             raise
 
-    def submissions(self, cik: str, *, include_older: bool = True) -> list[dict[str, Any]]:
+    def submissions(self, cik: str, *, include_older: bool = True, since: date | None = None) -> list[dict[str, Any]]:
         """The submissions document for `cik` plus (with `include_older`) every older page it lists under
-        `filings.files`. Empty list when the CIK is unknown."""
+        `filings.files`, skipping pages whose `filingTo` is before `since`. Empty list when the CIK is unknown."""
         first = self._data_json(SUBMISSIONS_PATH.format(cik=str(cik).zfill(CIK_WIDTH)))
         if first is None:
             return []
@@ -418,6 +418,9 @@ class Edgar:
         if include_older:
             for f in (first.get("filings") or {}).get("files") or []:
                 name = f.get("name") if isinstance(f, dict) else None
+                to = pd.to_datetime(f.get("filingTo"), errors="coerce") if isinstance(f, dict) else pd.NaT
+                if since is not None and pd.notna(to) and to.date() < since:
+                    continue
                 if name:
                     page = self._data_json(SUBMISSIONS_PAGE_PATH.format(name=name))
                     if page is not None:

@@ -219,6 +219,9 @@ strategies:                    # name -> {enabled, params}; names come from swin
   within_industry_reversal_no_news:   {enabled: false, min_reward_risk: 0.0}  # month end: 1,000 largest, buy the 50 that lagged their SIC2 industry most with no earnings or news in 21 sessions
   large_shock_no_news_reversal:       {enabled: false, min_reward_risk: 0.0}  # -5% and 3-sigma market-adjusted drop with no news, 8-K or earnings; next open, 10-session hold, stop 2 x the day's range
   industry_leader_lag_smallmid:       {enabled: false, min_reward_risk: 0.0}  # week end: SMALLMID names 3+ points behind a top-quintile, 3%+ week of their SIC2 industry's 500-largest; 5-session hold
+  # batch 7 (docs/preregistration/2026-10-14-batch7.md); replay-only: silent without the data.b7 join
+  merger_target_spread_capture:       {enabled: false, min_reward_risk: 0.0}  # DEFM14A / SC TO-T (first in 365 days), mcap >= $300M; hold to the deal close, 15% break stop, 180 sessions
+  seo_marketed_offer_rebound:         {enabled: false, min_reward_risk: 0.0}  # 424B4/5 (no 424B in 90 days) after a 4% 5-session drop, 3 points under SPY; 7-session hold, 12% stop
   dividend_month_premium:             {enabled: false, min_reward_risk: 0.0}  # month end: 50 most liquid stocks predicted to go ex-dividend next month; replay only (total-return store)
   large_cap_net_repurchasers:         {enabled: false, min_reward_risk: 0.0}  # month end: 500 largest, buy bottom 10% of net share issuance, sell above 20%; replay only
   volatility_managed_spy:             {enabled: false, min_reward_risk: 0.0}  # SPY at min(1, c / 22-day realized variance), monthly; book config/prereg_b2_spy.yaml; replay only
