@@ -1,0 +1,39 @@
+{
+  "batch": "batch14",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 2,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(6)=2.638",
+  "cards": [
+    {
+      "slug": "sp500_four_signal_composite",
+      "source": "Asness-Moskowitz-Pedersen (2013); Novy-Marx (2013); survey thread 2026-10-14",
+      "universe": "500 largest by mcap_pit, close >= $10",
+      "holding_period": "monthly, rank band enter 90 / keep 120",
+      "data_needed": "daily bars, mcap_pit, XBRL gross profit/assets/equity, net_share_issuance",
+      "rule": "Top 100 by mean z of vol-adjusted 12-1 momentum, GP/A, -net issuance, B/M; weights mcap x replica score map, caps 9% and 3x cap weight; unused in SPY.",
+      "card": "sp500_four_signal_composite.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "momentum",
+      "family_trials": 6,
+      "expected_turnover": "80-150%/yr"
+    },
+    {
+      "slug": "vol_scaled_momentum_replica",
+      "source": "Barroso & Santa-Clara (2015); Daniel & Moskowitz (2016)",
+      "universe": "as sp500_momentum_index_replica",
+      "holding_period": "semiannual selection, monthly exposure",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Replica weights x min(1, 0.15 / 126-day vol of the replica's daily returns), rest in BIL; trade exposure when change >= 0.10.",
+      "card": "vol_scaled_momentum_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "momentum",
+      "family_trials": 6,
+      "expected_turnover": "150-250%/yr"
+    }
+  ]
+}
