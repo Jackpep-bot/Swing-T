@@ -60,6 +60,10 @@ FSCORE, BOOK_TO_MARKET, OCF_TTM, CODE33 = "b5_fscore", "b5_book_to_market", "b5_
 DIV_YIELD, BUYBACK_YIELD = "b5_div_yield", "b5_buyback_yield"
 B5_COLUMNS: list[str] = [FSCORE, BOOK_TO_MARKET, OCF_TTM, CODE33, DIV_YIELD, BUYBACK_YIELD]
 EVENT_COLUMNS: list[str] = ["f7", "equity", "ocf_ttm", "code33"]  # per filing, before the row-level parts
+#: per filing, also returned by ``event_values`` for the batch-13 mispricing cards (research.b13_books): asset growth
+#: (assets / assets four quarters earlier - 1), accruals ((TTM net income - TTM operating cash flow) / mean of the two),
+#: gross profit / assets and ROA, each with the latest total assets; NaN where an input is missing or assets <= 0
+MISPRICING_COLUMNS: list[str] = ["asset_growth", "accruals", "gp_assets", "roa", "assets"]
 
 QUARTER_DAYS = 365.25 / 4
 YEAR_QUARTERS = 4
@@ -119,7 +123,7 @@ def event_values(facts: pd.DataFrame, events: pd.DataFrame, splits: pd.DataFrame
         old = ev["filed"] < pd.Timestamp(first)
         last_old = ev["filed"].where(old).groupby(ev["sym"], sort=False).transform("max")
         ev = ev.loc[~old | (ev["filed"] == last_old)]
-    out = ev[["symbol", "filed", "avail_ts"]].assign(**{c: np.nan for c in EVENT_COLUMNS})
+    out = ev[["symbol", "filed", "avail_ts"]].assign(**{c: np.nan for c in (*EVENT_COLUMNS, *MISPRICING_COLUMNS)})
     ev = ev.loc[ev["code"].notna()]
     if ev.empty:
         return out.reset_index(drop=True)
@@ -183,6 +187,13 @@ def event_values(facts: pd.DataFrame, events: pd.DataFrame, splits: pd.DataFrame
     out.loc[ev.index, "equity"] = equity
     out.loc[ev.index, "ocf_ttm"] = ocf
     out.loc[ev.index, "code33"] = np.where(seen, code33.astype(float), np.nan)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        pos, pos_1 = assets > 0, (assets > 0) & (assets_1 > 0)
+        out.loc[ev.index, "assets"] = np.where(pos, assets, np.nan)
+        out.loc[ev.index, "asset_growth"] = np.where(pos_1, assets / assets_1 - 1.0, np.nan)
+        out.loc[ev.index, "accruals"] = np.where(pos_1, (ni - ocf) / ((assets + assets_1) / 2.0), np.nan)
+        out.loc[ev.index, "gp_assets"] = np.where(pos, gp / assets, np.nan)
+        out.loc[ev.index, "roa"] = np.where(pos, ni / assets, np.nan)
     return out.reset_index(drop=True)
 
 
@@ -279,4 +290,4 @@ def join_b5_fundamentals(store: Any, panel: pd.DataFrame) -> pd.DataFrame:
     return panel.assign(**cols)
 
 
-__all__ = ["B5_COLUMNS", "event_values", "dividend_yield", "buyback_yield", "join_b5_fundamentals"]
+__all__ = ["B5_COLUMNS", "MISPRICING_COLUMNS", "event_values", "dividend_yield", "buyback_yield", "join_b5_fundamentals"]

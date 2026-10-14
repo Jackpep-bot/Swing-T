@@ -199,3 +199,14 @@ def test_join_is_point_in_time_and_leaves_a_bare_panel_alone():
                                    out.loc[cut.index, B.B5_COLUMNS].to_numpy(dtype=float), equal_nan=True)
     finally:
         store.close()
+
+
+def test_event_values_mispricing_inputs_by_hand():
+    fund = pd.concat([filings("GOOD"), filings("BANK", gp=None)], ignore_index=True)
+    good = at(B.event_values(fund, events_of(fund)), "GOOD", TEN_K_2025)
+    ni = sum(EPS[12:]) * SHARES[15]  # TTM diluted EPS x cover-page shares = 70
+    assert good["assets"] == 1000.0 and good["asset_growth"] == pytest.approx(0.0)  # flat assets
+    assert good["accruals"] == pytest.approx((ni - 240.0) / 1000.0) and good["roa"] == pytest.approx(ni / 1000.0)
+    assert good["gp_assets"] == pytest.approx(sum(GP[12:]) / 1000.0)
+    bank = at(B.event_values(fund, events_of(fund)), "BANK", TEN_K_2025)
+    assert np.isnan(bank["gp_assets"]) and bank["roa"] == pytest.approx(ni / 1000.0)  # scored on the others
