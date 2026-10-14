@@ -1,4 +1,8 @@
 # Batch 8 (docs/proposals/swing-methods-2026-10/batch8/; pre-registration docs/preregistration/2026-10-14-batch8.md).
 # Store: the batch-7 research store plus table `form_parties` (deal filings' headers, scripts/build_b8_store.py);
 # prereg_run copies it per job. Never point this at the live store. Research replays only.
-extends: prereg_b7.yaml
+# Extends prereg_b6.yaml directly (same screen as batches 5-7): one more level would pass the settings loader's
+# five-level `extends` limit once prereg_run adds its per-job file.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_b7.duckdb
