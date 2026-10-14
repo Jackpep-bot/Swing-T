@@ -1,4 +1,4 @@
-# Project status: BATCH 5 RUNNING; small-cap map done, no candidates (2026-10-13 19:30 ET)
+# Project status: BATCH 5 RUNNING, BATCH 6 QUEUED BEHIND IT; small-cap map done, no candidates (2026-10-13 20:00 ET)
 
 Branch `claude/project-thread-fesglg` (PR https://github.com/Jackpep-bot/Swing-T/pull/3) continues from
 `claude/project-thread-4wq9xa` (PR 2, still open, ends at 62455ed).
@@ -14,9 +14,14 @@ all). So there is no probation candidate, no reason to widen the nightly's unive
 
 ## Running
 Owner 19:23 ET: "push all tasks forward and increase a thread of research into new swing strategies constantly
-scraping and comparing data internally". The coordinator runs a cloud research thread that cards new strategies;
-each batch arrives as a branch and commit. For each: merge the cards, code them (add-strategy skill), commit a
-pre-registration BEFORE any replay, then `prereg_run` as batch 5 (copy scripts/run_batch5.sh).
+scraping and comparing data internally". The coordinator runs a cloud research thread (daily routine) that cards new
+strategies; each batch arrives as branch `claude/batchN-cards`. For each: merge the cards, code them (add-strategy
+skill; a card that is not a stock strategy gets a research module, as research/vrp_overlay.py), commit a
+pre-registration BEFORE any run, harness-check signal counts, then queue
+`scripts/run_prereg_batch.sh <tag> <date> <slugs>` behind whatever is running (see its header).
+While a replay batch runs, anything new under swing_engine/strategies/ must import cleanly from the first save:
+every replay that starts imports the whole package (develop a module as `_wip_<slug>.py`, rename when its tests pass).
+
 `scripts/on_power.sh scripts/run_batch5.sh` (PID 72028, log data/logs/research/batch5.log). Started 18:56 ET at 3
 replays at a time; restarted 19:25 ET at 7 at a time (`--job-gb 2024=6`: a replay held 3.4 GB) without losing the
 three that were running. The script now skips any replay that is finished or still running (`todo`), so starting
@@ -25,12 +30,25 @@ until a replay ends), then 2017-24 (one at a time, 30 GB budget, not measured ye
 shows its real size) for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
 (docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
 verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13).
-Afterwards delete data/live/pr_prereg-b5-{russell_recon_deletion_rebound,russell_recon_addition_frontrun,
-tax_loss_loser_rebound}_2024.{duckdb,yaml}: their runner was replaced mid-replay, so nothing removes them.
 Do not run `swing ingest` on the live store while batch 5 runs: every replay starts by copying it.
 `scripts/on_power.sh` (owner: "start them I will plug in soon") starts a job on AC or on a battery at or above 25%
 (`BATT_FLOOR`), pauses it in place (SIGSTOP, Telegram notice) under that, and continues it on AC.
 If it is gone after a restart, start it again with nohup (see the script's header).
+
+**Batch 6** (5 cards, docs/proposals/swing-methods-2026-10/batch6/, merged from claude/batch6-cards @ 8e794f1):
+coded, tested (2,737 tests pass), pre-registered (docs/preregistration/2026-10-13-batch6.md, commit 7504dbe) and
+QUEUED: `scripts/on_power.sh scripts/run_prereg_batch.sh b6 2026-10-13 ...` (PID 74305, log
+data/logs/research/batch6.log) waits for run_batch5.sh to end, then runs the SVXY volatility-premium book
+(research/vrp_overlay.py -> ...-batch6-vrp-results.md), replays the four stock cards on 2024-26 and on 2017-24 for
+those that meet the rule, grades (...-batch6-results.md, -iwm.md) and Telegrams. Store: data/live/replay_b6.duckdb
+(scripts/build_b6_store.py: live store copy + 2016-24 bars for SVXY, IWD, IWF, BIL + table `sic` from EDGAR);
+`data/b6.py` joins `sic2` and the ETF factor returns only on that store. Harness finding, in the pre-registration:
+`within_industry_reversal_no_news` had only 36 scored names on 2025-10-31 (few large caps go 21 sessions without
+news), so that book holds nearly every eligible name.
+Speed-up to do when batch 5 reaches 2017-24: its replays run one at a time on an unmeasured 30 GB budget. Read a
+running replay's memory (`ps -o rss`), then restart the runner with a real figure (edit `--job-gb` in
+scripts/run_batch5.sh, kill the wrapper, the script and prereg_run but NOT the replay, start the script again:
+`todo` skips what is finished or running). For batch 6 the same knob is the GB17 variable.
 
 When it is done: commit the results files and docs/income_view.md. A card that passes goes to a forward test only:
 `shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes) for ordinary swing
