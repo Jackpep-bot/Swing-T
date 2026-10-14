@@ -1,0 +1,6 @@
+# Batch 12 (docs/proposals/swing-methods-2026-10/batch12/; pre-registration docs/preregistration/2026-10-14-batch12.md).
+# Store: data/live/replay_b12.duckdb = batch 9's store plus Alpaca SIP daily bars 2016-01-04 .. 2024-10-06 for EFA,
+# EEM, VNQ, IEF, DBC, UUP (scripts/extend_research_store.py). Read only by research/b12_books.py.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_b12.duckdb

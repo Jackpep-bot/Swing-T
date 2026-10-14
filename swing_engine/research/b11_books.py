@@ -132,10 +132,10 @@ def migrant_orders(ranks_at: Any, sessions: Sequence[date], promoted: bool = Fal
     return orders, counts
 
 
-def verdict(res: dict[str, dict[str, Any]]) -> tuple[list[bool], str]:
+def verdict(res: dict[str, dict[str, Any]], n_trials: int = N_TRIALS) -> tuple[list[bool], str]:
     """Either route (docs/gates.md, Full-period test): the rule in both halves, or in the pooled window with
     alpha > 0 in each half."""
-    crit = alpha_t_critical(N_TRIALS)
+    crit = alpha_t_critical(n_trials)
 
     def rule(w: str) -> bool:
         r = res[w]
