@@ -23,6 +23,7 @@ class Secrets(BaseSettings):
     alpaca_paper: bool = True
     quiver_api_key: str | None = None
     fmp_api_key: str | None = None  # Financial Modeling Prep: optional float/shares vendor (data.float_data)
+    tiingo_api_key: str | None = None  # Tiingo free tier: daily bars incl. delisted (data.tiingo; 500 symbols, 50 req/hr)
     anthropic_api_key: str | None = None
     telegram_bot_token: str | None = None
     telegram_chat_id: str | None = None

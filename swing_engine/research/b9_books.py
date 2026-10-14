@@ -128,20 +128,20 @@ def capped_weights(raw: pd.Series, caps: pd.Series) -> pd.Series:
     return w
 
 
-def caps_for(cap_weight: pd.Series) -> pd.Series:
+def caps_for(cap_weight: pd.Series, max_weight: float = MAX_WEIGHT, mult: float = MAX_CAP_MULT) -> pd.Series:
     """min(MAX_WEIGHT, k x cap weight) with k = MAX_CAP_MULT, or the smallest larger k at which the caps add up to 1
     (registered reading: when the 100 names' 3 x cap weights cannot hold 100%, the multiple is raised, never the 9%)."""
-    if MAX_WEIGHT * len(cap_weight) < 1.0:  # too few names to hold 100% under the 9% cap
-        return pd.Series(MAX_WEIGHT, index=cap_weight.index)
-    lo, hi = MAX_CAP_MULT, MAX_CAP_MULT
-    while np.minimum(MAX_WEIGHT, hi * cap_weight).sum() < 1.0:
+    if max_weight * len(cap_weight) < 1.0:  # too few names to hold 100% under the hard cap
+        return pd.Series(max_weight, index=cap_weight.index)
+    lo, hi = mult, mult
+    while np.minimum(max_weight, hi * cap_weight).sum() < 1.0:
         lo, hi = hi, hi * 2.0
     for _ in range(60):
         if hi - lo < 1e-9:
             break
         mid = (lo + hi) / 2.0
-        lo, hi = (mid, hi) if np.minimum(MAX_WEIGHT, mid * cap_weight).sum() < 1.0 else (lo, mid)
-    return np.minimum(MAX_WEIGHT, hi * cap_weight)
+        lo, hi = (mid, hi) if np.minimum(max_weight, mid * cap_weight).sum() < 1.0 else (lo, mid)
+    return np.minimum(max_weight, hi * cap_weight)
 
 
 def momentum_orders(closes: pd.DataFrame, mcap_at: Any, sessions: Sequence[date], *, first: int = 1,
