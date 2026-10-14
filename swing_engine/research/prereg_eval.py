@@ -17,6 +17,10 @@ windows instead of the haircut Sharpe / net R rule (docs/preregistration/2026-10
 ``--alpha-slugs`` (stock portfolios graded on alpha, docs/preregistration/2026-10-10-batch3.md) must meet that
 standard rule AND have a positive OLS alpha against the benchmark with alpha t >= ``alpha_t_critical(n_trials)`` (the
 two-sided Bonferroni critical value at ALPHA_LEVEL) in both windows.
+
+``--pooled`` (docs/gates.md, "Full-period test": cards pre-registered from 2026-10-14 on) adds a third row per
+strategy, the two windows joined end to end (``pool_runs``), and a second way to pass: the same rule met on the
+pooled row, with alpha > 0 in each half for the alpha slugs. Off by default: earlier groups keep their rule.
 """
 from __future__ import annotations
 
@@ -124,10 +128,22 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_tr
     return out
 
 
+def pool_runs(older: dict[str, Any], newer: dict[str, Any]) -> dict[str, Any]:
+    """One payload from two window replays joined end to end: all trades, and the newer equity curve rescaled to
+    start where the older one ends (each window's book starts flat, so the seam closes and reopens positions)."""
+    a, b = pd.DataFrame(older.get("equity_curve") or []), pd.DataFrame(newer.get("equity_curve") or [])
+    if a.empty or b.empty:
+        return {"trades": [], "equity_curve": []}
+    col = "equity" if "equity" in a.columns else a.columns[-1]
+    b = b.assign(**{col: b[col].astype(float) * float(a[col].iloc[-1]) / float(b[col].iloc[0])})
+    return {"trades": [*(older.get("trades") or []), *(newer.get("trades") or [])],
+            "equity_curve": pd.concat([a, b], ignore_index=True).to_dict("records")}
+
+
 def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequence[str] = SLUGS,
                  tag_prefix: str = TAG_PREFIX, n_trials: int = N_TRIALS, out: str = OUT,
                  benchmark: pd.Series | None = None, benchmark_slugs: Sequence[str] = (),
-                 benchmark_name: str = "benchmark", alpha_slugs: Sequence[str] = ()) -> list[str]:
+                 benchmark_name: str = "benchmark", alpha_slugs: Sequence[str] = (), pooled: bool = False) -> list[str]:
     """Markdown lines: one row per strategy and window, then the PASS / FAIL verdicts. With ``benchmark`` (close
     by date) a second table reports every strategy against it, and ``benchmark_slugs`` pass on a positive haircut
     information ratio in both windows instead of the absolute rule; ``alpha_slugs`` need the absolute rule and a
@@ -140,27 +156,43 @@ def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequenc
              "top-7% P&L share | return |", "|" + "---|" * 12]
     verdicts = {}
     versus: list[str] = []
+    def passes(slug: str, g: dict[str, float]) -> bool:
+        if benchmark is not None and slug in benchmark_slugs:
+            return g.get("haircut_ir", -1) > 0
+        ok = g.get("haircut_sharpe", -1) > 0 and g.get("net_r", -1) > 0
+        if slug in alpha_slugs:  # NaN / missing compare False: no benchmark or no run fails
+            ok = ok and g.get("alpha_ann", -1) > 0 and g.get("alpha_t", -1) >= crit
+        return ok
+
     for slug in slugs:
         ok = True
+        payloads, halves = [], []
         for w in WINDOWS:
             path = runs / f"{w.start.isoformat()}_{w.end.isoformat()}_{tag_prefix}{slug}.json"
-            g = (grade_run(json.loads(path.read_text()), costs, n_trials, benchmark) if path.exists()
-                 else {"trades": math.nan})
-            if benchmark is not None and slug in benchmark_slugs:
-                ok = ok and g.get("haircut_ir", -1) > 0
+            payloads.append(json.loads(path.read_text()) if path.exists() else None)
+        rows = [(str(w.start.year), p) for w, p in zip(WINDOWS, payloads, strict=True)]
+        if pooled:
+            newer, older = payloads  # WINDOWS: survivorship-free (newer) first, long history second
+            rows.append((f"{WINDOWS[1].start.year}-{WINDOWS[0].end.year % 100:02d}",
+                         pool_runs(older, newer) if older and newer else None))
+        for label, payload in rows:
+            g = grade_run(payload, costs, n_trials, benchmark) if payload else {"trades": math.nan}
+            if "-" in label:
+                pooled_ok = passes(slug, g) and (slug not in alpha_slugs or all(h.get("alpha_ann", -1) > 0 for h in halves))
+                ok = ok or pooled_ok
             else:
-                ok = ok and g.get("haircut_sharpe", -1) > 0 and g.get("net_r", -1) > 0
-                if slug in alpha_slugs:  # NaN / missing compare False: no benchmark or no run fails
-                    ok = ok and g.get("alpha_ann", -1) > 0 and g.get("alpha_t", -1) >= crit
+                ok = ok and passes(slug, g)
+                halves.append(g)
+            w_label = label
 
             def f(key: str, spec: str = ".2f", g: dict[str, float] = g) -> str:
                 v = g.get(key)
                 return "-" if v is None or not math.isfinite(v) else format(v, spec)
 
-            lines.append(f"| {slug} | {w.start.year} | {f('trades', '.0f')} | {f('net_r', '+.3f')} | {f('t')} | "
+            lines.append(f"| {slug} | {w_label} | {f('trades', '.0f')} | {f('net_r', '+.3f')} | {f('t')} | "
                          f"{f('sharpe')} | {f('haircut_sharpe')} | {f('dsr')} | {f('max_dd', '.1%')} | "
                          f"{f('hold_days', '.0f')} | {f('top7_share', '.0%')} | {f('total_return', '+.1%')} |")
-            versus.append(f"| {slug} | {w.start.year} | {f('excess_ann', '+.1%')} | {f('ir')} | {f('haircut_ir')} | "
+            versus.append(f"| {slug} | {w_label} | {f('excess_ann', '+.1%')} | {f('ir')} | {f('haircut_ir')} | "
                           f"{f('alpha_ann', '+.1%')} | {f('alpha_t')} | {f('beta')} | {f('exposure', '.0%')} | "
                           f"{f('sharpe')} | {f('bench_sharpe')} | {f('turnover_ann', '.0%')} |")
         verdicts[slug] = "PASS" if ok else "FAIL"
@@ -197,6 +229,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     ap.add_argument("--benchmark-slugs", default="", help="slugs whose pass rule is the haircut IR vs --benchmark")
     ap.add_argument("--alpha-slugs", default="",
                     help="slugs that also need alpha vs --benchmark > 0 with t >= the Bonferroni critical value")
+    ap.add_argument("--pooled", action="store_true",
+                    help="also grade the two windows joined (docs/gates.md, Full-period test; cards from 2026-10-14)")
     args = ap.parse_args(argv)
     slugs = tuple(s.strip() for s in args.slugs.split(",") if s.strip())
     bench_slugs = tuple(s.strip() for s in args.benchmark_slugs.split(",") if s.strip())
@@ -219,7 +253,8 @@ def main(argv: Sequence[str] | None = None) -> None:
             raise SystemExit(f"no {args.benchmark} bars in {store_path}")
         benchmark = pd.Series(b["close"].astype(float).to_numpy(), index=_bar_days(b["ts"])).sort_index()
     lines = build_report(store_path.parent / "runs" / "replay", _cost_lookup(cost_table(bars)), slugs,
-                         args.tag_prefix, args.n_trials, args.out, benchmark, bench_slugs, args.benchmark or "", alpha_slugs)
+                         args.tag_prefix, args.n_trials, args.out, benchmark, bench_slugs, args.benchmark or "", alpha_slugs,
+                         args.pooled)
     (ROOT / args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[-(len(slugs) + 1):]))
 

@@ -9,7 +9,8 @@
 # $2 date of docs/preregistration/<date>-batch<N>.md (the results file is named after it). $3 slugs, comma-separated.
 # Env: N_TRIALS (default: the number of slugs), WAIT_FOR (pgrep -f pattern of a run to wait for), BEFORE (a command
 # run first, for a card that is not an engine strategy), ALWAYS_LONG (slugs replayed on 2017-24 whatever 2024-26
-# says), GB24 / GB17 (memory budget per replay, default 6 / 30).
+# says), GB24 / GB17 (memory budget per replay, default 6 / 30), POOLED=1 (docs/gates.md "Full-period test", every
+# card pre-registered from 2026-10-14 on: both windows for every card, graded also as one joined window).
 cd /Users/personal/Desktop/swing-engine
 TAG=$1 SLUGS=$3
 PREFIX=prereg-$TAG-
@@ -34,6 +35,7 @@ echo "start $(date '+%F %H:%M')"
 if [[ -n $BEFORE ]]; then ${=BEFORE} || echo "BEFORE FAILED: $BEFORE"; fi
 uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo $SLUGS 2024)" --alpha-slugs $SLUGS --window-years 2024 --out $OUT --no-eval
 drain
+if [[ -n $POOLED ]]; then LONG=$SLUGS; EVAL_POOLED=(--pooled); else EVAL_POOLED=()
 LONG=$(TAG=$TAG PREFIX=$PREFIX SLUGS=$SLUGS ALWAYS_LONG=$ALWAYS_LONG N=$N uv run python - <<'PY'
 import json
 import os
@@ -68,11 +70,12 @@ for s in slugs:
 print(",".join(keep))
 PY
 )
+fi
 echo "2017-24 window for: $LONG"
 uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo "$LONG" 2017)" --alpha-slugs "$LONG" --window-years 2017 --out $OUT --no-eval
 drain
-uv run python -m swing_engine.research.prereg_eval --settings config/prereg_$TAG.yaml --tag-prefix $PREFIX --n-trials $N --slugs $SLUGS --benchmark SPY --alpha-slugs $SLUGS --out $OUT
-uv run python -m swing_engine.research.prereg_eval --settings config/prereg_$TAG.yaml --tag-prefix $PREFIX --n-trials $N --slugs $SLUGS --benchmark IWM --alpha-slugs $SLUGS --out ${OUT%.md}-iwm.md
+uv run python -m swing_engine.research.prereg_eval --settings config/prereg_$TAG.yaml --tag-prefix $PREFIX --n-trials $N --slugs $SLUGS --benchmark SPY --alpha-slugs $SLUGS --out $OUT $EVAL_POOLED
+uv run python -m swing_engine.research.prereg_eval --settings config/prereg_$TAG.yaml --tag-prefix $PREFIX --n-trials $N --slugs $SLUGS --benchmark IWM --alpha-slugs $SLUGS --out ${OUT%.md}-iwm.md $EVAL_POOLED
 uv run python -m swing_engine.research.income_view --settings config/live.yaml
 OUT=$OUT TAG=$TAG uv run python -c "
 import os

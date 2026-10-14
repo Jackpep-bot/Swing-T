@@ -15,6 +15,18 @@
      what SPY returned over the same holding span on the same dollars (`research.cards.market_r`, beta 1), because
      every strategy is long-only and most positive gross R was the index going up (docs/attribution.md).
      Pre-registered portfolio tests keep their own registered rule (alpha vs SPY with a Bonferroni t).
+   - Full-period test (owner, 2026-10-14 16:14 UTC, decision card in the project chat: "Add full-period test").
+     Every card pre-registered after that moment (batch 11 on) is graded three ways, all written into its
+     pre-registration before it runs: the two windows as before (2017-01-01 .. 2024-10-04 and 2024-10-07 ..
+     2026-10-05) and one pooled 2017-26 window. Engine cards: both windows are replayed for every card (no gating
+     on the 2024-26 result) and the pooled window is the two replays joined end to end
+     (`research.prereg_eval --pooled`, `scripts/run_prereg_batch.sh` with POOLED=1). Weights cards: the pooled
+     window is one simulation over 2017-01-01 .. 2026-10-05. A card PASSES on either route: its registered rule
+     met in both windows, or the same rule met in the pooled window (haircut Sharpe > 0, net R per trade > 0 for
+     engine cards, alpha vs SPY > 0 with alpha t >= `alpha_t_critical(n_trials)`) with alpha vs SPY above zero in
+     each window. The last condition and the joined-replay reading are the implementer's, recorded here so a pooled
+     pass cannot rest on one half. The pooled view is part of the same trial (no extra trial is counted). Cards
+     tested before (batches 5-10, including batch 8, which was registered before the decision) are not re-graded.
    - CZ check (manual, catalog `open_factor_benchmark_cz`): for any signal that re-implements a published
      predictor (momentum, reversal, 52-week high, insider, accruals...), download the matching monthly long-short
      portfolio returns from Chen-Zimmermann Open Source Asset Pricing (openassetpricing.com) and compare them with

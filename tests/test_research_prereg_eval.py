@@ -128,3 +128,34 @@ def test_alpha_slugs_need_the_standard_rule_and_a_bonferroni_significant_alpha(t
 
 def g_mean(payload: dict) -> float:
     return float(np.mean([r["equity"] for r in payload["equity_curve"]]))
+
+
+def test_pooled_window_joins_the_halves_and_is_a_second_way_to_pass(tmp_path) -> None:
+    rng = np.random.default_rng(5)
+    old_days, new_days = pd.bdate_range("2023-01-02", periods=300), pd.bdate_range("2024-03-01", periods=300)
+    days = old_days.append(new_days)
+    spy_ret = rng.normal(0.0005, 0.01, len(days))
+    spy = pd.Series(400.0 * (1.0 + spy_ret).cumprod(), index=[d.date() for d in days])
+    half = rng.normal(0.0, 0.002, 300)
+    half -= half.mean()
+    noise = np.r_[half, half]  # the same noise in both halves: each half's t is about 1.7, the pooled one about 2.5
+
+    def payload(sl: slice, edge: float) -> dict:
+        p = _timing_payload(days[sl], 100_000.0 * (1.0 + spy_ret[sl] + edge + noise[sl]).cumprod())
+        p["trades"][0].update(exit_price=12.0, pnl=200.0)
+        return p
+
+    newer, older = WINDOWS
+    for w, sl in ((older, slice(0, 300)), (newer, slice(300, 600))):
+        (tmp_path / f"{w.start.isoformat()}_{w.end.isoformat()}_b11-slow.json").write_text(json.dumps(payload(sl, 0.00022)))
+    joined = pe.pool_runs(payload(slice(0, 300), 0.0), payload(slice(300, 600), 0.0))
+    assert len(joined["equity_curve"]) == 600 and len(joined["trades"]) == 2
+    assert joined["equity_curve"][300]["equity"] == pytest.approx(joined["equity_curve"][299]["equity"])  # the seam
+    assert joined["equity_curve"][301]["equity"] / joined["equity_curve"][300]["equity"] == pytest.approx(
+        1.0 + spy_ret[301] + noise[301])
+    args = (tmp_path, {}, ("slow",), "b11-", 2, "x-results.md", spy, (), "SPY", ("slow",))
+    halves = [pe.grade_run(json.loads(f.read_text()), {}, 2, spy)["alpha_t"] for f in sorted(tmp_path.glob("*b11-slow.json"))]
+    assert all(1.0 < t < pe.alpha_t_critical(2) for t in halves)  # neither half clears the bar alone
+    assert pe.build_report(*args)[-1] == "- **slow**: FAIL"
+    pooled = pe.build_report(*args, pooled=True)
+    assert pooled[-1] == "- **slow**: PASS" and any("| slow | 2017-26 |" in x for x in pooled)
