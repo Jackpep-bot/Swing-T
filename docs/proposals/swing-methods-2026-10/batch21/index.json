@@ -1,0 +1,24 @@
+{
+  "batch": "batch21",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(3)=2.394",
+  "cards": [
+    {
+      "slug": "sp500_earnings_disappointment_exclusion",
+      "source": "Bernard & Thomas (1989); Stambaugh, Yu & Yuan (2012); batch 19 results",
+      "universe": "500 largest by mcap_pit, close >= $5",
+      "holding_period": "quarterly (end Mar/May/Aug/Nov)",
+      "data_needed": "daily bars, mcap_pit, XBRL diluted EPS with avail_ts",
+      "rule": "Batch 19 surprise signal; exclude the 100 lowest (buffer 130); unscored names kept; rest at mcap weight capped 10%; fully invested.",
+      "card": "sp500_earnings_disappointment_exclusion.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "earnings_surprise",
+      "family_trials": 3,
+      "expected_turnover": "50-120%/yr"
+    }
+  ]
+}
