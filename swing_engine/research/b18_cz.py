@@ -23,6 +23,13 @@ from swing_engine.core.config import ROOT
 
 CZ_DIR = ROOT / "data" / "research" / "chen_zimmermann"
 LIST_OUT = "docs/preregistration/2026-10-14-batch18-list.md"
+SELECT_OUT = "docs/preregistration/2026-10-14-batch18-selection.md"
+CUTOFF = "2016-12"  # card: post-publication evidence through 2016-12 only; nothing later is read
+MIN_MONTHS, MIN_T, MAX_SELECTED = 60, 2.0, 10  # card
+#: card: price-momentum predictors (any whose definition is a past-return sort) and GP are excluded by family
+EXCLUDED = frozenset({"GP", "Mom6m", "Mom12m", "MomVol", "IntMom", "Mom12mOffSeason", "FirmAgeMom", "IndMom",
+                      "LRreversal", "MRreversal", "STreversal", "MomOffSeason", "MomRev", "MomSeason", "MomSeasonShort",
+                      "ResidualMomentum", "TrendFactor"})
 CATEGORIES = ("Accounting", "Price", "Trading")
 MAX_HISTORY_MONTHS = 60  # card: a predictor needing more than 60 months of history is out
 
@@ -223,15 +230,74 @@ def build_list(doc: pd.DataFrame) -> list[str]:
     return lines + [""]
 
 
+def selection(doc: pd.DataFrame, returns: pd.DataFrame) -> pd.DataFrame:
+    """Step 2 on every buildable predictor; ``returns``: CZ long-short monthly returns (percent), date index. Rows
+    after CUTOFF are dropped before anything is computed."""
+    from swing_engine.research.premise_library import mean_t
+
+    p = predictors(doc)
+    r = returns.loc[returns.index.strftime("%Y-%m") <= CUTOFF] / 100.0
+    r.index = r.index.strftime("%Y-%m")
+    rows = []
+    for a, d in p.iterrows():
+        if not BUILDABLE[a][0]:
+            continue
+        why = ("excluded by family (card)" if a in EXCLUDED else
+               "equal-weighted original series (no VWforce file)" if d["Stock Weight"] != "VW" else
+               "no returns in the CZ file" if a not in r.columns else "")
+        s = r[a] if a in r.columns else pd.Series(dtype=float)
+        post = s.loc[f"{int(d['Year']) + 1}-01":].dropna()
+        ins = s.loc[f"{int(d['SampleStartYear'])}-01":f"{int(d['SampleEndYear'])}-12"].dropna()
+        mp, tp, n = mean_t(post) if why == "" else (float("nan"), float("nan"), len(post))
+        mi = float(ins.mean() * 12) if why == "" and len(ins) else float("nan")
+        if why == "":
+            why = (f"post-publication window {n} months (< {MIN_MONTHS})" if n < MIN_MONTHS else
+                   f"post-publication t {tp:.2f} < {MIN_T}" if not tp >= MIN_T else
+                   "in-sample mean not positive" if not mi > 0 else "")
+        rows.append({"predictor": a, "weight": d["Stock Weight"], "published": int(d["Year"]), "months": n,
+                     "post_mean": mp, "post_t": tp, "in_sample_mean": mi, "passes": why == "", "why": why or "passes"})
+    out = pd.DataFrame(rows).set_index("predictor")
+    passing = out.loc[out["passes"]].sort_values("post_t", ascending=False)
+    out["selected"] = out.index.isin(passing.index[:MAX_SELECTED])
+    return out
+
+
+def _f(x: float, spec: str) -> str:
+    return "-" if pd.isna(x) else format(x, spec)
+
+
+def selection_lines(table: pd.DataFrame) -> list[str]:
+    chosen = table.loc[table["selected"]].sort_values("post_t", ascending=False)
+    lines = ["# Batch 18, step 2: the blind selection", "",
+             f"Committed 2026-10-14 before the book is built. Rule (card, fixed before any statistic): among the step-1 "
+             f"buildable predictors (`{LIST_OUT}`), value-weighted original CZ series only (no VWforce file on the Mac), "
+             f"momentum family and GP excluded; mean monthly long-short return from January after publication through "
+             f"{CUTOFF}, at least {MIN_MONTHS} months, t >= {MIN_T}, and a positive in-sample mean; at most "
+             f"{MAX_SELECTED} by t. Returns after {CUTOFF} were dropped before anything was computed and were not looked at.",
+             "", f"**Selected: {', '.join(chosen.index) if len(chosen) else 'none: no card (the rule leaves nothing)'}**", "",
+             "| predictor | EW/VW | published | months | post-pub mean/yr | t | in-sample mean/yr | result |",
+             "|---|---|---|---|---|---|---|---|"]
+    for a, r in table.sort_values(["passes", "post_t"], ascending=False).iterrows():
+        lines.append(f"| {a} | {r['weight']} | {r['published']} | {r['months']} | {_f(r['post_mean'], '+.2%')} | "
+                     f"{_f(r['post_t'], '.2f')} | {_f(r['in_sample_mean'], '+.2%')} | "
+                     f"{'SELECTED' if r['selected'] else r['why']} |")
+    return lines + [""]
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--step", choices=["list"], required=True)
+    ap.add_argument("--step", choices=["list", "select"], required=True)
     args = ap.parse_args(argv)
     doc = pd.read_csv(CZ_DIR / "SignalDoc.csv")
     if args.step == "list":
         lines = build_list(doc)
         (ROOT / LIST_OUT).write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"{LIST_OUT}: {sum(1 for ln in lines if '| yes |' in ln)} buildable of {len(predictors(doc))}")
+    elif args.step == "select":
+        ret = pd.read_csv(CZ_DIR / "PredictorLSretWide.csv", na_values=["NA"], parse_dates=["date"]).set_index("date")
+        lines = selection_lines(selection(doc, ret))
+        (ROOT / SELECT_OUT).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        print("\n".join(lines[:7]))
 
 
 if __name__ == "__main__":

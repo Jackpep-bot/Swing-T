@@ -63,6 +63,10 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   **FAIL**: +5.5% vs SPY +13.6% pooled, beta 0.65, alpha -2.8% (t -0.88), deepest drop -37.7% (2020) vs SPY -34.2%;
   total-return store +8.2% (descriptive). Uncorrelated with the momentum replica (-0.01). French low-variance premise
   NOT SUPPORTED (Lo 20 alpha +2.05% a year, t 2.87 since 1963; t 1.39 since 2017).
+- Batch 18 (`research/b18_cz.py`; blind Chen-Zimmermann selection): step 1 found 66 of 157 Accounting / Price / Trading
+  predictors buildable (docs/preregistration/2026-10-14-batch18-list.md); step 2, with value-weighted original series
+  only (the VWforce file is not on the Mac), left **no predictor** (the six candidates, all volatility / lottery
+  signals, had post-publication t 0.24-0.59 through 2016): **no card, no trial** (2026-10-14-batch18-selection.md).
 - Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
   downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
   Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
