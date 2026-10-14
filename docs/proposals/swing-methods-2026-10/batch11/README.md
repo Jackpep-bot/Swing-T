@@ -13,11 +13,15 @@ Both cards hold SPY with any weight they do not use, so neither can lose to SPY 
 (one per card, both new families); bar `alpha_t_critical(2)` = 2.241.
 
 ## Note for the grader (not a card change)
-`prereg_eval._vs_benchmark` regresses raw daily returns on SPY's raw returns, with no T-bill rate taken off either
-side. A book holding BIL or cash therefore shows a positive alpha equal to the bill rate (about 2% a year on average
-2017-26) with a very small residual, so a mostly-in-bills book can show a large alpha t without any skill. The usual
-fix is to regress returns minus the bill rate (BIL's return is in the store) on SPY minus the bill rate. Neither card
-here holds bills, so this does not affect them; it matters for part-invested engine cards.
+Raised with this batch: `prereg_eval._vs_benchmark` regressed raw returns on raw SPY returns, with no bill rate taken
+off. The Mac has since switched it to (r - BIL) on (SPY - BIL) (docs/gates.md, "Bill rate"); re-grading batches 5-10
+changed no verdict. Correction to what was first written here: the store is price-only, so BIL's price is flat
+(91.38 in Jan 2016, 91.51 in Oct 2026) and a book sitting in bills showed about zero return, not the bill rate.
+
+**Price-only data.** The store leaves out dividends (and interest on idle cash) for both the book and SPY. For
+`dividend_increase_drift`, whose holdings pay above-average dividends, this understates the book's return against
+SPY by roughly the yield gap (likely under 1% a year). This is a statement about the data, not a rule change; the
+grade uses the price-only store as registered.
 
 ## Rejected this sweep
 - **SPAC trust-value floor** (buy blank-check shares under trust value): needs point-in-time SIC 6770 or IPO type;
