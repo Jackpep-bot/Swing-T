@@ -1,4 +1,4 @@
-# Project status: batches 5-17 all done, nothing passed; total-return figures, Tiingo fetcher, after-tax column next (2026-10-14 16:00 ET)
+# Project status: batches 5-18 all done, nothing passed; total-return figures, Tiingo fetcher, after-tax column next (2026-10-14 16:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -64,9 +64,9 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   total-return store +8.2% (descriptive). Uncorrelated with the momentum replica (-0.01). French low-variance premise
   NOT SUPPORTED (Lo 20 alpha +2.05% a year, t 2.87 since 1963; t 1.39 since 2017).
 - Batch 18 (`research/b18_cz.py`; blind Chen-Zimmermann selection): step 1 found 66 of 157 Accounting / Price / Trading
-  predictors buildable (docs/preregistration/2026-10-14-batch18-list.md); step 2, with value-weighted original series
-  only (the VWforce file is not on the Mac), left **no predictor** (the six candidates, all volatility / lottery
-  signals, had post-publication t 0.24-0.59 through 2016): **no card, no trial** (2026-10-14-batch18-selection.md).
+  predictors buildable; step 2 on value-weighted originals selected nothing, so it was rerun once on CZ's VWforce
+  series under amendment 1 (written first): DivYieldST (post-publication t 3.91 through 2016) and VolumeTrend (2.13).
+  The book **FAIL**: +10.3% vs SPY +13.6% pooled, alpha -1.7% (t -0.86); total-return store +12.7%, alpha t -0.61.
 - Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
   downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
   Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
@@ -90,7 +90,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
-  batch): 49 cards after batch 17. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  batch): 50 cards after batch 18. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
   had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
   -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
   momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
