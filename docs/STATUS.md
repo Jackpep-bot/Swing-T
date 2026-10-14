@@ -1,4 +1,4 @@
-# Project status: batches 5-21 all done, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
+# Project status: batches 5-22 all done, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -78,6 +78,11 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
 - Batch 21 (docs/preregistration/2026-10-14-batch21-results.md, `research/b21_books.py`): large caps minus their 100
   worst earnings surprises **FAIL**: +13.3% vs SPY +13.6% pooled, alpha -0.4% (t -0.36), tracking error 3.1%. The
   excluded names lagged SPY by 4.6% a year (t -1.57) but held only 17% of the cap.
+- Batch 22 (docs/preregistration/2026-10-14-batch22-results.md, `research/b22_books.py`): large-cap opportunistic
+  insider buys **FAIL**: +11.2% vs SPY +13.6% pooled, alpha -2.5% (t -2.35). The insider names themselves (equal-weight
+  satellite, about 11 names) made +3.2% a year, alpha -9.3% (t -2.23); the routine-buy placebo also lagged. In large
+  caps, officers' open-market buys marked falling stocks that kept falling (descriptive; one more reason the insider
+  family is closed here).
 - Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
   downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
   Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
@@ -101,7 +106,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
-  batch): 53 cards after batch 21. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  batch): 54 cards after batch 22. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
   had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
   -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
   momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
