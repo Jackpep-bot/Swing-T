@@ -1,4 +1,4 @@
-# Project status: batches 5-20 all done, nothing passed; total-return figures, Tiingo fetcher, after-tax column next (2026-10-14 16:00 ET)
+# Project status: batches 5-20 all done, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
