@@ -5,11 +5,11 @@ Graded per docs/preregistration/2026-10-13-batch5.md (n_trials = 15). Net of rep
 | strategy | window | trades | net R/trade | t | net Sharpe | haircut SR | DSR | max DD | hold days | top-7% P&L share | return |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | russell_recon_deletion_rebound | 2024 | 0 | - | - | - | - | - | - | - | - | - |
-| russell_recon_deletion_rebound | 2017 | - | - | - | - | - | - | - | - | - | - |
+| russell_recon_deletion_rebound | 2017 | 0 | - | - | - | - | - | - | - | - | - |
 | russell_recon_addition_frontrun | 2024 | 56 | -0.114 | -0.81 | -0.23 | -0.23 | 0.02 | 14.3% | 32 | -153% | -4.2% |
-| russell_recon_addition_frontrun | 2017 | - | - | - | - | - | - | - | - | - | - |
+| russell_recon_addition_frontrun | 2017 | 147 | +0.064 | 0.47 | 0.11 | 0.00 | 0.07 | 20.8% | 30 | 771% | +4.0% |
 | tax_loss_loser_rebound | 2024 | 36 | -0.085 | -0.96 | -0.22 | -0.22 | 0.02 | 7.8% | 19 | -110% | -3.1% |
-| tax_loss_loser_rebound | 2017 | - | - | - | - | - | - | - | - | - | - |
+| tax_loss_loser_rebound | 2017 | 166 | +0.171 | 3.00 | 0.43 | 0.00 | 0.28 | 29.8% | 19 | 85% | +29.7% |
 | ceo_cfo_buy_5day | 2024 | 511 | -0.058 | -2.94 | -1.10 | -1.10 | 0.00 | 34.1% | 5 | -107% | -27.9% |
 | ceo_cfo_buy_5day | 2017 | - | - | - | - | - | - | - | - | - | - |
 | pre_earnings_runup_winners | 2024 | 132 | +0.013 | 0.13 | -0.14 | -0.14 | 0.03 | 8.8% | 3 | -560% | -2.6% |
@@ -44,9 +44,9 @@ Daily net return minus SPY close-to-close return on the same sessions. Pass rule
 | russell_recon_deletion_rebound | 2024 | - | - | - | - | - | - | - | - | - | - |
 | russell_recon_deletion_rebound | 2017 | - | - | - | - | - | - | - | - | - | - |
 | russell_recon_addition_frontrun | 2024 | -18.9% | -1.11 | -1.11 | -3.3% | -0.58 | 0.08 | 9% | -0.23 | 1.03 | 71% |
-| russell_recon_addition_frontrun | 2017 | - | - | - | - | - | - | - | - | - | - |
+| russell_recon_addition_frontrun | 2017 | -13.0% | -0.72 | -0.72 | -0.3% | -0.13 | 0.08 | 6% | 0.11 | 0.75 | 48% |
 | tax_loss_loser_rebound | 2024 | -18.5% | -1.10 | -1.10 | -2.4% | -0.53 | 0.06 | 4% | -0.22 | 1.03 | 61% |
-| tax_loss_loser_rebound | 2017 | - | - | - | - | - | - | - | - | - | - |
+| tax_loss_loser_rebound | 2017 | -10.0% | -0.51 | -0.51 | +3.1% | 1.00 | 0.05 | 5% | 0.43 | 0.75 | 74% |
 | ceo_cfo_buy_5day | 2024 | -32.6% | -2.03 | -2.03 | -22.2% | -2.49 | 0.39 | 33% | -1.10 | 1.03 | 2010% |
 | ceo_cfo_buy_5day | 2017 | - | - | - | - | - | - | - | - | - | - |
 | pre_earnings_runup_winners | 2024 | -18.1% | -1.06 | -1.06 | -2.2% | -0.42 | 0.07 | 4% | -0.14 | 1.03 | 340% |
