@@ -1,0 +1,39 @@
+{
+  "batch": "batch13",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 4,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL)",
+  "cards": [
+    {
+      "slug": "mispricing_short_leg_exclusion_large",
+      "source": "Stambaugh, Yu & Yuan (2012); Stambaugh & Yuan (2017)",
+      "universe": "500 largest by mcap_pit, close >= $5",
+      "holding_period": "quarterly (Mar/Jun/Sep/Dec), cap weights drift between",
+      "data_needed": "daily bars, mcap_pit, net_share_issuance, XBRL assets/OCF/gross profit/EPS/shares",
+      "rule": "Cap-weight the 500 largest minus the worst 100 on mean percentile of issuance, asset growth, accruals, low GP/A, low ROA; buffer 130; cap 10%.",
+      "card": "mispricing_short_leg_exclusion_large.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "mispricing_short_leg",
+      "family_trials": 2,
+      "expected_turnover": "15-30%/yr"
+    },
+    {
+      "slug": "mispricing_short_leg_exclusion_mid",
+      "source": "Stambaugh, Yu & Yuan (2012); Stambaugh & Yuan (2017)",
+      "universe": "mcap ranks 501-1,500, close >= $5, med_dv_63 >= $1M",
+      "holding_period": "quarterly, cap weights drift between",
+      "data_needed": "same as the large-cap card",
+      "rule": "Same score; cap-weight ranks 501-1,500 minus the worst 300; buffer 360; cap 2%.",
+      "card": "mispricing_short_leg_exclusion_mid.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "mispricing_short_leg",
+      "family_trials": 2,
+      "expected_turnover": "40-70%/yr"
+    }
+  ]
+}
