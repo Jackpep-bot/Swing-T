@@ -1,0 +1,6 @@
+# Batch 9 (docs/proposals/swing-methods-2026-10/batch9/; pre-registration docs/preregistration/2026-10-14-batch9.md).
+# Store: the research copy built by scripts/build_b9_store.py (the batch-6 store plus 2016-24 SSO bars). Read only by
+# research/b9_books.py. Never point this at the live store.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_b9.duckdb
