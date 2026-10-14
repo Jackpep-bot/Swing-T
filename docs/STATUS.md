@@ -22,6 +22,10 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
    cards and GB17=10 (PID 86616, log data/logs/research/batch5.log): their 2017-24 replays, descriptive only
    (run_batch5.sh skipped them: its 2017 step lacked --out, fixed). russell_recon_deletion_rebound's is done; the
    other two run side by side (3.8 GB each). It then re-grades batch 5 and Telegrams.
+Budget lesson: `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year,
+so a runner started with 2017=30 waits while another runner's two 2017-24 replays run (it held batch 7 for 30
+minutes on 2026-10-14). Start runners beside 2017-24 work with GB17=7 (a 2017-24 replay holds about 4-6.5 GB).
+Batch 7 was restarted that way at 10:03 ET (wrapper PID 95341).
 Watcher lesson: a background `until pgrep -f ...` loop whose own command line contains `--tag prereg-` matches
 itself and blocks every runner's `drain` (it held batch 5 for 40 minutes on 2026-10-14). Watch log files instead.
 
