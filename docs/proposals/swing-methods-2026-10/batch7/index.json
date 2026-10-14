@@ -1,0 +1,32 @@
+{
+  "batch": "batch7",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 6,
+  "cards": [
+    {
+      "slug": "merger_target_spread_capture",
+      "source": "Mitchell & Pulvino 2001 (JF)",
+      "universe": "mcap_pit >= $300M, med_dv_63 >= $5M",
+      "holding_period": "to deal close, max 180 sessions",
+      "data_needed": "daily bars incl. delisted, EDGAR form types DEFM14A / SC TO-T",
+      "rule": "Buy targets after the definitive merger proxy or third-party tender offer filing; hold until delisted, -15% break stop or 180 sessions.",
+      "card": "merger_target_spread_capture.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": false
+    },
+    {
+      "slug": "seo_marketed_offer_rebound",
+      "source": "Price pressure and overnight SEOs (Penn State, 2000-2014)",
+      "universe": "close >= $5, med_dv_63 >= $2M",
+      "holding_period": "7 sessions",
+      "data_needed": "daily bars, EDGAR form types 424B4 / 424B5",
+      "rule": "Buy the open after a first-in-90-days 424B filing that followed a >= 4% 5-session drop; hold 7 sessions.",
+      "card": "seo_marketed_offer_rebound.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": false
+    }
+  ]
+}
