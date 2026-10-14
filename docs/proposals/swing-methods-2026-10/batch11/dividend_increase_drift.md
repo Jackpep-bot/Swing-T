@@ -61,6 +61,11 @@ PASS on either route: (1) in both A and B, haircut Sharpe > 0 and alpha vs SPY >
 Trials: this card counts as 1 trial of a new family; the batch bar is `alpha_t_critical(2)` = 2.241 (2 cards).
 Descriptive only: the same book split into increase events and initiation events.
 
+## Data note (added 2026-10-14 before any result, not a rule change)
+The store is price-only: dividends are left out for the book and for SPY alike. This book holds dividend raisers,
+which yield more than SPY on average, so price-only grading understates its return against SPY by about the yield
+gap (likely under 1% a year). The grade uses the price-only store as registered.
+
 ## Expectation stated before the run
 Modest. Most increases come from large, steady dividend payers, which lagged SPY in 2024-26; alpha vs SPY likely
 0 to +2% a year with alpha t under 1.5. Likely FAIL.
