@@ -1,4 +1,4 @@
-# Project status: IDLE, waiting for batch 13; batches 5-12 all done, nothing passed (2026-10-14 14:00 ET)
+# Project status: IDLE, waiting for batch 13; batches 5-12 all done, nothing passed (2026-10-14 15:20 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -48,6 +48,13 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   (first book = the September 2026 selection: 100 names, AAPL 9%, MU 8.3%, AMD 5.9% ...; bought at the open after
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
+- Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
+  batch): 42 cards. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
+  -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
+  momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
+  boost this project to perfection"; the coordinator runs that survey in a cloud thread ("What winning trading
+  programs do") and relays build ideas as claude/* branches.
 - Grader fix 2026-10-14 (docs/gates.md, Bill rate): alpha regresses (r - BIL) on (SPY - BIL). Price-only BIL barely
   moves, so it changed no verdict (re-graded batches 5-8, alphas moved 0.1% a year at most).
 - Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
