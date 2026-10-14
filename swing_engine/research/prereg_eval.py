@@ -47,6 +47,7 @@ REPLAY_BPS = 10.0  # already charged per side by the replay's CostModel
 BPS = 1e4
 TOP_TRADE_SHARE = 0.07
 PERIODS = 252
+BILL = "BIL"  # the bill rate taken off both sides of the alpha regression (docs/gates.md, "Bill rate")
 ALPHA_LEVEL = 0.05  # family-wise two-sided level of the --alpha-slugs rule
 
 
@@ -59,9 +60,14 @@ def _cost_lookup(table: pd.DataFrame) -> dict[tuple[str, Any], float]:
     return {(s, d): c for s, d, c in zip(table["symbol"], table["as_of"], table["cost_bps"], strict=True)}
 
 
-def _vs_benchmark(rets: pd.Series, bench: pd.Series, n_trials: int) -> dict[str, float]:
-    """Daily ``rets`` against the benchmark's returns ``bench`` (both indexed by session date)."""
+def _vs_benchmark(rets: pd.Series, bench: pd.Series, n_trials: int, rf: pd.Series | None = None) -> dict[str, float]:
+    """Daily ``rets`` against the benchmark's returns ``bench`` (both indexed by session date). With ``rf`` (the bill
+    ETF's daily return, BIL) both sides are taken net of it before the regression (docs/gates.md, "Bill rate"); a
+    session without an ``rf`` value counts it as zero."""
     both = pd.DataFrame({"r": rets, "b": bench.reindex(rets.index)}).dropna()
+    if rf is not None:
+        bill = rf.reindex(both.index).fillna(0.0)
+        both = both.assign(r=both["r"] - bill, b=both["b"] - bill)
     if len(both) < 3:
         return {}
     excess, years = both["r"] - both["b"], len(both) / PERIODS
@@ -81,7 +87,7 @@ def _vs_benchmark(rets: pd.Series, bench: pd.Series, n_trials: int) -> dict[str,
 
 
 def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_trials: int = N_TRIALS,
-              benchmark: pd.Series | None = None) -> dict[str, float]:
+              benchmark: pd.Series | None = None, rf: pd.Series | None = None) -> dict[str, float]:
     trades = pd.DataFrame(payload.get("trades") or [])
     curve = pd.DataFrame(payload.get("equity_curve") or [])
     out: dict[str, float] = {"trades": float(len(trades))}
@@ -124,7 +130,7 @@ def grade_run(payload: dict[str, Any], costs: dict[tuple[str, Any], float], n_tr
     if "exposure" in curve.columns:
         out["exposure"] = float(curve["exposure"].astype(float).mean())
     if benchmark is not None:
-        out.update(_vs_benchmark(rets, benchmark.reindex(equity.index).pct_change(), n_trials))
+        out.update(_vs_benchmark(rets, benchmark.reindex(equity.index).pct_change(), n_trials, rf))
     return out
 
 
@@ -143,7 +149,8 @@ def pool_runs(older: dict[str, Any], newer: dict[str, Any]) -> dict[str, Any]:
 def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequence[str] = SLUGS,
                  tag_prefix: str = TAG_PREFIX, n_trials: int = N_TRIALS, out: str = OUT,
                  benchmark: pd.Series | None = None, benchmark_slugs: Sequence[str] = (),
-                 benchmark_name: str = "benchmark", alpha_slugs: Sequence[str] = (), pooled: bool = False) -> list[str]:
+                 benchmark_name: str = "benchmark", alpha_slugs: Sequence[str] = (), pooled: bool = False,
+                 rf: pd.Series | None = None) -> list[str]:
     """Markdown lines: one row per strategy and window, then the PASS / FAIL verdicts. With ``benchmark`` (close
     by date) a second table reports every strategy against it, and ``benchmark_slugs`` pass on a positive haircut
     information ratio in both windows instead of the absolute rule; ``alpha_slugs`` need the absolute rule and a
@@ -176,7 +183,7 @@ def build_report(runs: Path, costs: dict[tuple[str, Any], float], slugs: Sequenc
             rows.append((f"{WINDOWS[1].start.year}-{WINDOWS[0].end.year % 100:02d}",
                          pool_runs(older, newer) if older and newer else None))
         for label, payload in rows:
-            g = grade_run(payload, costs, n_trials, benchmark) if payload else {"trades": math.nan}
+            g = grade_run(payload, costs, n_trials, benchmark, rf) if payload else {"trades": math.nan}
             if "-" in label:
                 pooled_ok = passes(slug, g) and (slug not in alpha_slugs or all(h.get("alpha_ann", -1) > 0 for h in halves))
                 ok = ok or pooled_ok
@@ -252,9 +259,12 @@ def main(argv: Sequence[str] | None = None) -> None:
         if b.empty:
             raise SystemExit(f"no {args.benchmark} bars in {store_path}")
         benchmark = pd.Series(b["close"].astype(float).to_numpy(), index=_bar_days(b["ts"])).sort_index()
+    bill = bars.loc[bars["symbol"] == BILL]
+    rf = (pd.Series(bill["close"].astype(float).to_numpy(), index=_bar_days(bill["ts"])).sort_index().pct_change()
+          if not bill.empty else None)
     lines = build_report(store_path.parent / "runs" / "replay", _cost_lookup(cost_table(bars)), slugs,
                          args.tag_prefix, args.n_trials, args.out, benchmark, bench_slugs, args.benchmark or "", alpha_slugs,
-                         args.pooled)
+                         args.pooled, rf)
     (ROOT / args.out).write_text("\n".join(lines) + "\n")
     print("\n".join(lines[-(len(slugs) + 1):]))
 

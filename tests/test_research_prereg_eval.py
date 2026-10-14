@@ -159,3 +159,15 @@ def test_pooled_window_joins_the_halves_and_is_a_second_way_to_pass(tmp_path) ->
     assert pe.build_report(*args)[-1] == "- **slow**: FAIL"
     pooled = pe.build_report(*args, pooled=True)
     assert pooled[-1] == "- **slow**: PASS" and any("| slow | 2017-26 |" in x for x in pooled)
+
+
+def test_bill_rate_comes_off_both_sides_of_the_alpha_regression() -> None:
+    rng = np.random.default_rng(9)
+    days = [d.date() for d in pd.bdate_range("2025-01-02", periods=500)]
+    spy = pd.Series(rng.normal(0.0005, 0.01, 500), index=days)
+    bill = pd.Series(0.0002, index=days)  # about 5% a year
+    book = 0.5 * spy + 0.5 * bill + rng.normal(0.0, 0.0005, 500)  # half in SPY, half in bills: no skill
+    raw = pe._vs_benchmark(book, spy, 1)
+    net = pe._vs_benchmark(book, spy, 1, bill)
+    assert raw["alpha_ann"] == pytest.approx(0.5 * 0.0002 * 252, abs=0.01) and raw["alpha_t"] > 2  # the bills read as skill
+    assert abs(net["alpha_ann"]) < 0.01 and abs(net["alpha_t"]) < 2 and net["beta"] == pytest.approx(0.5, abs=0.05)

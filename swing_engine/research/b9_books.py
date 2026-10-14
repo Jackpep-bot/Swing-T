@@ -224,10 +224,10 @@ def switch_orders(states: pd.Series, start: date) -> dict[date, pd.Series]:
 
 
 # ------------------------------------------------------------------------------------------------ run
-def grade(book: pd.DataFrame, spy: pd.Series, n_trials: int = N_GROUP_TRIALS) -> dict[str, Any]:
+def grade(book: pd.DataFrame, spy: pd.Series, n_trials: int = N_GROUP_TRIALS, rf: pd.Series | None = None) -> dict[str, Any]:
     spy = spy.reindex(book.index)
     return {"stats": stats(book["ret"], n_trials), "spy_stats": stats(spy, n_trials),
-            "vs": _vs_benchmark(book["ret"], spy, n_trials), "start": book.index[0],
+            "vs": _vs_benchmark(book["ret"], spy, n_trials, rf), "start": book.index[0],
             "turnover_ann": float(book["turnover"].sum() / (len(book) / 252.0)),
             "cost_ann": float(book["cost"].mean() * 252.0), "orders": int((book["turnover"] > 0).sum()),
             "avg_held": float(book["n_held"].mean())}
