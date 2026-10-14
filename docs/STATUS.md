@@ -1,7 +1,7 @@
-# Project status: IDLE, waiting for the next card batch (2026-10-14 11:05 ET)
+# Project status: BATCH 8 RUNNING; batches 9 and 10 done (2026-10-14 11:40 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
-No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged. No jobs running.
+No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
 
 ## Results since 2026-10-13 (all committed)
 - Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
@@ -18,6 +18,28 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   seo_marketed_offer_rebound -6.9% over 2024-26). The merger card's trades show the DEFM14A / SC TO-T flag is
   noisy: 1 completed deal, 23 of 52 break stops (descriptive note in the results file; feedback sent to the
   research thread).
+
+- Batch 9 (weights cards, docs/preregistration/2026-10-14-batch9-results.md; `research/b9_books.py` on the daily
+  weights book `research/weights_book.py`; store data/live/replay_b9.duckdb = batch-6 store + 2016-24 SSO bars):
+  **both FAIL** the alpha-t bar. sp500_momentum_index_replica beat SPY in both windows (+17.0% vs +12.4% a year in
+  2017-24, +27.0% vs +16.4% in 2024-26, drops no deeper; alpha t 1.30 and 0.73); chosen knowing SPMO's record, so
+  at most a forward test. leveraged_sp500_trend_switch made more than SPY but dropped -46% vs -34% in 2017-24.
+- Batch 10 (docs/preregistration/2026-10-14-batch10-results.md, `research/b10_books.py`): the same momentum rules
+  on mid caps (ranks 501-900) and small caps (901-1,500) **both FAIL** against SPY (mid +8.2%, small +16.9% vs SPY
+  +16.4% in 2024-26); both beat their own cap-weighted universe by about 5 points a year (descriptive).
+- Batch 8 (docs/preregistration/2026-10-14-batch8.md): merger re-test with a flag from EDGAR filing headers
+  (`data/b8.py`, table `form_parties` in data/live/replay_b7.duckdb); 4 signals in Jan-Oct 2025. RUNNING:
+  `scripts/run_prereg_batch.sh b8 2026-10-14 merger_target_spread_capture_v2` (N_TRIALS=2, log
+  data/logs/research/batch8.log). Its first start failed on a settings `extends` chain deeper than five levels
+  (amendment in the pre-registration); keep book configs within prereg_<tag>.yaml -> prereg_b6.yaml -> live.yaml.
+- Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
+  $3,300 trillion on 2019-08-30; also HXL, TXNM, VCEL, HL, CPK). Batches 3, 5, 6 and 8 rank or filter on `mcap_pit`
+  without a guard (a handful of names misranked; not re-run). Batch 9/10 drop names whose `mcap_pit` exceeds 10,000 x
+  their 63-session median dollar volume. A fix at the source (`data.fundamentals.share_issuance_features`) would
+  need its own decision: it changes every earlier mcap-ranked result.
+- Waiting for the owner (the coordinator posted a decision card in the project chat; do not ask again): keep the
+  two-window bar, add a 2017-26 full-period test set in advance for new cards only (recommended), or forward-test
+  the best near-miss on paper. Until he answers, grading stays unchanged.
 
 Runner lessons:
 - `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year. Beside other
