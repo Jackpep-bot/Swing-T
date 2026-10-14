@@ -1,33 +1,30 @@
-# Project status: BATCH 7 RUNNING; batch 5 2017-24 extras running (2026-10-14 09:31 ET)
+# Project status: IDLE, waiting for the next card batch (2026-10-14 11:05 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
-No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
+No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged. No jobs running.
 
 ## Results since 2026-10-13 (all committed)
 - Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
 - Batch 5 (15 cards, docs/preregistration/2026-10-13-batch5-results.md): **all FAIL** on 2024-26. Best books:
   piotroski_fscore8_small_value +12.2%, clenow_stocks_on_the_move_midcap +11.8%, double_surprise_smallmid +8.0%
-  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade in 2024-26 (its rank >= 3,200
-  rule is probably out of reach among the ~2,800 names with a filed share count; not checked further).
+  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade in either window (its rank >=
+  3,200 rule is probably out of reach among the ~2,800 names with a filed share count; not checked further).
+  Descriptive 2017-24 replays of the yearly cards (they can never pass): tax_loss_loser_rebound +29.7% over
+  2017-24, net R t 3.00, alpha t 1.00 (but -3.1% in 2024-26); russell_recon_addition_frontrun +4.0%.
 - Batch 6 (docs/preregistration/2026-10-13-batch6-results.md, -vrp-results.md): **all five FAIL**. The SVXY overlay
   trailed SPY by 4.7% a year in 2024-26; `residual_reversal_ff3_etf`, re-run after the harness fix (amendment in
   the pre-registration), lost 8.5% over 2024-26 with alpha t -1.92.
+- Batch 7 (docs/preregistration/2026-10-14-batch7-results.md): **both FAIL** (merger_target_spread_capture -7.8%,
+  seo_marketed_offer_rebound -6.9% over 2024-26). The merger card's trades show the DEFM14A / SC TO-T flag is
+  noisy: 1 completed deal, 23 of 52 break stops (descriptive note in the results file; feedback sent to the
+  research thread).
 
-## Running (Mac on AC)
-1. Batch 7: `scripts/on_power.sh scripts/run_prereg_batch.sh b7 2026-10-14 merger_target_spread_capture,
-   seo_marketed_offer_rebound` (PID 93768, log data/logs/research/batch7.log), started 09:31 ET; pre-registered in
-   docs/preregistration/2026-10-14-batch7.md (commit de53150). Store data/live/replay_b7.duckdb
-   (scripts/build_b7_store.py: the batch-6 store + `form_events` from EDGAR).
-2. `scripts/on_power.sh scripts/run_prereg_batch.sh b5 2026-10-13 <15 slugs>` with ALWAYS_LONG = the three yearly
-   cards and GB17=10 (PID 86616, log data/logs/research/batch5.log): their 2017-24 replays, descriptive only
-   (run_batch5.sh skipped them: its 2017 step lacked --out, fixed). russell_recon_deletion_rebound's is done; the
-   other two run side by side (3.8 GB each). It then re-grades batch 5 and Telegrams.
-Budget lesson: `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year,
-so a runner started with 2017=30 waits while another runner's two 2017-24 replays run (it held batch 7 for 30
-minutes on 2026-10-14). Start runners beside 2017-24 work with GB17=7 (a 2017-24 replay holds about 4-6.5 GB).
-Batch 7 was restarted that way at 10:03 ET (wrapper PID 95341).
-Watcher lesson: a background `until pgrep -f ...` loop whose own command line contains `--tag prereg-` matches
-itself and blocks every runner's `drain` (it held batch 5 for 40 minutes on 2026-10-14). Watch log files instead.
+Runner lessons:
+- `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year. Beside other
+  2017-24 work start a runner with GB17=7 (a 2017-24 replay holds about 4-6.5 GB), or it waits (batch 7 lost 30
+  minutes on 2026-10-14).
+- A background `until pgrep -f ...` loop whose own command line contains `--tag prereg-` matches itself and blocks
+  every runner's `drain`. Watch log files instead.
 
 ## Next
 - New batches arrive daily from the research thread's routine (branch `claude/batchN-cards`, relayed by the
