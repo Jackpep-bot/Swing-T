@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Sequence
-from pathlib import Path
 
 import pandas as pd
 
