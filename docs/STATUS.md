@@ -1,4 +1,4 @@
-# Project status: BATCH 8 RUNNING; batches 9 and 10 done (2026-10-14 11:40 ET)
+# Project status: IDLE, waiting for batch 11; batches 5-10 all done, nothing passed (2026-10-14 12:45 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -27,19 +27,20 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
 - Batch 10 (docs/preregistration/2026-10-14-batch10-results.md, `research/b10_books.py`): the same momentum rules
   on mid caps (ranks 501-900) and small caps (901-1,500) **both FAIL** against SPY (mid +8.2%, small +16.9% vs SPY
   +16.4% in 2024-26); both beat their own cap-weighted universe by about 5 points a year (descriptive).
-- Batch 8 (docs/preregistration/2026-10-14-batch8.md): merger re-test with a flag from EDGAR filing headers
-  (`data/b8.py`, table `form_parties` in data/live/replay_b7.duckdb); 4 signals in Jan-Oct 2025. RUNNING:
-  `scripts/run_prereg_batch.sh b8 2026-10-14 merger_target_spread_capture_v2` (N_TRIALS=2, log
-  data/logs/research/batch8.log). Its first start failed on a settings `extends` chain deeper than five levels
-  (amendment in the pre-registration); keep book configs within prereg_<tag>.yaml -> prereg_b6.yaml -> live.yaml.
+- Batch 8 (docs/preregistration/2026-10-14-batch8-results.md): merger re-test with a flag from EDGAR filing headers
+  (`data/b8.py`, table `form_parties` in data/live/replay_b7.duckdb) **FAIL**: -2.6% over 2024-26, 24 trades, 2 of 11
+  closed trades were completed deals (the card needed over half). Its first start failed on a settings `extends`
+  chain deeper than five levels (amendment in the pre-registration); keep book configs within
+  prereg_<tag>.yaml -> prereg_b6.yaml -> live.yaml.
 - Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
   $3,300 trillion on 2019-08-30; also HXL, TXNM, VCEL, HL, CPK). Batches 3, 5, 6 and 8 rank or filter on `mcap_pit`
   without a guard (a handful of names misranked; not re-run). Batch 9/10 drop names whose `mcap_pit` exceeds 10,000 x
   their 63-session median dollar volume. A fix at the source (`data.fundamentals.share_issuance_features`) would
   need its own decision: it changes every earlier mcap-ranked result.
-- Waiting for the owner (the coordinator posted a decision card in the project chat; do not ask again): keep the
-  two-window bar, add a 2017-26 full-period test set in advance for new cards only (recommended), or forward-test
-  the best near-miss on paper. Until he answers, grading stays unchanged.
+- Owner's decision 2026-10-14 16:14 UTC ("Add full-period test"): from batch 11 on, every card is also graded on one
+  pooled 2017-26 window set in advance (docs/gates.md, docs/preregistration/TEMPLATE.md; run new engine batches with
+  POOLED=1 in scripts/run_prereg_batch.sh; weights cards simulate 2017-01-01 .. 2026-10-05 in one run). Batches 5-10
+  are not re-graded.
 
 Runner lessons:
 - `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year. Beside other
