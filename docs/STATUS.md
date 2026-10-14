@@ -1,4 +1,4 @@
-# Project status: batches 5-14 all done, nothing passed; batch 15 and the total-return figures next (2026-10-14 15:30 ET)
+# Project status: batches 5-16 all done, nothing passed; total-return figures, Tiingo fetcher, after-tax column next (2026-10-14 16:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -55,6 +55,16 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
 - Batch 15 (docs/preregistration/2026-10-14-batch15-results.md, `research/b15_books.py`): sp500_quality_index_replica
   **FAIL**: +14.9% vs SPY +13.6% a year pooled, beat SPY in both halves, alpha +0.6% (t 0.32), turnover 188% a year
   (card guessed 40-70%). Its daily excess correlates only 0.26 with the momentum replica's (a diversifier, descriptive).
+- Batch 16 (docs/preregistration/2026-10-14-batch16-results.md, `research/b16_books.py`; chosen after batch 14):
+  sp500_momentum_profitability_replica **FAIL** (bar 2.690): +16.5% vs SPY +13.6% pooled, alpha +2.4% (t 0.92), beat
+  SPY in both halves; the plain replica made +19.1% over the same window (daily-excess correlation 0.90). Adding
+  profitability cut return more than risk.
+- Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
+  downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
+  Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
+  Of 208 published predictors, 23 have t >= 2 since 2017 (about 5 by luck); the value-weighted gross profitability
+  long-short (GP) is the strongest large-cap one (+15.1% a year, t 2.5). Candidate leads for the research thread:
+  earnings-surprise streaks, big-firm earnings surprise, net payout yield, net external financing.
 - Dead-man alert (`ops/deadman.py`, deploy/launchd/com.swing.deadman.plist): Telegram "Nightly missing" at 08:30 on
   weekdays when the morning's nightly has not finished. Built and tested; NOT installed (installing a launchd job
   needs the owner's yes: `scripts/install-launchd.sh --deadman --settings config/live.yaml`).
@@ -65,7 +75,7 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
   minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
 - Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
-  batch): 47 cards after batch 15. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  batch): 48 cards after batch 16. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
   had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
   -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
   momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
