@@ -57,7 +57,7 @@ print(",".join(keep))
 PY
 )
 echo "2017-24 window for: $LONG"
-uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo $LONG 2017)" --alpha-slugs $LONG --window-years 2017 --no-eval
+uv run python -m swing_engine.research.prereg_run $COMMON --slugs "$(todo $LONG 2017)" --alpha-slugs $LONG --window-years 2017 --out $OUT --no-eval
 drain
 uv run python -m swing_engine.research.prereg_eval --settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --slugs $SLUGS --benchmark SPY --alpha-slugs $SLUGS --out $OUT
 uv run python -m swing_engine.research.prereg_eval --settings config/prereg_b5.yaml --tag-prefix prereg-b5- --n-trials 15 --slugs $SLUGS --benchmark IWM --alpha-slugs $SLUGS --out ${OUT%.md}-iwm.md

@@ -1503,6 +1503,61 @@ def _big_ff3_resid_mom(ctx: _Ctx, n: str, form: str) -> pd.Series:
     return ctx.col(f"ff3_resid_mom_{n}_{form}").where(ok)
 
 
+# ----------------------------------------------------------------------------------------------- batch 6
+# docs/preregistration/2026-10-13-batch6.md (card residual_reversal_ff3_etf)
+ETF3_COLUMNS = ("etf_mkt", "etf_smb", "etf_hml")  # data.b6.join_b6 panel columns (decimal daily returns)
+ETF3_TOM_DAYS = (-1, -2)  # scored on a month's last two sessions only: the rebalance and the hold zone before it
+
+
+def _etf3_score(y: np.ndarray, mkt: np.ndarray, smb: np.ndarray, hml: np.ndarray, tom: np.ndarray,
+                fit: int, form: int, gap: int, min_fit: int) -> np.ndarray:
+    """One symbol: on rows with ``tom`` in ETF3_TOM_DAYS, fit y = a + b'[mkt, smb, hml] over the ``fit`` rows that
+    end ``gap`` rows before the row (complete rows only, at least ``min_fit``; fewer than ``fit`` exist at the
+    start of the history), then score the last ``form`` rows' residuals y - a - b'x as sum / the fit residuals'
+    population std. NaN elsewhere and when any of the last ``form`` rows has a missing input."""
+    k = len(y)
+    x = np.column_stack([np.ones(k), mkt, smb, hml])
+    ok = np.isfinite(y) & np.isfinite(x).all(axis=1)
+    x0, y0 = np.where(ok[:, None], x, 0.0), np.where(ok, y, 0.0)
+
+    def csum(a: np.ndarray) -> np.ndarray:
+        return np.concatenate([np.zeros((1, *a.shape[1:])), np.cumsum(a, axis=0)])
+
+    c_n, c_x, c_y, c_yy = csum(ok.astype(float)), csum(x0), csum(y0), csum(y0 * y0)
+    c_xx, c_xy = csum(x0[:, :, None] * x0[:, None, :]), csum(x0 * y0[:, None])
+
+    def win(c: np.ndarray, end: np.ndarray, n: int) -> np.ndarray:
+        return c[end + 1] - c[np.maximum(end + 1 - n, 0)]
+
+    out = np.full(k, np.nan)
+    t = np.flatnonzero(np.isin(tom, ETF3_TOM_DAYS))
+    t = t[(t - gap >= 0) & (t + 1 >= form)]
+    if t.size:
+        fe = t - gap
+        n_fit = win(c_n, fe, fit)
+        t, fe, n_fit = (a[(win(c_n, t, form) == form) & (n_fit >= min_fit)] for a in (t, fe, n_fit))
+    if not t.size:
+        return out
+    sxx, sxy = win(c_xx, fe, fit), win(c_xy, fe, fit)
+    b = (np.linalg.pinv(sxx) @ sxy[..., None])[..., 0]
+    var = (win(c_yy, fe, fit) - 2.0 * np.einsum("ij,ij->i", b, sxy) + np.einsum("ij,ijk,ik->i", b, sxx, b)) / n_fit
+    e = win(c_y, t, form) - np.einsum("ij,ij->i", b, win(c_x, t, form))
+    out[t] = np.where(var > 0, e / np.sqrt(np.where(var > 0, var, 1.0)), np.nan)
+    return out
+
+
+def _etf3_resid_rev(ctx: _Ctx, fit: str, form: str, gap: str, min_fit: str) -> pd.Series:
+    """``etf3_resid_rev_<fit>_<form>_<gap>_<min_fit>``: one-month residual on ETF factor proxies (Blitz, Huij,
+    Lansdorp & Verbeek 2013; card residual_reversal_ff3_etf), on each month's last two sessions (``_etf3_score``).
+    Point-in-time: the factor columns are same-day ETF returns, known at the row's close. NaN without them."""
+    if not all(c in ctx.df.columns for c in ETF3_COLUMNS):
+        return pd.Series(np.nan, index=ctx.df.index)
+    y = ctx.ps(ctx.c, pct_return, 1)
+    f, fo, g, m = int(fit), int(form), int(gap), int(min_fit)
+    return ctx.series(ctx.loop(lambda *a: _etf3_score(*a, fit=f, form=fo, gap=g, min_fit=m), y,
+                               *(ctx.df[c] for c in ETF3_COLUMNS), _calendar(ctx)["tom_day"]))
+
+
 # ----------------------------------------------------------------------------------------------- registry
 def _cal(name: str) -> Feature:
     return lambda ctx: _calendar(ctx)[name]
@@ -1641,6 +1696,7 @@ EXTRA_PATTERNS: list[tuple[re.Pattern[str], Callable[..., pd.Series], str, int |
     (re.compile(r"wk_fresh"), _wk_fresh, "wk_fresh", None),
     (re.compile(rf"med_dv_{_N}"), _med_dv, "med_dv_63", None),
     (re.compile(rf"rvar_{_N}"), _rvar, "rvar_22", None),
+    (re.compile(rf"etf3_resid_rev_{_N}_{_N}_{_N}_{_N}"), _etf3_resid_rev, "etf3_resid_rev_120_21_22_60", None),
     (re.compile(r"wk_close"), lambda ctx: _wk(ctx, lambda g: g["close"]), "wk_close", None),
 ]
 

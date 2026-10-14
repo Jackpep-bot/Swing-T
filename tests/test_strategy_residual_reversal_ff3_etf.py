@@ -9,6 +9,7 @@ import pandas as pd
 import pytest
 
 from swing_engine.data.calendar import trading_days
+from swing_engine.features import extra
 from swing_engine.strategies import residual_reversal_ff3_etf as mod
 from tests.features_gbm import NY_TZ
 
@@ -17,6 +18,7 @@ MONTH_END, BEFORE = date(2025, 10, 31), date(2025, 10, 30)
 K = len(DAYS)
 END = DAYS.index(MONTH_END)
 PARAMS = {"buy_count": 2, "hold_count": 4, "universe_top": 8}
+COL = "etf3_resid_rev_756_21_22_500"
 
 
 def make_panel(n: int = 10) -> pd.DataFrame:
@@ -39,23 +41,35 @@ def strat(**over):
     return mod.ResidualReversalFf3Etf({**PARAMS, **over})
 
 
-def test_score_matches_a_direct_regression_and_needs_complete_inputs():
+def _one(close: np.ndarray, f: np.ndarray) -> pd.DataFrame:
+    days = pd.DatetimeIndex(pd.to_datetime(trading_days("2020-01-02", "2026-12-31")[: len(close)])).tz_localize(NY_TZ)
+    return pd.DataFrame({"symbol": "AAA", "ts": days, "open": close, "high": close, "low": close, "close": close,
+                         "volume": 1e6, "etf_mkt": f[:, 0], "etf_smb": f[:, 1], "etf_hml": f[:, 2]})
+
+
+def test_score_matches_a_direct_regression_on_month_ends_and_needs_complete_inputs():
     rng = np.random.default_rng(1)
     f = rng.normal(0.0, 0.01, size=(900, 3))
     r = 0.0002 + f @ np.array([1.2, 0.5, -0.3]) + rng.normal(0.0, 0.005, 900)
-    r[-21:] -= 0.002
     close = 20.0 * np.cumprod(1.0 + r)
-    got = mod.residual_score(close, f, fit=756, gap=22, form=21, min_fit=500)
-    ret, x = close[1:] / close[:-1] - 1.0, np.column_stack([np.ones(899), f[1:]])
-    xf, yf = x[899 - 22 - 756:899 - 22], ret[899 - 22 - 756:899 - 22]
+    p = _one(close, f)
+    out = extra.ensure_extra(p, [COL])[COL]
+    month = p["ts"].dt.tz_localize(None).dt.to_period("M")
+    last = np.r_[month.to_numpy()[1:] != month.to_numpy()[:-1], False]  # complete months' last sessions
+    t = int(np.flatnonzero(last)[-1])
+    ret, x = p["close"].pct_change().to_numpy(), np.column_stack([np.ones(900), f])
+    xf, yf = x[t - 22 - 755:t - 22 + 1], ret[t - 22 - 755:t - 22 + 1]
     beta = np.linalg.solve(xf.T @ xf, xf.T @ yf)
-    want = (ret[-21:] - x[-21:] @ beta).sum() / np.std(yf - xf @ beta)
-    assert got == pytest.approx(want) and got < -5.0  # 21 x -0.2% against 0.5% daily noise
-    hole = close.copy()
-    hole[-5] = np.nan
-    assert np.isnan(mod.residual_score(hole, f, 756, 22, 21, 500))  # a gap inside the last 21 sessions
-    assert np.isnan(mod.residual_score(close[-400:], f[-400:], 756, 22, 21, 500))  # under 500 fit sessions
-    assert np.isfinite(mod.residual_score(close[-600:], f[-600:], 756, 22, 21, 500))  # a short history that has 500
+    want = (ret[t - 20:t + 1] - x[t - 20:t + 1] @ beta).sum() / np.std(yf - xf @ beta)
+    assert out.iloc[t] == pytest.approx(want, rel=1e-6)
+    assert np.isfinite(out.iloc[t - 1]) and out.iloc[t - 2:t - 1].isna().all()  # the last two sessions only
+    hole = p.assign(close=p["close"].where(p.index != t - 5))
+    assert np.isnan(extra.ensure_extra(hole, [COL])[COL].iloc[t])  # a gap inside the last 21 sessions
+    young = extra.ensure_extra(p.iloc[t - 500:t + 1].reset_index(drop=True), [COL])[COL]
+    assert young.isna().all()  # under 500 complete sessions in the fit window
+    assert np.isfinite(extra.ensure_extra(p.iloc[t - 560:t + 1].reset_index(drop=True), [COL])[COL].iloc[-1])
+    shocked = p.assign(etf_mkt=np.where(p.index > t, 0.5, p["etf_mkt"]))  # later factor values never move it
+    assert extra.ensure_extra(shocked, [COL])[COL].iloc[t] == pytest.approx(out.iloc[t])
 
 
 def test_buys_the_lowest_residuals_of_the_largest_names_at_month_end_only():
@@ -65,7 +79,10 @@ def test_buys_the_lowest_residuals_of_the_largest_names_at_month_end_only():
     top = sigs[0]
     assert top.target is None and top.stop == pytest.approx(top.entry * 0.80) and top.features["rank"] == 1
     assert s.signals(panel, BEFORE) == [] and s.signals(panel, DAYS[END + 1]) == []
-    assert s.engine_trail is False and s.warmup_calendar_days == 1200
+    assert s.engine_trail is False and s.warmup_calendar_days == 1200 and s.extra_features == [COL]
+    full = extra.ensure_extra(panel, [COL])
+    tail = full.loc[full["ts"].dt.date >= DAYS[END - 299]]  # what the replay hands `signals` (300 sessions)
+    assert [x.symbol for x in sorted(strat().signals(tail, MONTH_END), key=lambda x: -x.score)] == ["S7", "S6"]
 
 
 def test_exclusions_point_in_time_and_silence_without_the_join():

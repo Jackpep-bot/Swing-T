@@ -249,7 +249,7 @@ def _with_market_series(panel: pd.DataFrame) -> pd.DataFrame:
     noise = lambda k: np.random.default_rng(k).normal(0.0, 0.01, seed.max() + 1)[seed]  # noqa: E731
     sym = panel["symbol"].astype(str).map(lambda s: sum(map(ord, s)))  # EDGAR-style per-symbol values (ccr_score)
     return panel.assign(vix_close=15.0 + 100.0 * np.abs(noise(1)), ff_mkt_rf=noise(2), ff_smb=noise(3),
-                        ff_hml=noise(4), ff_rf=0.0001, gross_prof=sym / 1000.0, shares_outstanding=1e6 * sym,
+                        ff_hml=noise(4), ff_rf=0.0001, etf_mkt=noise(5), etf_smb=noise(6), etf_hml=noise(7), gross_prof=sym / 1000.0, shares_outstanding=1e6 * sym,
                         # data.fundamentals.join_share_issuance + store history (big_net_issuance)
                         mcap_pit=1e6 * sym * panel["close"], close_as_traded=panel["close"],
                         net_share_issuance=sym / 1e4, pre_panel_bars=600.0)
