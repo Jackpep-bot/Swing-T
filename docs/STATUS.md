@@ -1,58 +1,48 @@
-# Project status: BATCH 5 RUNNING, BATCH 6 QUEUED BEHIND IT; small-cap map done, no candidates (2026-10-13 20:00 ET)
+# Project status: BATCH 7 BEING PREPARED; batch 6 card re-run and batch 5 2017-24 extras running (2026-10-14 08:10 ET)
 
-Branch `claude/project-thread-fesglg` (PR https://github.com/Jackpep-bot/Swing-T/pull/3) continues from
-`claude/project-thread-4wq9xa` (PR 2, still open, ends at 62455ed).
+Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
+No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
 
-## Small-cap map: DONE 2026-10-13 18:55 ET, nothing found (docs/edge_map_smallcap.md)
-Run 20261013-155159, every strategy on the 2,500 stocks after the 1,500 most liquid, 2024-26, 10/10 chunks.
-**0 of 870 cells** are positive against SPY in both halves, at t >= 2 or even at t >= 1 (luck alone would give about
-22 at t >= 1). Pooled, every liquidity band loses in both halves: net R -0.10 to -0.26, -0.17 to -0.39 against SPY.
-Small caps do not rescue these methods; they are worse there than on the liquid 1,500. 2,955 trials logged (9,707 in
-all). So there is no probation candidate, no reason to widen the nightly's universe, and nothing for the
-`event_avoid_filters` card to be applied to. The lane stores data/live/research_20261013-155159_l0..l3.duckdb
-(4 copies of the store) hold the ledgers; delete them with the other old copies when the owner says so.
+## Results since 2026-10-13 (all committed)
+- Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
+- Batch 5 (15 cards, docs/preregistration/2026-10-13-batch5-results.md): **all FAIL** on 2024-26. Best books:
+  piotroski_fscore8_small_value +12.2%, clenow_stocks_on_the_move_midcap +11.8%, double_surprise_smallmid +8.0%
+  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade (its rank >= 3,200 rule is
+  probably out of reach among the ~2,800 names with a filed share count; not checked further).
+- Batch 6 (docs/preregistration/2026-10-13-batch6-results.md, -vrp-results.md): the SVXY overlay and three stock
+  cards **FAIL**; `residual_reversal_ff3_etf` made no signal (harness bug: the replay hands signals() 300 sessions,
+  the module fitted 756). Fixed as a panel feature (`etf3_resid_rev_756_21_22_500`), amendment written in the
+  pre-registration, re-running now.
 
-## Running
-Owner 19:23 ET: "push all tasks forward and increase a thread of research into new swing strategies constantly
-scraping and comparing data internally". The coordinator runs a cloud research thread (daily routine) that cards new
-strategies; each batch arrives as branch `claude/batchN-cards`. For each: merge the cards, code them (add-strategy
-skill; a card that is not a stock strategy gets a research module, as research/vrp_overlay.py), commit a
-pre-registration BEFORE any run, harness-check signal counts, then queue
-`scripts/run_prereg_batch.sh <tag> <date> <slugs>` behind whatever is running (see its header).
-While a replay batch runs, anything new under swing_engine/strategies/ must import cleanly from the first save:
-every replay that starts imports the whole package (develop a module as `_wip_<slug>.py`, rename when its tests pass).
+## Running (started 2026-10-14 08:00 ET, Mac on AC)
+1. `scripts/on_power.sh scripts/run_prereg_batch.sh b6 2026-10-13 <4 slugs>` (PID 85644, log
+   data/logs/research/batch6.log): replays residual_reversal_ff3_etf on 2024-26 (the other three are skipped as
+   finished), 2017-24 only if it meets the rule, re-grades all four, Telegrams. The no-signal run's file is kept as
+   data/live/runs/replay/...residual_reversal_ff3_etf.json.no-signals; its trial stays in data/trials.jsonl.
+2. `scripts/on_power.sh scripts/run_prereg_batch.sh b5 2026-10-13 <15 slugs>` with ALWAYS_LONG = the three yearly
+   cards (PID 85665, log data/logs/research/batch5.log): their 2017-24 replays, descriptive only (they can never
+   pass), which run_batch5.sh skipped (its 2017 step lacked --out; fixed). One at a time on a 30 GB budget; a
+   2017-24 replay held 3.6 GB after 9 minutes, so a restart with GB17=10 would run all three at once.
+3. `uv run python scripts/build_b7_store.py` (log data/logs/research/b7_store.log): data/live/replay_b7.duckdb =
+   the batch-6 store + table `form_events` (DEFM14A, SC TO-T, 424B from EDGAR, 2015 on). About 50 minutes.
 
-`scripts/on_power.sh scripts/run_batch5.sh` (PID 72028, log data/logs/research/batch5.log). Started 18:56 ET at 3
-replays at a time; restarted 19:25 ET at 7 at a time (`--job-gb 2024=6`: a replay held 3.4 GB) without losing the
-three that were running. The script now skips any replay that is finished or still running (`todo`), so starting
-it again is safe. It replays the 15 batch-5 cards on 2024-26 (logs data/logs/research/pr_prereg-b5-*.log, empty
-until a replay ends), then 2017-24 (one at a time, 30 GB budget, not measured yet: raise it once the first one
-shows its real size) for the cards that meet the rule in 2024-26 plus the three once-a-year cards, grades
-(docs/preregistration/2026-10-13-batch5-results.md, `-iwm.md`), refreshes docs/income_view.md and Telegrams the
-verdicts. Pre-registered: docs/preregistration/2026-10-13-batch5.md (commit 1991e13).
-Do not run `swing ingest` on the live store while batch 5 runs: every replay starts by copying it.
-`scripts/on_power.sh` (owner: "start them I will plug in soon") starts a job on AC or on a battery at or above 25%
-(`BATT_FLOOR`), pauses it in place (SIGSTOP, Telegram notice) under that, and continues it on AC.
-If it is gone after a restart, start it again with nohup (see the script's header).
+## Next
+- Batch 7 (docs/proposals/swing-methods-2026-10/batch7/, merged @ f141623): merger_target_spread_capture and
+  seo_marketed_offer_rebound are coded and tested (commit 7aa1c53). When the b7 store is built: harness check
+  (signal counts), fill the harness section of docs/preregistration/2026-10-14-batch7.md, commit it, then queue
+  `WAIT_FOR="run_prereg_batch.sh b6" N_TRIALS=2 nohup scripts/on_power.sh scripts/run_prereg_batch.sh b7 2026-10-14
+  merger_target_spread_capture,seo_marketed_offer_rebound > data/logs/research/batch7.log 2>&1 &`.
+- New batches arrive daily from the research thread's routine (branch `claude/batchN-cards`, relayed by the
+  coordinator). For each: merge the cards, code them (add-strategy skill; a weights card gets a research module, as
+  research/vrp_overlay.py), commit a pre-registration BEFORE any run, harness-check signal counts ON A
+  REPLAY-SHAPED PANEL (the last 300 sessions with extras attached on the whole panel: that is what signals() gets),
+  then queue `scripts/run_prereg_batch.sh <tag> <date> <slugs>` behind whatever is running (see its header).
+- While a replay batch runs, anything new under swing_engine/strategies/ must import cleanly from the first save:
+  every replay that starts imports the whole package (develop a module as `_wip_<slug>.py`, rename when green).
 
-**Batch 6** (5 cards, docs/proposals/swing-methods-2026-10/batch6/, merged from claude/batch6-cards @ 8e794f1):
-coded, tested (2,737 tests pass), pre-registered (docs/preregistration/2026-10-13-batch6.md, commit 7504dbe) and
-QUEUED: `scripts/on_power.sh scripts/run_prereg_batch.sh b6 2026-10-13 ...` (PID 74305, log
-data/logs/research/batch6.log) waits for run_batch5.sh to end, then runs the SVXY volatility-premium book
-(research/vrp_overlay.py -> ...-batch6-vrp-results.md), replays the four stock cards on 2024-26 and on 2017-24 for
-those that meet the rule, grades (...-batch6-results.md, -iwm.md) and Telegrams. Store: data/live/replay_b6.duckdb
-(scripts/build_b6_store.py: live store copy + 2016-24 bars for SVXY, IWD, IWF, BIL + table `sic` from EDGAR);
-`data/b6.py` joins `sic2` and the ETF factor returns only on that store. Harness finding, in the pre-registration:
-`within_industry_reversal_no_news` had only 36 scored names on 2025-10-31 (few large caps go 21 sessions without
-news), so that book holds nearly every eligible name.
-Speed-up to do when batch 5 reaches 2017-24: its replays run one at a time on an unmeasured 30 GB budget. Read a
-running replay's memory (`ps -o rss`), then restart the runner with a real figure (edit `--job-gb` in
-scripts/run_batch5.sh, kill the wrapper, the script and prereg_run but NOT the replay, start the script again:
-`todo` skips what is finished or running). For batch 6 the same knob is the GB17 variable.
-
-When it is done: commit the results files and docs/income_view.md. A card that passes goes to a forward test only:
-`shadow_only` in config/live.yaml, and `probation: true` (paper, quarter risk; owner said yes) for ordinary swing
-signals the live sizer can trade.
+Waiting for the owner (unchanged): free always-on host (Oracle Always Free) yes/no; delete old lane store copies
+in data/live (about 25 GB, plus the four research_20261013-155159_l*.duckdb small-cap lanes); a second Alpaca paper
+account only when a card earns paper.
 
 Fixed 2026-10-13 (commit c28625e): a limit entry could take a target its fill bar reached before the fill
 (`backtest._check_exit` sold at that bar's open; `shadow.grade_one` counted its high). On the fill bar of a limit
