@@ -10,7 +10,11 @@ batches 1-13 and shaped to the research scoreboard's profile: fully invested or 
 | 1 | [sp500_four_signal_composite](sp500_four_signal_composite.md) | One book from momentum, gross profitability, net repurchases and value, equally weighted z-scores | 80-150%/yr |
 | 2 | [vol_scaled_momentum_replica](vol_scaled_momentum_replica.md) | Batch 9's replica unchanged, with exposure = min(1, 15% / its 126-day vol), rest in BIL | 150-250%/yr |
 
-Both were chosen knowing the earlier results (stated in each card). Trial counting: both are momentum-family trials
+Premise check (coordinator's request, after the survey addendum): [premise_check_french_momentum_profitability](premise_check_french_momentum_profitability.md)
+tests the core of card 1 on Ken French's long-only big-stock momentum and profitability portfolios from 1963. It is
+evidence for the idea, not a trial and not a pass route.
+
+Both cards were chosen knowing the earlier results (stated in each card). Trial counting: both are momentum-family trials
 (the family becomes 6: replica, mid, small, industry-neutral, these two), so both are graded at `alpha_t_critical(6)`
 = 2.638. Card 1 also reuses the profitability and repurchase signals; it is counted once, against the largest family.
 

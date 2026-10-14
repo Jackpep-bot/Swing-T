@@ -1,7 +1,7 @@
 {
   "batch": "batch14",
   "generated": "2026-10-14",
-  "kept": 2,
+  "kept": 3,
   "rejected": 2,
   "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(6)=2.638",
   "cards": [
@@ -34,6 +34,20 @@
       "family": "momentum",
       "family_trials": 6,
       "expected_turnover": "150-250%/yr"
+    },
+    {
+      "slug": "premise_check_french_momentum_profitability",
+      "source": "Ken French Data Library (approved round 1)",
+      "universe": "French BIG HiPRIOR and BIG HiOP portfolios",
+      "holding_period": "monthly",
+      "data_needed": "French 2x3 size-momentum, size-OP portfolios, FF3 factors",
+      "rule": "50/50 blend 1963-07..latest, CAPM alpha t >= 3.0 and positive in 3 subperiods = premise supported; plus correlation >= 0.5 with our 2017+ books. Not a trial, not a pass route.",
+      "card": "premise_check_french_momentum_profitability.md",
+      "kind": "premise_check",
+      "evidence_grade": "B",
+      "weights_card": false,
+      "family": "none",
+      "family_trials": 0
     }
   ]
 }
