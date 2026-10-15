@@ -123,6 +123,7 @@ def test_research_section_reads_this_weeks_verdicts_and_open_decisions(tmp_path)
     (tmp_path / "docs" / "preregistration").mkdir(parents=True)
     (tmp_path / "docs" / "preregistration" / "2026-10-13-x-results.md").write_text(
         "# X\n\n## Verdicts\n- **card_a**: FAIL\n- **card_b**: PASS\n")
+    (tmp_path / "docs" / "research_roundup_2026-10-15.md").write_text("# Round-up\n\n## Bottom line\n- none passed\n")
     (tmp_path / "docs" / "STATUS.md").write_text(
         "# Status\n\nStill waiting for the owner:\n1. Delete old copies?\n2. Always-on host?\n\nDone:\n- things\n")
     settings = settings_for(tmp_path)
@@ -131,6 +132,7 @@ def test_research_section_reads_this_weeks_verdicts_and_open_decisions(tmp_path)
     text = "\n".join(weekly.research_section(today - timedelta(days=3), today, settings, tmp_path))
     assert "`2026-10-13-x-results.md`: **card_a**: FAIL; **card_b**: PASS" in text
     assert "On paper probation (0.25 of normal risk): `cand`." in text
+    assert "### Round-up" in text and "### Bottom line" in text and "- none passed" in text
     assert "### Waiting for you" in text and "2. Always-on host?" in text and "things" not in text
     old = "\n".join(weekly.research_section(today - timedelta(days=30), today - timedelta(days=20), settings, tmp_path))
-    assert "No pre-registered result was written this week." in old
+    assert "No pre-registered result was written this week." in old and "Round-up" not in old

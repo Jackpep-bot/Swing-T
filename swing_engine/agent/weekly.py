@@ -220,6 +220,7 @@ def recommendations(drift: pd.DataFrame, settings: Settings) -> list[str]:
 
 RESULTS_GLOB = "docs/preregistration/*-results.md"
 STATUS_FILE = "docs/STATUS.md"
+ROUNDUP_GLOB = "docs/research_roundup_*.md"  # the research thread's one-page round-ups
 WAITING_MARKER = "waiting for the owner"  # the STATUS.md paragraph that lists the owner's open decisions
 VERDICT_WORDS = ("PASS", "FAIL", "Nothing passes")
 
@@ -239,6 +240,11 @@ def research_section(start: date, end: date, settings: Settings, root: Path = RO
         found = True
     if not found:
         lines.append("No pre-registered result was written this week.")
+    for path in sorted(root.glob(ROUNDUP_GLOB)):  # a round-up written this week goes in whole, headings demoted
+        if start <= date.fromtimestamp(path.stat().st_mtime) <= end:
+            body = path.read_text(encoding="utf-8").splitlines()
+            lines += ["", f"### {body[0].lstrip('# ').strip()}" if body else f"### {path.name}",
+                      *[("#" + ln) if ln.startswith("## ") else ln for ln in body[1:]]]
     probation = sorted(n for n, c in settings.strategies.items() if (c or {}).get("probation"))
     lines += ["", "On paper probation (" + f"{settings.risk.probation_risk_mult:g}" + " of normal risk): "
               + (", ".join(f"`{n}`" for n in probation) if probation else "none") + "."]
