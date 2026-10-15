@@ -1,0 +1,24 @@
+{
+  "batch": "batch24",
+  "generated": "2026-10-15",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "confirmation of sp500_momentum_index_replica on 2011-01-03..2016-12-30: alpha > 0 and alpha t >= 1.96, haircut Sharpe > 0; PENDING Jack's approval of grading on pre-2016 years",
+  "cards": [
+    {
+      "slug": "replica_oos_2011_2016",
+      "source": "batch 9 sp500_momentum_index_replica, code unchanged",
+      "universe": "500 largest by mcap_pit (public-float fallback stated)",
+      "holding_period": "semiannual (Mar/Sep)",
+      "data_needed": "data/live/replay_2010.duckdb (Tiingo bars 2010-2015, EDGAR fundamentals)",
+      "rule": "Replica exactly as run in batch 9 (inert tilt kept); DATA_START 2010-01-04; window O 2011-2016.",
+      "card": "replica_oos_2011_2016.md",
+      "kind": "confirmation_test",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "momentum",
+      "family_trials": 7,
+      "expected_turnover": "~250%/yr (as replica)"
+    }
+  ]
+}
