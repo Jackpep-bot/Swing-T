@@ -1,4 +1,4 @@
-# Project status: batches 5-22 all done, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
+# Project status: batches 5-22 all done, batch 23 robustness MIXED, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
@@ -83,6 +83,12 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   satellite, about 11 names) made +3.2% a year, alpha -9.3% (t -2.23); the routine-buy placebo also lagged. In large
   caps, officers' open-market buys marked falling stocks that kept falling (descriptive; one more reason the insider
   family is closed here).
+- Batch 23 (docs/preregistration/2026-10-14-batch23-results.md, `research/b23_robustness.py`; robustness pass on the
+  momentum replica, not a trial): **MIXED**. All 6 timing variants and all 6 neighbouring settings beat SPY (alpha
+  +0.1% .. +5.1% a year), but the six-tranche book (timing luck removed) made +2.2% alpha (t 0.72), just under the
+  +2.45% "robust" line; the registered Feb/Aug timing was the luckiest of the six (+4.7%). Costs at 3x leave +3.3%.
+  Bootstrap: 5.2% of draws at or below zero alpha. Found: the score tilt never acts (the cap rule pins every name at
+  its cap), so the replica is top-100 momentum at capped market-cap weights.
 - Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
   downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
   Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
