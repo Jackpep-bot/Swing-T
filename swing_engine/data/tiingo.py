@@ -118,8 +118,21 @@ class TiingoProvider(BarProvider):
         out = out if include_delisted else out.loc[out["active"]]
         return normalize_symbols(out.sort_values("active", kind="mergesort"))  # a reused ticker: the active row wins
 
+    def ticker_spans(self) -> pd.DataFrame:
+        """Every row of the supported-tickers file (a reused ticker keeps one row per holder): ticker, exchange,
+        assetType, priceCurrency, startDate, endDate (dates parsed)."""
+        raw = self.http.get_bytes(TIINGO_TICKERS_URL)
+        with zipfile.ZipFile(io.BytesIO(raw)) as z:
+            df = pd.read_csv(z.open(z.namelist()[0]), dtype=str)
+        df = df.loc[df["ticker"].notna()].assign(ticker=lambda d: d["ticker"].str.upper())
+        for c in ("startDate", "endDate"):
+            df[c] = pd.to_datetime(df[c], errors="coerce").dt.date
+        return df.reset_index(drop=True)
+
     # ------------------------------------------------------------------ bars
-    def _symbol_bars(self, symbol: str, start: date, end: date) -> pd.DataFrame:
+    def daily_rows(self, symbol: str, start: date, end: date) -> pd.DataFrame:
+        """Tiingo's raw daily rows (OHLCV, adjClose, divCash, splitFactor) for one symbol, cached; empty for an
+        unknown ticker. Counts against the monthly symbol ledger unless cached."""
         url = f"{self.base_url}{PRICES_PATH.format(symbol=symbol.lower())}"
         public = {"startDate": start.isoformat(), "endDate": end.isoformat(), "format": "json"}
         key = RawCache.key(url, public, salt="eod") if end < self._today() else None
@@ -130,9 +143,12 @@ class TiingoProvider(BarProvider):
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:  # unknown ticker
                 log.info("tiingo_unknown_symbol", symbol=symbol)
-                return empty_bars()
+                return pd.DataFrame()
             raise
-        return split_adjust(pd.DataFrame(rows or []), symbol)
+        return pd.DataFrame(rows or [])
+
+    def _symbol_bars(self, symbol: str, start: date, end: date) -> pd.DataFrame:
+        return split_adjust(self.daily_rows(symbol, start, end), symbol)
 
     def daily_bars(self, symbols: Iterable[str], start: date, end: date) -> pd.DataFrame:
         start_d, end_d = as_date(start), as_date(end)
