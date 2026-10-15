@@ -1,9 +1,17 @@
-# Project status: batches 5-22 all done, batch 23 robustness MIXED, nothing passed; queue empty, builds a-c done, Tiingo key and dead-man install wait on the owner (2026-10-14 16:00 ET)
+# Project status: batches 5-23 done, nothing passed; batches 24-25 (2011-16 confirmations) pre-registered and approved, waiting on the 2010 store, which waits on TIINGO_API_KEY in .env (2026-10-15 15:20 ET)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
 
 ## Results since 2026-10-13 (all committed)
+- Batches 24-25 (2026-10-15; docs/preregistration/2026-10-15-batch24-25.md, cards merged from claude/batch25-cards
+  @ 9486ac1, which contains batch 24 @ 8f41eb3): out-of-sample confirmations on 2011-2016 of the momentum replica
+  (bar 1.96), the batch 16 momentum + profitability replica and batch 3's gross profitability (bar 2.241), code
+  unchanged except DATA_START = 2010-01-04. Jack approved grading on pre-2016 years ("Grade it" 18:47Z, "Grade them"
+  18:59Z, relayed by the coordinator). Pre-registered before the store exists; NOT run. Waiting on: TIINGO_API_KEY in
+  .env (checked 19:10Z: absent) -> `scripts/build_store_2010.py` (about two months on the free quota) -> store gates
+  6(a) and 6(c) -> runner (DATA_START as a parameter; not written yet) -> grade.
+
 - Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
 - Batch 5 (15 cards, docs/preregistration/2026-10-13-batch5-results.md): **all FAIL** on 2024-26. Best books:
   piotroski_fscore8_small_value +12.2%, clenow_stocks_on_the_move_midcap +11.8%, double_surprise_smallmid +8.0%
