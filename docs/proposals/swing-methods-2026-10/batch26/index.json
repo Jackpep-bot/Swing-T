@@ -1,0 +1,10 @@
+{
+  "batch": "batch26",
+  "generated": "2026-10-15",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "none: premise check / early read only; batch 24 and 25 rules unchanged",
+  "cards": [
+    {"slug": "premise_check_french_early_read_2011_2016", "source": "French 5x5 size x prior (2-12) and size x OP, 2x3 size x momentum, FF3", "universe": "French value-weighted portfolios, NYSE breakpoints", "holding_period": "monthly", "data_needed": "French library CSVs (round-1 approval)", "rule": "CAPM alpha 2011-01..2016-12; calibration correlation vs our books 2017-01..latest", "card": "premise_check_french_early_read_2011_2016.md", "kind": "premise_check", "evidence_grade": "B", "weights_card": false, "family": "none (not a trial)", "family_trials": 0, "expected_turnover": "n/a"}
+  ]
+}
