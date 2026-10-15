@@ -1,5 +1,15 @@
 # Plan: a stock-level research store back to 2010
 
+**Status 2026-10-15: built and tested offline; waiting only for TIINGO_API_KEY.** Code: `swing_engine/data/history2010.py`
+(steps 1-5, tests in tests/test_data_history2010.py on a fake Tiingo and an in-memory store), the provider's
+`daily_rows` / `ticker_spans` (data/tiingo.py), and `scripts/build_store_2010.py` (exits before any network call
+without the key). Run it once the key is in .env:
+`uv run python scripts/build_store_2010.py --source data/live/replay_b9.duckdb --target data/live/replay_2010.duckdb`
+(config/prereg_2010.yaml points at the result). Output: data/research/store2010/ (candidates, hand-check list,
+report with each name's seam scale and spread). Ticker matching for dead CIKs uses their last 10-K's XBRL instance
+file name (`ticker-yyyymmdd.xml`) checked against Tiingo's spans, since Tiingo's ticker list has no company names.
+Still open: research modules start at `b9_books.DATA_START` (2016-01-04); moving it is part of the grading decision.
+
 Owner approved 2026-10-14 19:20 UTC (card "Approve longer free history", option "All three"): AQR, Chen-Zimmermann,
 and a free Tiingo account he creates himself. This is the plan for the stock-level part; nothing below touches
 data/live/market.duckdb (research copies only), and nothing is graded on the new years until the owner says so.

@@ -95,10 +95,13 @@ No strategy has passed anything. Nothing is enabled or on probation; config/live
   Of 208 published predictors, 23 have t >= 2 since 2017 (about 5 by luck); the value-weighted gross profitability
   long-short (GP) is the strongest large-cap one (+15.1% a year, t 2.5). Candidate leads for the research thread:
   earnings-surprise streaks, big-firm earnings surprise, net payout yield, net external financing.
-- Tiingo provider (`data/tiingo.py`, registered `tiingo`; key slot TIINGO_API_KEY, the owner signs up and adds it):
-  delisted tickers, free caps enforced in code (41 requests an hour, 500 distinct symbols a month ledger under
-  data/raw/tiingo). Plan for a 2010-2026 research store from it plus EDGAR: docs/plan-store-2010.md (about two months
-  of free quota; grading on the early years needs the owner's word).
+- Tiingo provider (`data/tiingo.py`) and the **2010 store build, ready to run** (`data/history2010.py`,
+  `scripts/build_store_2010.py`, config/prereg_2010.yaml; docs/plan-store-2010.md): EDGAR full-index + public float
+  picks the 2009-15 large caps, dead names matched to Tiingo tickers through their last 10-K's instance file name,
+  bars scaled to the store's split basis on a 2016 overlap (and rejected if they disagree), splits, dividends and dead
+  CIKs' fundamentals added; offline tests pass. It exits before any network call until the owner adds
+  TIINGO_API_KEY to .env; the free quota makes the full build take about two calendar months. Grading on 2010-15
+  needs the owner's word.
 - After-tax line in the weekly report: the shadow book's forward record now tracks FIFO lots and reports realized
   short- / long-term gains and an after-tax return at illustrative 24% / 15% federal rates
   (`ops/shadow_books.realized_gains`, constants TAX_SHORT_TERM / TAX_LONG_TERM).
