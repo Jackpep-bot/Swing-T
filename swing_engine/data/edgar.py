@@ -1,5 +1,7 @@
-"""SEC EDGAR: current-filings Atom feed (feedparser), Form 4 open-market buys (edgartools, guarded) and
-the company_tickers.json symbol map. SEC fair-access policy: 10 requests/second and a User-Agent with
+"""SEC EDGAR: current-filings Atom feed (feedparser), Form 4 open-market buys (edgartools, guarded), the
+company_tickers.json symbol map, and the data.sec.gov submissions / XBRL companyfacts JSON that feed the
+point-in-time earnings-date and fundamentals tables (`data.fundamentals`, catalog slug
+`earnings_dates_point_in_time`, docs/catalog/catalog.json). SEC fair-access policy: 10 requests/second and a User-Agent with
 contact details, which `Edgar(user_agent)` sends on every call.
 
 Point-in-time: every row is stamped with the filing's acceptance/filing time, never a transaction date.
@@ -20,6 +22,7 @@ import structlog
 
 from ._common import TZ, as_date
 from ._http import Http
+from .calendar import next_trading_day, session_bounds
 
 log = structlog.get_logger(__name__)
 
@@ -44,6 +47,177 @@ FORM4_COLUMNS = [
 ]
 COMPANY_TICKER_COLUMNS = ["cik", "symbol", "name"]
 
+# ---- data.sec.gov: submissions (8-K item 2.02 earnings dates) and XBRL companyfacts -----------------------------
+SEC_DATA_BASE_URL = "https://data.sec.gov"
+SUBMISSIONS_PATH = "/submissions/CIK{cik}.json"
+SUBMISSIONS_PAGE_PATH = "/submissions/{name}"  # older filings pages listed under filings.files
+COMPANYFACTS_PATH = "/api/xbrl/companyfacts/CIK{cik}.json"
+HTTP_NOT_FOUND = 404
+EARNINGS_ITEM = "2.02"  # 8-K Item 2.02 "Results of Operations and Financial Condition"
+EARNINGS_FORMS: frozenset[str] = frozenset({"8-K"})  # 8-K/A amendments are not new announcements
+ITEMS_SEPARATOR = ","
+#: submissions JSON `acceptanceDateTime` ends in "Z" and is UTC. Checked 2026-10-08 on CIK 789019 (MSFT): Item 2.02
+#: 8-Ks read 20:04Z (EDT) / 21:04Z (EST), i.e. ~16:04 ET, MSFT's after-close release. AAPL's read 00:30Z the next
+#: UTC day (20:30 ET on the filingDate), also after the close. `parse_submissions` also floors the reaction session
+#: at the filingDate session, so a filing can never move earlier than the date EDGAR stamped.
+ACCEPTANCE_TZ = TZ
+ACCEPTANCE_UTC_HOPS = 1
+EARNINGS_COLUMNS = ["symbol", "cik", "accepted_at", "filing_date", "accession", "form", "session"]
+
+
+def earnings_session(accepted_at: Any) -> date:
+    """The first session whose close can react to an 8-K accepted at `accepted_at` (Eastern): that day when the
+    filing lands before the session close (pre-market or intraday), else the next session (after 16:00 ET, or
+    after an early close, or on a weekend/holiday)."""
+    ts = pd.Timestamp(accepted_at)
+    ts = ts.tz_localize(TZ) if ts.tzinfo is None else ts.tz_convert(TZ)
+    d = ts.date()
+    bounds = session_bounds(d)
+    if bounds is not None and ts < bounds[1]:
+        return d
+    return next_trading_day(d)
+
+
+def _acceptance_ts(value: Any) -> pd.Timestamp:
+    text = str(value or "").strip()
+    if not text:
+        return pd.NaT
+    ts = pd.to_datetime(text.rstrip("Zz"), errors="coerce")
+    if pd.isna(ts):
+        return pd.NaT
+    ts = ts.tz_localize(None) if ts.tzinfo is not None else ts
+    for _ in range(ACCEPTANCE_UTC_HOPS):  # see ACCEPTANCE_TZ
+        ts = ts.tz_localize("UTC").tz_convert(ACCEPTANCE_TZ).tz_localize(None)
+    return ts.tz_localize(ACCEPTANCE_TZ)
+
+
+def _reaction_session(accepted: pd.Timestamp, filing_date: Any) -> date:
+    """`earnings_session(accepted)`, never earlier than the first session on or after EDGAR's filingDate."""
+    session = earnings_session(accepted)
+    if pd.isna(filing_date):
+        return session
+    fd = filing_date.date()
+    floor = fd if session_bounds(fd) is not None else next_trading_day(fd)
+    return max(session, floor)
+
+
+def _filings_block(payload: dict[str, Any]) -> dict[str, Any]:
+    """The columnar filings block of a submissions document (`filings.recent`) or of an older page (top level)."""
+    filings = payload.get("filings")
+    if isinstance(filings, dict) and isinstance(filings.get("recent"), dict):
+        return filings["recent"]
+    return payload
+
+
+def _cell(block: dict[str, Any], key: str, i: int) -> Any:
+    col = block.get(key)
+    return col[i] if isinstance(col, list) and i < len(col) else None
+
+
+def parse_submissions(payload: dict[str, Any], symbols: Iterable[str], cik: str | None = None) -> pd.DataFrame:
+    """8-K filings with Item 2.02 from one submissions document/page, one row per (symbol, accession), stamped
+    with the acceptance datetime (Eastern) and the session that first reacts to it. Never the period date."""
+    block = _filings_block(payload)
+    forms = block.get("form") or []
+    cik_s = str(cik if cik is not None else payload.get("cik", "")).zfill(CIK_WIDTH)
+    syms = sorted({s.upper().strip() for s in symbols if s})
+    rows: list[dict[str, Any]] = []
+    for i, form in enumerate(forms):
+        if str(form) not in EARNINGS_FORMS:
+            continue
+        items = [t.strip() for t in str(_cell(block, "items", i) or "").split(ITEMS_SEPARATOR)]
+        if EARNINGS_ITEM not in items:
+            continue
+        accepted = _acceptance_ts(_cell(block, "acceptanceDateTime", i))
+        if pd.isna(accepted):
+            continue
+        filing_date = pd.to_datetime(_cell(block, "filingDate", i), errors="coerce")
+        accession = _cell(block, "accessionNumber", i)
+        for sym in syms:
+            rows.append(
+                {
+                    "symbol": sym,
+                    "cik": cik_s,
+                    "accepted_at": accepted,
+                    "filing_date": filing_date.date() if pd.notna(filing_date) else None,
+                    "accession": accession,
+                    "form": str(form),
+                    "session": _reaction_session(accepted, filing_date),
+                }
+            )
+    df = pd.DataFrame(rows, columns=EARNINGS_COLUMNS)
+    if df.empty:
+        return df
+    df["accepted_at"] = pd.to_datetime(df["accepted_at"], utc=True).dt.tz_convert(TZ)
+    return df.sort_values(["symbol", "accepted_at"], kind="mergesort").reset_index(drop=True)
+
+# ---- every 8-K item list and Schedule 13D filings (data.filings) from the same submissions pages ---------------
+EIGHTK_FORMS: frozenset[str] = frozenset({"8-K", "8-K/A"})
+EIGHTK_COLUMNS = ["symbol", "cik", "accession", "form", "filing_date", "acceptance", "session", "items"]
+#: Schedule 13D appears in the SUBJECT company's submissions list; EDGAR renamed the form "SCHEDULE 13D" when the
+#: structured 13D/G format began (Dec 2024), so both spellings are kept.
+SCHED13D_FORMS: frozenset[str] = frozenset({"SC 13D", "SC 13D/A", "SCHEDULE 13D", "SCHEDULE 13D/A"})
+SCHED13D_COLUMNS = ["symbol", "cik", "filer", "accession", "form", "filing_date", "acceptance", "session"]
+ACCESSION_FILER_WIDTH = 10  # accession prefix = CIK of the filer OR its filing agent (submissions JSON has no filer)
+
+
+def _no_time_session(filing_date: Any) -> date:
+    """A filing with a date but no acceptance time is visible from the session AFTER its filing date."""
+    return next_trading_day(filing_date.date())
+
+
+def parse_filings(
+    payload: dict[str, Any], symbols: Iterable[str], cik: str | None, forms: frozenset[str], columns: list[str]
+) -> pd.DataFrame:
+    """Rows for `forms` from one submissions document/page, one per (symbol, accession): `acceptance` (Eastern,
+    decoded from UTC like `parse_submissions`), `session` (first session whose close can react; the session after
+    filing_date when acceptance is missing), raw `items`, and `filer` (accession prefix)."""
+    block = _filings_block(payload)
+    cik_s = str(cik if cik is not None else payload.get("cik", "")).zfill(CIK_WIDTH)
+    syms = sorted({s.upper().strip() for s in symbols if s})
+    rows: list[dict[str, Any]] = []
+    for i, form in enumerate(block.get("form") or []):
+        if str(form) not in forms:
+            continue
+        filing_date = pd.to_datetime(_cell(block, "filingDate", i), errors="coerce")
+        accepted = _acceptance_ts(_cell(block, "acceptanceDateTime", i))
+        if pd.isna(accepted) and pd.isna(filing_date):
+            continue
+        session = _no_time_session(filing_date) if pd.isna(accepted) else _reaction_session(accepted, filing_date)
+        accession = str(_cell(block, "accessionNumber", i) or "")
+        items = ",".join(t.strip() for t in str(_cell(block, "items", i) or "").split(ITEMS_SEPARATOR) if t.strip())
+        for sym in syms:
+            rows.append({
+                "symbol": sym, "cik": cik_s, "filer": accession[:ACCESSION_FILER_WIDTH], "accession": accession,
+                "form": str(form), "filing_date": filing_date.date() if pd.notna(filing_date) else None,
+                "acceptance": accepted, "session": session, "items": items,
+            })
+    df = pd.DataFrame(rows, columns=columns)
+    if df.empty:
+        return df
+    df["acceptance"] = pd.to_datetime(df["acceptance"], utc=True).dt.tz_convert(TZ)
+    return df.sort_values(["symbol", "session", "accession"], kind="mergesort").reset_index(drop=True)
+
+
+def submission_tables(
+    pages: Iterable[dict[str, Any]], cik: str, symbols: Iterable[str]
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """(earnings_dates, eightk_items, sched13d) frames from one CIK's submissions pages (one fetch, three tables)."""
+    syms = list(symbols)
+    pages = list(pages)
+
+    def cat(frames: list[pd.DataFrame], columns: list[str]) -> pd.DataFrame:
+        frames = [f for f in frames if not f.empty]
+        if not frames:
+            return pd.DataFrame(columns=columns)
+        return pd.concat(frames, ignore_index=True).drop_duplicates(subset=["symbol", "accession"]).reset_index(drop=True)
+
+    return (
+        cat([parse_submissions(p, syms, cik) for p in pages], EARNINGS_COLUMNS),
+        cat([parse_filings(p, syms, cik, EIGHTK_FORMS, EIGHTK_COLUMNS) for p in pages], EIGHTK_COLUMNS),
+        cat([parse_filings(p, syms, cik, SCHED13D_FORMS, SCHED13D_COLUMNS) for p in pages], SCHED13D_COLUMNS),
+    )
+
 # edgartools' DataFrame column names have shifted between releases; look for any of these
 _CODE_CANDIDATES = ("Code", "TransactionCode", "transaction_code", "code")
 _AD_CANDIDATES = ("AcquiredDisposed", "acquired_disposed", "AD", "acquiredDisposed")
@@ -66,6 +240,7 @@ class Edgar:
         user_agent: str,
         *,
         base_url: str = SEC_BASE_URL,
+        data_base_url: str = SEC_DATA_BASE_URL,
         client: httpx.Client | None = None,
         calls_per_min: float = EDGAR_CALLS_PER_MIN,
         cache_dir: str | Path | None = None,
@@ -76,6 +251,7 @@ class Edgar:
             raise ValueError("edgar: user_agent must include a contact email (SEC fair-access policy)")
         self.user_agent = user_agent
         self.base_url = base_url.rstrip("/")
+        self.data_base_url = data_base_url.rstrip("/")
         self.http = Http(
             client=client,
             rate_per_min=calls_per_min,
@@ -221,5 +397,50 @@ class Edgar:
         )
         return df.sort_values("symbol").reset_index(drop=True)
 
+    # ------------------------------------------------------------------ data.sec.gov JSON
+    def _data_json(self, path: str) -> dict[str, Any] | None:
+        """GET a data.sec.gov JSON document through the shared fair-access bucket; None on 404."""
+        try:
+            return self.http.get_json(f"{self.data_base_url}{path}")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == HTTP_NOT_FOUND:
+                log.info("edgar_data_missing", path=path)
+                return None
+            raise
 
-__all__ = ["Edgar", "FORM4_COLUMNS", "CURRENT_COLUMNS", "COMPANY_TICKER_COLUMNS"]
+    def submissions(self, cik: str, *, include_older: bool = True) -> list[dict[str, Any]]:
+        """The submissions document for `cik` plus (with `include_older`) every older page it lists under
+        `filings.files`. Empty list when the CIK is unknown."""
+        first = self._data_json(SUBMISSIONS_PATH.format(cik=str(cik).zfill(CIK_WIDTH)))
+        if first is None:
+            return []
+        pages = [first]
+        if include_older:
+            for f in (first.get("filings") or {}).get("files") or []:
+                name = f.get("name") if isinstance(f, dict) else None
+                if name:
+                    page = self._data_json(SUBMISSIONS_PAGE_PATH.format(name=name))
+                    if page is not None:
+                        pages.append(page)
+        return pages
+
+    def earnings_dates(self, cik: str, symbols: Iterable[str], *, include_older: bool = True) -> pd.DataFrame:
+        """Point-in-time earnings announcements (8-K Item 2.02) for `cik`, one row per symbol sharing the CIK."""
+        syms = list(symbols)
+        frames = [parse_submissions(p, syms, cik) for p in self.submissions(cik, include_older=include_older)]
+        frames = [f for f in frames if not f.empty]
+        if not frames:
+            return pd.DataFrame(columns=EARNINGS_COLUMNS)
+        df = pd.concat(frames, ignore_index=True).drop_duplicates(subset=["symbol", "accession"])
+        return df.sort_values(["symbol", "accepted_at"], kind="mergesort").reset_index(drop=True)
+
+    def companyfacts(self, cik: str) -> dict[str, Any] | None:
+        """Raw XBRL companyfacts payload for `cik`; None when the filer has no XBRL facts (404)."""
+        return self._data_json(COMPANYFACTS_PATH.format(cik=str(cik).zfill(CIK_WIDTH)))
+
+
+__all__ = [
+    "Edgar", "FORM4_COLUMNS", "CURRENT_COLUMNS", "COMPANY_TICKER_COLUMNS", "EARNINGS_COLUMNS", "earnings_session",
+    "parse_submissions", "parse_filings", "submission_tables", "EIGHTK_COLUMNS", "SCHED13D_COLUMNS", "EIGHTK_FORMS",
+    "SCHED13D_FORMS",
+]

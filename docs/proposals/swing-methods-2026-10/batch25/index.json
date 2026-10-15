@@ -1,0 +1,11 @@
+{
+  "batch": "batch25",
+  "generated": "2026-10-15",
+  "kept": 2,
+  "rejected": 4,
+  "grading": "confirmation on 2011-01-03..2016-12-30 (later start if gross-profit coverage < 60%): alpha > 0, alpha t >= 2.241, haircut Sharpe > 0; under Jack's batch-24 approval if it covers pre-registered confirmations, else descriptive",
+  "cards": [
+    {"slug": "mom_prof_replica_oos_2011_2016", "source": "batch 16 code unchanged", "universe": "500 largest by mcap_pit", "holding_period": "semiannual", "data_needed": "replay_2010.duckdb, XBRL GP and assets", "rule": "Batch 16 book as run (inert tilt kept), DATA_START 2010-01-04", "card": "mom_prof_replica_oos_2011_2016.md", "kind": "confirmation_test", "evidence_grade": "B", "weights_card": true, "family": "momentum", "family_trials": 7, "expected_turnover": "~200%/yr (as batch 16)"},
+    {"slug": "gross_profitability_oos_2011_2016", "source": "batch 3 code unchanged", "universe": "500 largest non-financials", "holding_period": "63-504 sessions (engine)", "data_needed": "replay_2010.duckdb, XBRL GP and assets", "rule": "Batch 3 engine card as run, DATA_START 2010-01-04", "card": "gross_profitability_oos_2011_2016.md", "kind": "confirmation_test", "evidence_grade": "B", "weights_card": false, "family": "profitability", "family_trials": 4, "expected_turnover": "~40-200%/yr (as batch 3)"}
+  ]
+}

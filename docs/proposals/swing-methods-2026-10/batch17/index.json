@@ -1,0 +1,39 @@
+{
+  "batch": "batch17",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(2)=2.241",
+  "cards": [
+    {
+      "slug": "sp500_low_volatility_replica",
+      "source": "S&P 500 Low Volatility Index methodology; Baker, Bradley & Wurgler (2011); Frazzini & Pedersen (2014)",
+      "universe": "500 largest by mcap_pit, close >= $5, >= 253 sessions",
+      "holding_period": "quarterly (Feb/May/Aug/Nov trades)",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "100 lowest 252-day volatility (buffer: keep within lowest 130); weights 1/vol capped 3%; unused weight in SPY.",
+      "card": "sp500_low_volatility_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "low_risk",
+      "family_trials": 1,
+      "expected_turnover": "80-150%/yr"
+    },
+    {
+      "slug": "premise_check_french_low_variance",
+      "source": "Kenneth R. French Data Library, Portfolios Formed on Variance",
+      "universe": "CRSP, value-weighted quintiles",
+      "holding_period": "monthly",
+      "data_needed": "French library (approved round 1)",
+      "rule": "CAPM alpha of Lo 20 vs Mkt-RF, 1963-07..latest and three subperiods; supported if t >= 3 and alpha > 0 in each.",
+      "card": "premise_check_french_low_variance.md",
+      "kind": "premise_check",
+      "evidence_grade": "B",
+      "weights_card": false,
+      "family": "low_risk",
+      "family_trials": 0,
+      "expected_turnover": null
+    }
+  ]
+}

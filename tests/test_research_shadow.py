@@ -269,3 +269,20 @@ def test_a_stale_store_does_not_mark_names_delisted():
     record_signals(store, [long_signal("AAA", as_of, ENTRY, STOP, TARGET)], set(), as_of, None)
     grade_signals(store, date(2024, 2, 1), horizons=(5,))  # weeks later, but no newer bar anywhere
     assert store.read_table(SHADOW_TABLE).iloc[0][horizon_column("hit", 5)] == Hit.PENDING
+
+
+def test_stop_entry_fills_at_level_or_skips_when_untouched():
+    bars = _bars([(100.0, 103.0, 99.5, 102.0), (102.0, 111.0, 101.0, 110.0)])
+    g = grade_one(Side.LONG, STOP, TARGET, bars, (5,), entry_type="stop", entry_level=102.0)
+    assert g.entry_price == 102.0 and g.by_horizon[5].hit == Hit.TARGET
+    assert g.by_horizon[5].result_r == pytest.approx((TARGET - 102.0) / (102.0 - STOP))
+    miss = grade_one(Side.LONG, STOP, TARGET, bars, (5,), entry_type="stop", entry_level=104.0)
+    assert miss.skip_reason == "not_triggered"
+
+
+def test_limit_entry_fills_at_the_better_of_open_and_level():
+    bars = _bars([(100.0, 101.0, 97.0, 98.0), FLAT])
+    g = grade_one(Side.LONG, STOP, TARGET, bars, (5,), entry_type="limit", entry_level=98.0)
+    assert g.entry_price == 98.0
+    assert grade_one(Side.LONG, STOP, TARGET, bars, (5,), entry_type="limit", entry_level=96.0).skip_reason \
+        == "not_triggered"

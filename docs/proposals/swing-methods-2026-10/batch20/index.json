@@ -1,0 +1,24 @@
+{
+  "batch": "batch20",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(2)=2.241",
+  "cards": [
+    {
+      "slug": "global_equities_dual_momentum",
+      "source": "Antonacci (2014) Dual Momentum Investing",
+      "universe": "SPY, EFA, IEF",
+      "holding_period": "monthly signal",
+      "data_needed": "daily bars SPY, EFA, IEF, BIL (all in the store)",
+      "rule": "If SPY 12m return > BIL 12m return, hold the better of SPY and EFA by 12m return; else IEF (AGG substitute). Always fully invested.",
+      "card": "global_equities_dual_momentum.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "cross_asset_trend",
+      "family_trials": 2,
+      "expected_turnover": "100-300%/yr"
+    }
+  ]
+}

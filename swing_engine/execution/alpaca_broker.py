@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Iterable, Mapping
+from datetime import UTC, date, datetime
 from typing import Any
 
 import structlog
@@ -35,6 +36,7 @@ from swing_engine.core.registry import register
 from swing_engine.risk.limits import PCT
 
 try:
+    from alpaca.common.enums import Sort
     from alpaca.common.exceptions import APIError
     from alpaca.trading.client import TradingClient
     from alpaca.trading.enums import OrderClass, OrderSide, QueryOrderStatus, TimeInForce
@@ -66,6 +68,8 @@ SETTLED_STATUSES = frozenset({"canceled", "filled", "expired", "rejected", "repl
 CANCEL_SETTLE_POLLS = 10  # cancels are asynchronous; legs hold the shares until they are really gone
 CANCEL_SETTLE_INTERVAL_S = 0.5
 NO_POSITION = "no_position"
+ORDERS_PAGE_LIMIT = 500  # GET /v2/orders maximum page size
+LEGGED_CLASSES = frozenset({"bracket", "oco", "oto"})  # order classes whose exits are legs of a parent order
 REARM_PREFIX = "rearm"  # client ids of re-armed protective stops (not swing-*: never read as a strategy entry)
 
 
@@ -198,8 +202,39 @@ class AlpacaBroker(Broker):
         return result
 
     def open_orders(self) -> list[dict[str, Any]]:
-        request = GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True)
-        return [_to_dict(o) for o in self.client.get_orders(request)]
+        """Open orders with their nested legs. Once a bracket's entry has filled, Alpaca's status=open listing
+        returns only the working target leg: the stop leg waits in status ``held`` and is left out (seen on paper
+        2026-10-12: every night the position manager found "no open stop order" and tried to arm a second one).
+        For each bracket / OCO leg listed alone, the filled parent is listed in its place with both legs."""
+        orders = [_to_dict(o) for o in self.client.get_orders(GetOrdersRequest(status=QueryOrderStatus.OPEN, nested=True))]
+        lone = sorted({str(o.get("symbol")) for o in orders
+                       if _status_text(o.get("order_class")).lower() in LEGGED_CLASSES and not o.get("legs")})
+        if not lone:
+            return orders
+        request = GetOrdersRequest(status=QueryOrderStatus.ALL, nested=True, symbols=lone, limit=ORDERS_PAGE_LIMIT)
+        parents = []
+        for parent in (_to_dict(o) for o in self.client.get_orders(request)):
+            legs = [_to_dict(leg) for leg in parent.get("legs") or []]
+            if any(_status_text(leg.get("status")).lower() not in SETTLED_STATUSES for leg in legs):
+                parents.append({**parent, "legs": legs})
+        nested = {str(leg.get("id")) for parent in parents for leg in parent["legs"]}
+        return [o for o in orders if str(o.get("id")) not in nested] + parents
+
+    def closed_orders(self, since: date) -> list[dict[str, Any]]:
+        """Read-only: every closed order submitted on or after ``since`` (UTC midnight), oldest first, with
+        nested bracket legs (GET /v2/orders status=closed nested=true; a filled stop / target leg shows up in its
+        parent's ``legs`` with its own id, ``filled_at`` and ``filled_avg_price``)."""
+        after = datetime(since.year, since.month, since.day, tzinfo=UTC)
+        out: list[dict[str, Any]] = []
+        while True:
+            request = GetOrdersRequest(status=QueryOrderStatus.CLOSED, nested=True, after=after,
+                                       limit=ORDERS_PAGE_LIMIT, direction=Sort.ASC)
+            page = [_to_dict(o) for o in self.client.get_orders(request)]
+            out.extend(page)
+            last = datetime.fromisoformat(str(page[-1]["submitted_at"])) if page and page[-1].get("submitted_at") else None
+            if len(page) < ORDERS_PAGE_LIMIT or last is None or last <= after:
+                return out
+            after = last
 
     def cancel(self, order_id: str) -> None:
         self.client.cancel_order_by_id(order_id)

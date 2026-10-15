@@ -1,0 +1,36 @@
+{
+  "batch": "batch10",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 2,
+  "cards": [
+    {
+      "slug": "midcap_momentum_index_replica",
+      "source": "S&P Momentum Indices methodology; live ETF XMMO",
+      "universe": "mcap ranks 501-900",
+      "holding_period": "semiannual (Mar/Sep)",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Batch 9 sp500_momentum_index_replica rules unchanged on mcap ranks 501-900, 80 names.",
+      "card": "midcap_momentum_index_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "momentum_index",
+      "family_trials": 3
+    },
+    {
+      "slug": "smallcap_momentum_index_replica",
+      "source": "S&P Momentum Indices methodology; live ETF XSMO",
+      "universe": "mcap ranks 901-1,500",
+      "holding_period": "semiannual (Mar/Sep)",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Batch 9 sp500_momentum_index_replica rules unchanged on mcap ranks 901-1,500, 120 names.",
+      "card": "smallcap_momentum_index_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true,
+      "family": "momentum_index",
+      "family_trials": 3
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "batch": "batch22",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(5)=2.576",
+  "cards": [
+    {
+      "slug": "large_cap_opportunistic_insider_buys",
+      "source": "Cohen, Malloy & Pomorski (2012)",
+      "universe": "500 largest by mcap_pit, close >= $5",
+      "holding_period": "63 sessions from filing, monthly rebalance",
+      "data_needed": "daily bars, mcap_pit, Form 4 (approved round 1)",
+      "rule": "Officer/director code-P buys >= $50k by CMP-opportunistic insiders, filed in last 63 sessions; 2% each, max 50; unused weight in SPY.",
+      "card": "large_cap_opportunistic_insider_buys.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "insider",
+      "family_trials": 5,
+      "expected_turnover": "100-250%/yr"
+    }
+  ]
+}

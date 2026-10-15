@@ -1,0 +1,24 @@
+{
+  "batch": "batch18",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 3,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL); bar alpha_t_critical(3)=2.394",
+  "cards": [
+    {
+      "slug": "cz_blind_presample_composite",
+      "source": "Chen & Zimmermann v2.0.0 (approved 2026-10-14); McLean & Pontiff (2016)",
+      "universe": "500 largest by mcap_pit, close >= $5",
+      "holding_period": "semiannual (Jun/Dec trades)",
+      "data_needed": "CZ VW long-short returns (or original), daily bars, mcap_pit, XBRL concepts already loaded, dividends",
+      "rule": "Buildable CZ Accounting/Price/Trading predictors, no momentum or GP; selected if post-publication t >= 2 through 2016-12 (>= 60 months) and in-sample mean > 0, max 10; average percentile score; top 100 (buffer 150), mcap weights cap 5%; unused weight in SPY.",
+      "card": "cz_blind_presample_composite.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "cz_blind_composite",
+      "family_trials": 1,
+      "expected_turnover": "80-160%/yr"
+    }
+  ]
+}

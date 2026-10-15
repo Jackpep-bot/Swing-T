@@ -1,0 +1,22 @@
+{
+  "batch": "batch8",
+  "generated": "2026-10-14",
+  "kept": 1,
+  "rejected": 2,
+  "cards": [
+    {
+      "slug": "merger_target_spread_capture_v2",
+      "retest_of": "merger_target_spread_capture",
+      "trials_in_family": 2,
+      "source": "Mitchell & Pulvino 2001; Alpha Architect 2018",
+      "universe": "mcap_pit >= $300M, med_dv_63 >= $5M",
+      "holding_period": "to deal close, max 180 sessions",
+      "data_needed": "form_events with filer/subject CIK, 8-K items, daily bars incl. delisted",
+      "rule": "Targets only (subject-only SC TO-T, or own DEFM14A after own 8-K 1.01), 10% premium vs 25 sessions before announcement, 10-session stdev <= 1%; hold to delisting, -15% break, 180 sessions.",
+      "card": "merger_target_spread_capture_v2.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": false
+    }
+  ]
+}

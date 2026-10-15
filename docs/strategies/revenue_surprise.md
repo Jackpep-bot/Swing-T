@@ -1,0 +1,98 @@
+---
+slug: revenue_surprise
+name: Revenue surprise (Jegadeesh-Livnat)
+originators: [Narasimhan Jegadeesh and Joshua Livnat (Journal of Accounting and Economics 41, 2006; FAJ 62(2), 2006)]
+category: strategy
+decision: implement_disabled_for_comparison
+holding_period_days: [20, 21]
+timeframe: daily bars, quarterly signal
+direction: long
+regimes_good: [healthy_uptrend, narrow_uptrend]
+regimes_bad: [correction, high_vol_selloff]
+typical_win_rate: null
+typical_payoff_ratio: null
+evidence_grade: C
+free_data_ok: true
+status: not_built
+---
+
+# Revenue surprise
+
+## One-line summary
+Rank stocks on standardized seasonal change in revenue per share; the top decile earned a marginal premium for
+about one month after the report.
+
+## Origin and lineage
+Jegadeesh and Livnat, "Revenue surprises and stock returns" (JAE 2006) and "Post-earnings-announcement drift: the role
+of revenue surprises" (FAJ 2006). Their finding: drift is stronger when revenue and earnings surprises agree, because
+revenue-driven earnings growth persists more than cost-cutting. Replicated as "Rs" in Hou-Xue-Zhang.
+
+## Exact rules (catalog E25)
+- Rs = (revenue per share_q - revenue per share_{q-4}) / std of that change over the prior 8 quarters (minimum 6).
+- Monthly decile sort on the latest Rs; long the top decile (long-short in the papers); hold one month.
+
+## Why it should work
+Investors under-react to the persistence of top-line growth (harder to manage than EPS). Counterparty: slow updaters.
+Likely subject to the same post-2006 decay as PEAD (not separately verified).
+
+## When it works and when it fails
+Best as a confirmation of an earnings surprise in the same direction; weak alone. Expect concentration in small caps.
+
+## Parameters and sensitivity
+Per-share vs total revenue, holding period (1 vs 6 months; only 1 month is reported significant), size filters.
+
+## Evidence
+- HXZ (NBER w23394): Rs1 0.31%/month, t about 2.2: marginal and below the t > 3 hurdle for new factors.
+- Jegadeesh-Livnat magnitudes not verified this session (paywalled; abstract not available on RePEc). The FAJ version
+  reports drift stronger when revenue and earnings surprises have the same sign.
+
+## Common mistakes
+Using fiscal period end as the signal date (look-ahead); mixing XBRL revenue tags across years without mapping.
+
+## Implementation spec for swing-engine
+- Data: EDGAR companyfacts us-gaap revenue concepts in order `Revenues`, `RevenueFromContractWithCustomerExcludingAssessedTax`,
+  `SalesRevenueNet`; shares from `dei:EntityCommonStockSharesOutstanding` (already parsed in `data/float_data.py`) or
+  `WeightedAverageNumberOfDilutedSharesOutstanding`. Quarterly Q4 = FY - 9M YTD. Point-in-time on `filed`.
+- Feature `rs_ts`; cross-sectional `rs_rank` (0-1) per month.
+- Use: minor confirmation feature in the ML ranker and as a tie-breaker for `power_gap` / `episodic_pivot`.
+  Replay variant: top decile with `sue_ts > 0`, entry next open after month start, `max_hold_days = 21`, stop
+  `entry - 3 * atr_14`, `min_reward_risk = 0.0`.
+- Missing: XBRL revenue ingest, tag mapping, monthly cadence.
+
+## What the router should know
+Not a standalone strategy; feature only.
+
+## Signs of decay to monitor
+Information coefficient of `rs_rank` vs 21-day forward return <= 0 over trailing 24 months.
+
+## Sources
+- https://www.nber.org/system/files/working_papers/w23394/w23394.pdf
+- https://ideas.repec.org/a/eee/jaecon/v41y2006i1-2p147-171.html
+- https://ideas.repec.org/a/taf/ufajxx/v62y2006i2p22-34.html
+
+## Empirical (replay)
+_Generated 2026-10-13 by `swing_engine.research.cards` from `swing replay --no-router` on real data._ R per signal from the replay shadow ledger: every signal, entered the next session by its entry type, exited at its own stop or target or at the horizon close. `avg R` is gross; `net R` subtracts a round-trip cost per signal: half the stock's estimated spread (Abdi-Ranaldo, from its own daily bars) a side, at least 10 bp for names trading $50M+ a day and 20 bp otherwise, in R of the signal's stop distance. `vs SPY` is the net R minus what SPY returned over the same days on the same dollars (beta 1, dividends ignored): the leaderboard's yardstick. Regimes are the playbook router's labels on the signal day.
+About 141 strategies were replayed together, so a few will look good by chance: judge them with the deflated Sharpe and haircut in docs/gates.md, not by this table alone.
+
+### 2024-10-07 .. 2026-10-05 (survivorship-free, every US ticker)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 372 | 0 | 53% | -0.00 | -0.06 | -0.09 | 40% | -0.16 | -0.22 | -0.20 | 39% | -0.14 | -0.20 | -0.20 | 0.69 |
+| healthy_uptrend | 832 | 0 | 52% | +0.03 | -0.03 | -0.07 | 43% | -0.04 | -0.11 | -0.19 | 41% | -0.04 | -0.10 | -0.17 | 0.91 |
+| high_vol_selloff | 247 | 0 | 47% | -0.11 | -0.21 | -0.08 | 57% | +0.05 | -0.05 | -0.12 | 54% | +0.17 | +0.08 | -0.09 | 1.49 |
+| narrow_uptrend | 68 | 0 | 82% | +0.77 | +0.70 | +0.19 | 72% | +0.76 | +0.69 | +0.22 | 81% | +1.21 | +1.15 | +0.51 | 7.75 |
+| **all** | 1519 | 0 | 53% | +0.03 | -0.03 | -0.07 | 46% | -0.02 | -0.08 | -0.16 | 45% | +0.03 | -0.03 | -0.13 | 1.08 |
+
+Portfolio replay (net of costs, slots shared with its run): 20 trades, win 25%, avg -0.42R, PF 0.27, P&L $-4,945 on $100k, avg hold 16.0 bars.
+
+### 2017-01-01 .. 2024-10-04 (~4,300 names liquid in 2024 plus ~2,800 delisted names (Alpaca), repaired store)
+| regime | signals | skipped | win 5d | avg R 5d | net R 5d | vs SPY 5d | win 10d | avg R 10d | net R 10d | vs SPY 10d | win 20d | avg R 20d | net R 20d | vs SPY 20d | PF 20d |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| choppy | 743 | 4 | 61% | +0.12 | +0.06 | -0.08 | 58% | +0.13 | +0.07 | -0.11 | 46% | -0.05 | -0.11 | -0.18 | 0.86 |
+| correction | 446 | 3 | 61% | +0.08 | +0.01 | -0.06 | 60% | +0.15 | +0.07 | -0.09 | 59% | +0.24 | +0.17 | -0.07 | 1.74 |
+| healthy_uptrend | 2005 | 15 | 43% | -0.09 | -0.17 | -0.12 | 48% | -0.04 | -0.12 | -0.13 | 49% | +0.03 | -0.05 | -0.13 | 1.07 |
+| high_vol_selloff | 604 | 6 | 65% | +0.10 | +0.02 | -0.11 | 51% | -0.06 | -0.14 | -0.15 | 53% | +0.01 | -0.06 | -0.16 | 1.03 |
+| narrow_uptrend | 581 | 5 | 55% | +0.02 | -0.05 | -0.14 | 57% | +0.11 | +0.04 | -0.14 | 52% | +0.06 | -0.01 | -0.08 | 1.15 |
+| **all** | 4379 | 33 | 53% | +0.00 | -0.07 | -0.11 | 52% | +0.02 | -0.05 | -0.12 | 50% | +0.04 | -0.03 | -0.13 | 1.10 |
+
+Portfolio replay (net of costs, slots shared with its run): 79 trades, win 51%, avg +0.06R, PF 1.14, P&L $3,710 on $100k, avg hold 17.2 bars.

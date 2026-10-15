@@ -146,7 +146,7 @@ def test_oct_6_2026_published_breadth_numbers(settings) -> None:
     spy_only = build_panel(_bars("SPY", SPY_PATHS["bull"], s0=400.0, volume=5e7))
     breadth = pd.DataFrame(
         [[26.9, 39.7, 180, 150, 1.2, 60, 240, 4806]],
-        columns=list(BREADTH_COLUMNS),
+        columns=list(BREADTH_COLUMNS[:8]),
         index=pd.DatetimeIndex([pd.Timestamp(OCT_6_2026)], name="session"),
     )
     state = pb.market_state(spy_only, OCT_6_2026, breadth=breadth, settings=settings)
