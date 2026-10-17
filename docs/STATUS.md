@@ -1,9 +1,20 @@
-# Project status: batches 5-23 done, nothing passed; batches 24-25 (2011-16 confirmations) pre-registered and approved, waiting on the 2010 store, which waits on TIINGO_API_KEY in .env (2026-10-15 15:20 ET)
+# Project status: batches 5-23 done, nothing passed; batches 24-25 (2011-16 confirmations) pre-registered and approved, waiting on the 2010 store, which waits on TIINGO_API_KEY in .env (still absent 2026-10-17 20:35Z); batch 26 premise check run (2026-10-17)
 
 Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
 No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
 
 ## Results since 2026-10-13 (all committed)
+- Batch 26 (2026-10-17; docs/preregistration/2026-10-17-batch26-results.md, `research/b26_premise.py`; card merged
+  from claude/batch26-cards @ 3a0e741): French early read on batches 24/25, not a trial. The registered 5x5 cells
+  were NOT run: `25_Portfolios_ME_Prior_12_2_CSV.zip` and `25_Portfolios_ME_OP_5x5_CSV.zip` are not on the Mac and
+  the fetch was refused on this Mac as a new download (needs Jack's word; rerun the module once they are in
+  data/research/french/). Descriptive 2x3 substitute: big high-momentum tracks the replica (corr 0.69, TR 0.70) but
+  made -0.4% a year alpha in 2011-16 (t -0.2): would read Points against; the profitability cell does not track the
+  batch 16 book (corr -0.09): Uninformative. Batches 24/25 unchanged.
+- Nightlies 2026-10-15 and 2026-10-16 ran every step ok (Mac woke late both days: finished 13:58Z and 17:32Z). The
+  shadow book's first forward sessions: sp500_momentum_index_replica +0.92% since 2026-10-14 vs SPY +0.28%. Friday's
+  weekly report written and sent (data/journal/weekly-2026-W42.md). PFG closed on its 5-session time stop 10-16.
+
 - Batches 24-25 (2026-10-15; docs/preregistration/2026-10-15-batch24-25.md, cards merged from claude/batch25-cards
   @ 9486ac1, which contains batch 24 @ 8f41eb3): out-of-sample confirmations on 2011-2016 of the momentum replica
   (bar 1.96), the batch 16 momentum + profitability replica and batch 3's gross profitability (bar 2.241), code
