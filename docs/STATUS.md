@@ -1,4 +1,316 @@
-# Project status: PAUSED (2026-10-07, by the user)
+# Project status: batches 5-23 done, nothing passed; batches 24-25 (2011-16 confirmations) pre-registered and approved, waiting on the 2010 store, which waits on TIINGO_API_KEY in .env (still absent 2026-10-17 20:35Z); batch 26 premise check run (2026-10-17)
+
+Branch `claude/project-thread-fesglg`, PR https://github.com/Jackpep-bot/Swing-T/pull/3 (continues PR 2's branch).
+No strategy has passed anything. Nothing is enabled or on probation; config/live.yaml is unchanged.
+
+## Results since 2026-10-13 (all committed)
+- Batch 26 (2026-10-17; docs/preregistration/2026-10-17-batch26-results.md, `research/b26_premise.py`; card merged
+  from claude/batch26-cards @ 3a0e741): French early read on batches 24/25, not a trial. Jack approved downloading
+  the two 5x5 files (card "Download", 20:35Z, relayed by the coordinator; those two files only):
+  data/research/french/25_Portfolios_ME_Prior_12_2_CSV.zip and 25_Portfolios_ME_OP_5x5_CSV.zip. All three registered
+  reads **Uninformative**: ME5 PRIOR5 tracks the replica (corr 0.68) but 2011-16 alpha +0.9% a year, t 0.33 (< 1.0);
+  the blend (corr 0.53) and ME5 OP5 (corr 0.12) do not track the batch 16 book. No lead either way; batches 24/25
+  unchanged.
+- Nightlies 2026-10-15 and 2026-10-16 ran every step ok (Mac woke late both days: finished 13:58Z and 17:32Z). The
+  shadow book's first forward sessions: sp500_momentum_index_replica +0.92% since 2026-10-14 vs SPY +0.28%. Friday's
+  weekly report written and sent (data/journal/weekly-2026-W42.md). PFG closed on its 5-session time stop 10-16.
+
+- Batches 24-25 (2026-10-15; docs/preregistration/2026-10-15-batch24-25.md, cards merged from claude/batch25-cards
+  @ 9486ac1, which contains batch 24 @ 8f41eb3): out-of-sample confirmations on 2011-2016 of the momentum replica
+  (bar 1.96), the batch 16 momentum + profitability replica and batch 3's gross profitability (bar 2.241), code
+  unchanged except DATA_START = 2010-01-04. Jack approved grading on pre-2016 years ("Grade it" 18:47Z, "Grade them"
+  18:59Z, relayed by the coordinator). Pre-registered before the store exists; NOT run. Waiting on: TIINGO_API_KEY in
+  .env (checked 19:10Z: absent) -> `scripts/build_store_2010.py` (about two months on the free quota) -> store gates
+  6(a) and 6(c) -> runner (DATA_START as a parameter; not written yet) -> grade.
+
+- Small-cap map (docs/edge_map_smallcap.md): 0 of 870 cells pass; every liquidity band loses in both halves.
+- Batch 5 (15 cards, docs/preregistration/2026-10-13-batch5-results.md): **all FAIL** on 2024-26. Best books:
+  piotroski_fscore8_small_value +12.2%, clenow_stocks_on_the_move_midcap +11.8%, double_surprise_smallmid +8.0%
+  over the window, all behind SPY. `russell_recon_deletion_rebound` made no trade in either window (its rank >=
+  3,200 rule is probably out of reach among the ~2,800 names with a filed share count; not checked further).
+  Descriptive 2017-24 replays of the yearly cards (they can never pass): tax_loss_loser_rebound +29.7% over
+  2017-24, net R t 3.00, alpha t 1.00 (but -3.1% in 2024-26); russell_recon_addition_frontrun +4.0%.
+- Batch 6 (docs/preregistration/2026-10-13-batch6-results.md, -vrp-results.md): **all five FAIL**. The SVXY overlay
+  trailed SPY by 4.7% a year in 2024-26; `residual_reversal_ff3_etf`, re-run after the harness fix (amendment in
+  the pre-registration), lost 8.5% over 2024-26 with alpha t -1.92.
+- Batch 7 (docs/preregistration/2026-10-14-batch7-results.md): **both FAIL** (merger_target_spread_capture -7.8%,
+  seo_marketed_offer_rebound -6.9% over 2024-26). The merger card's trades show the DEFM14A / SC TO-T flag is
+  noisy: 1 completed deal, 23 of 52 break stops (descriptive note in the results file; feedback sent to the
+  research thread).
+
+- Batch 9 (weights cards, docs/preregistration/2026-10-14-batch9-results.md; `research/b9_books.py` on the daily
+  weights book `research/weights_book.py`; store data/live/replay_b9.duckdb = batch-6 store + 2016-24 SSO bars):
+  **both FAIL** the alpha-t bar. sp500_momentum_index_replica beat SPY in both windows (+17.0% vs +12.4% a year in
+  2017-24, +27.0% vs +16.4% in 2024-26, drops no deeper; alpha t 1.30 and 0.73); chosen knowing SPMO's record, so
+  at most a forward test. leveraged_sp500_trend_switch made more than SPY but dropped -46% vs -34% in 2017-24.
+- Batch 10 (docs/preregistration/2026-10-14-batch10-results.md, `research/b10_books.py`): the same momentum rules
+  on mid caps (ranks 501-900) and small caps (901-1,500) **both FAIL** against SPY (mid +8.2%, small +16.9% vs SPY
+  +16.4% in 2024-26); both beat their own cap-weighted universe by about 5 points a year (descriptive).
+- Batch 8 (docs/preregistration/2026-10-14-batch8-results.md): merger re-test with a flag from EDGAR filing headers
+  (`data/b8.py`, table `form_parties` in data/live/replay_b7.duckdb) **FAIL**: -2.6% over 2024-26, 24 trades, 2 of 11
+  closed trades were completed deals (the card needed over half). Its first start failed on a settings `extends`
+  chain deeper than five levels (amendment in the pre-registration); keep book configs within
+  prereg_<tag>.yaml -> prereg_b6.yaml -> live.yaml.
+- Batch 11 (docs/preregistration/2026-10-14-batch11-results.md, `research/b11_books.py`; first batch under the
+  full-period test): dividend_increase_drift and russell_recon_migrant_drift **both FAIL** on both routes (pooled
+  alpha -5.0% and -6.6% a year, t -1.68 and -1.25). The dividend book turned over about 1,050% a year (weekly equal
+  weights over a 63-session window) and paid 3.3% a year in costs.
+- Batch 12 (docs/preregistration/2026-10-14-batch12-results.md, `research/b12_books.py`; store
+  data/live/replay_b12.duckdb = batch 9's + 2016 bars for EFA, EEM, VNQ, IEF, DBC, UUP via
+  scripts/extend_research_store.py): **both FAIL**. multi_asset_trend_long_flat made +2.2% a year pooled with a -7.7%
+  deepest drop (beta 0.12, alpha t 0.45; turnover 327% a year vs the card's 150-250%). industry_neutral_momentum_sp500
+  +12.7% vs SPY +13.6% (alpha t -0.57); batch 9's replica on the same pooled window: +19.0%, alpha t 1.51
+  (descriptive). CZ check not run (needs a downloaded file; ask the owner first).
+- Batch 13 (docs/preregistration/2026-10-14-batch13-results.md, `research/b13_books.py`): mispricing exclusion books
+  **both FAIL**. The large book (top 500 minus its worst 100 by a five-signal mispricing score) tracked SPY: +13.2% vs
+  +13.6% a year pooled; the mid book +8.0%. Leaving the worst names out added about 0.3% a year over the same universe
+  unscreened (descriptive).
+- Batch 14 (docs/preregistration/2026-10-14-batch14-results.md, `research/b14_books.py`): **both FAIL**.
+  sp500_four_signal_composite (momentum, profitability, buybacks, value) +12.3% vs SPY +13.6% pooled, alpha t -0.35;
+  value dragged it (book-to-market alone +7.7%). vol_scaled_momentum_replica +13.3%, alpha t 0.68, deepest drop -32%
+  vs SPY -34%; scaling cut the unscaled replica's +19.0% more than its drops. The 60-year premise check on Ken French
+  data is SUPPORTED (large-cap momentum + profitability blend alpha +1.9% a year, t 3.71 since 1963) but weakest
+  since 2017 (t 1.14); our books move with it (correlation 0.62).
+- Batch 15 (docs/preregistration/2026-10-14-batch15-results.md, `research/b15_books.py`): sp500_quality_index_replica
+  **FAIL**: +14.9% vs SPY +13.6% a year pooled, beat SPY in both halves, alpha +0.6% (t 0.32), turnover 188% a year
+  (card guessed 40-70%). Its daily excess correlates only 0.26 with the momentum replica's (a diversifier, descriptive).
+- Batch 16 (docs/preregistration/2026-10-14-batch16-results.md, `research/b16_books.py`; chosen after batch 14):
+  sp500_momentum_profitability_replica **FAIL** (bar 2.690): +16.5% vs SPY +13.6% pooled, alpha +2.4% (t 0.92), beat
+  SPY in both halves; the plain replica made +19.1% over the same window (daily-excess correlation 0.90). Adding
+  profitability cut return more than risk.
+- Batch 17 (docs/preregistration/2026-10-14-batch17-results.md, `research/b17_books.py`): sp500_low_volatility_replica
+  **FAIL**: +5.5% vs SPY +13.6% pooled, beta 0.65, alpha -2.8% (t -0.88), deepest drop -37.7% (2020) vs SPY -34.2%;
+  total-return store +8.2% (descriptive). Uncorrelated with the momentum replica (-0.01). French low-variance premise
+  NOT SUPPORTED (Lo 20 alpha +2.05% a year, t 2.87 since 1963; t 1.39 since 2017).
+- Batch 18 (`research/b18_cz.py`; blind Chen-Zimmermann selection): step 1 found 66 of 157 Accounting / Price / Trading
+  predictors buildable; step 2 on value-weighted originals selected nothing, so it was rerun once on CZ's VWforce
+  series under amendment 1 (written first): DivYieldST (post-publication t 3.91 through 2016) and VolumeTrend (2.13).
+  The book **FAIL**: +10.3% vs SPY +13.6% pooled, alpha -1.7% (t -0.86); total-return store +12.7%, alpha t -0.61.
+- Batch 19 (docs/preregistration/2026-10-14-batch19-results.md, `research/b19_books.py`): sp500_earnings_surprise_drift
+  **FAIL**: +11.8% vs SPY +13.6% pooled, alpha -1.1% (t -0.49); lost in 2017-24 (-3.4%), won in 2024-26 (+8.8%, t
+  1.69); turnover 404% a year. The bottom-100 book did worse (pooled alpha -3.9%), so a spread exists but the top side
+  alone does not beat SPY.
+- Batch 20 (docs/preregistration/2026-10-14-batch20-results.md, `research/b20_books.py`): global_equities_dual_momentum
+  (Antonacci; IEF for AGG) **FAIL**: +8.2% vs SPY +13.6% pooled, beta 0.78, alpha -1.9% (t -0.67), 20 switches (the
+  turnover column counts both legs of a switch: 422% a year); same deepest drop as SPY (-34.2%); total-return store
+  +10.1% vs SPY +15.3% (replay_b12_tr.duckdb, built for it).
+- Batch 21 (docs/preregistration/2026-10-14-batch21-results.md, `research/b21_books.py`): large caps minus their 100
+  worst earnings surprises **FAIL**: +13.3% vs SPY +13.6% pooled, alpha -0.4% (t -0.36), tracking error 3.1%. The
+  excluded names lagged SPY by 4.6% a year (t -1.57) but held only 17% of the cap.
+- Batch 22 (docs/preregistration/2026-10-14-batch22-results.md, `research/b22_books.py`): large-cap opportunistic
+  insider buys **FAIL**: +11.2% vs SPY +13.6% pooled, alpha -2.5% (t -2.35). The insider names themselves (equal-weight
+  satellite, about 11 names) made +3.2% a year, alpha -9.3% (t -2.23); the routine-buy placebo also lagged. In large
+  caps, officers' open-market buys marked falling stocks that kept falling (descriptive; one more reason the insider
+  family is closed here).
+- Batch 23 (docs/preregistration/2026-10-14-batch23-results.md, `research/b23_robustness.py`; robustness pass on the
+  momentum replica, not a trial): **MIXED**. All 6 timing variants and all 6 neighbouring settings beat SPY (alpha
+  +0.1% .. +5.1% a year), but the six-tranche book (timing luck removed) made +2.2% alpha (t 0.72), just under the
+  +2.45% "robust" line; the registered Feb/Aug timing was the luckiest of the six (+4.7%). Costs at 3x leave +3.3%.
+  Bootstrap: 5.2% of draws at or below zero alpha. Found: the score tilt never acts (the cap rule pins every name at
+  its cap), so the replica is top-100 momentum at capped market-cap weights.
+- Premise library (docs/premise_library.md, `research/premise_library.py`; owner approved the AQR and Chen-Zimmermann
+  downloads 2026-10-14 19:20 UTC, files in data/research/aqr and data/research/chen_zimmermann): evidence, not trials.
+  Since 2017 most US factors are weak (value -3% a year CAPM alpha, size -5.6%, BAB t 1.1, QMJ t 1.7, momentum t 1.7).
+  Of 208 published predictors, 23 have t >= 2 since 2017 (about 5 by luck); the value-weighted gross profitability
+  long-short (GP) is the strongest large-cap one (+15.1% a year, t 2.5). Candidate leads for the research thread:
+  earnings-surprise streaks, big-firm earnings surprise, net payout yield, net external financing.
+- Tiingo provider (`data/tiingo.py`) and the **2010 store build, ready to run** (`data/history2010.py`,
+  `scripts/build_store_2010.py`, config/prereg_2010.yaml; docs/plan-store-2010.md): EDGAR full-index + public float
+  picks the 2009-15 large caps, dead names matched to Tiingo tickers through their last 10-K's instance file name,
+  bars scaled to the store's split basis on a 2016 overlap (and rejected if they disagree), splits, dividends and dead
+  CIKs' fundamentals added; offline tests pass. It exits before any network call until the owner adds
+  TIINGO_API_KEY to .env; the free quota makes the full build take about two calendar months. Grading on 2010-15
+  needs the owner's word.
+- After-tax line in the weekly report: the shadow book's forward record now tracks FIFO lots and reports realized
+  short- / long-term gains and an after-tax return at illustrative 24% / 15% federal rates
+  (`ops/shadow_books.realized_gains`, constants TAX_SHORT_TERM / TAX_LONG_TERM).
+- Dead-man alert (`ops/deadman.py`, deploy/launchd/com.swing.deadman.plist): Telegram "Nightly missing" at 08:30 on
+  weekdays when the morning's nightly has not finished. Built and tested; NOT installed (installing a launchd job
+  needs the owner's yes: `scripts/install-launchd.sh --deadman --settings config/live.yaml`).
+- Shadow book (no orders), from 2026-10-14: batch 9's sp500_momentum_index_replica is followed forward by the
+  nightly's new `books` step (`ops/shadow_books.py`; research thread's recommended option, relayed by the
+  coordinator while the owner's answer is pending). State: data/live/runs/shadow_books/sp500_momentum_index_replica.json
+  (first book = the September 2026 selection: 100 names, AAPL 9%, MU 8.3%, AMD 5.9% ...; bought at the open after
+  2026-10-14). The nightly adds the March / September books with the registered code over the whole history (a few
+  minutes twice a year); the weekly report shows its forward return beside SPY. No order is ever sent.
+- Scoreboard (docs/research_scoreboard.md, `uv run python -m swing_engine.research.scoreboard`; rerun after each
+  batch): 54 cards after batch 22. In 2024-26 every engine card holding 10 sessions or less, and every card turning over 500%+ a year,
+  had negative alpha (medians about -14% a year); weights cards (fully invested, few trades) did best (median alpha t
+  -0.11, a third positive). Only two card-windows ever reached alpha t above 1 (gross profitability and the S&P
+  momentum replica, both 2017-24). Owner, 2026-10-14 19:04 UTC: "deep data dive ... huge scrape of the internet ...
+  boost this project to perfection"; the coordinator runs that survey in a cloud thread ("What winning trading
+  programs do") and relays build ideas as claude/* branches.
+- Grader fix 2026-10-14 (docs/gates.md, Bill rate): alpha regresses (r - BIL) on (SPY - BIL). Price-only BIL barely
+  moves, so it changed no verdict (re-graded batches 5-8, alphas moved 0.1% a year at most).
+- Data-quality finding (batch 9 harness): some EDGAR share counts are off by about 1,000x (Alcoa's `mcap_pit`
+  $3,300 trillion on 2019-08-30; also HXL, TXNM, VCEL, HL, CPK). Batches 3, 5, 6 and 8 rank or filter on `mcap_pit`
+  without a guard (a handful of names misranked; not re-run). Batch 9/10 drop names whose `mcap_pit` exceeds 10,000 x
+  their 63-session median dollar volume. A fix at the source (`data.fundamentals.share_issuance_features`) would
+  need its own decision: it changes every earlier mcap-ranked result.
+- Owner's decision 2026-10-14 16:14 UTC ("Add full-period test"): from batch 11 on, every card is also graded on one
+  pooled 2017-26 window set in advance (docs/gates.md, docs/preregistration/TEMPLATE.md; run new engine batches with
+  POOLED=1 in scripts/run_prereg_batch.sh; weights cards simulate 2017-01-01 .. 2026-10-05 in one run). Batches 5-10
+  are not re-graded.
+
+Runner lessons:
+- `prereg_run` counts EVERY replay on the machine at its own `--job-gb` for that replay's start year. Beside other
+  2017-24 work start a runner with GB17=7 (a 2017-24 replay holds about 4-6.5 GB), or it waits (batch 7 lost 30
+  minutes on 2026-10-14).
+- A background `until pgrep -f ...` loop whose own command line contains `--tag prereg-` matches itself and blocks
+  every runner's `drain`. Watch log files instead.
+
+## Next
+- New batches arrive daily from the research thread's routine (branch `claude/batchN-cards`, relayed by the
+  coordinator). For each: merge the cards, code them (add-strategy skill; a weights card gets a research module, as
+  research/vrp_overlay.py), commit a pre-registration BEFORE any run, harness-check signal counts ON A
+  REPLAY-SHAPED PANEL (the last 300 sessions with extras attached on the whole panel: that is what signals() gets),
+  then queue `scripts/run_prereg_batch.sh <tag> <date> <slugs>` behind whatever is running (see its header).
+- While a replay batch runs, anything new under swing_engine/strategies/ must import cleanly from the first save:
+  every replay that starts imports the whole package (develop a module as `_wip_<slug>.py`, rename when green).
+
+Waiting for the owner (unchanged): free always-on host (Oracle Always Free) yes/no; delete old lane store copies
+in data/live (about 25 GB, plus the four research_20261013-155159_l*.duckdb small-cap lanes); a second Alpaca paper
+account only when a card earns paper.
+
+Fixed 2026-10-13 (commit c28625e): a limit entry could take a target its fill bar reached before the fill
+(`backtest._check_exit` sold at that bar's open; `shadow.grade_one` counted its high). On the fill bar of a limit
+filled away from the open, only the close now counts as after the fill. One registered strategy is affected,
+`elder_ma_penetration_channel`; its rows on the older boards are flattered and were not regraded. Batch 5's two
+limit-entry cards carry no Signal target (their pre-registered workaround), so they do not change.
+
+Other paper venues (owner: "begin other sandbox or paper trading sites as able"). Checked 2026-10-13, web only:
+- Second Alpaca paper account: the one worth having. Same adapter, no new code: real environment variables win over
+  .env, so a second book is a settings file that `extends: live.yaml` with its own `state/` paths, launched with
+  ALPACA_API_KEY / ALPACA_SECRET_KEY set from a second pair of keys. Alpaca's forum says 3 paper accounts per login
+  (undated post; the dashboard decides). Use: the probation book (quarter risk, small-cap universe via
+  `universe.skip_top`) apart from the three rsi2 positions. NOT NEEDED YET: the small-cap map left no candidate.
+  The owner asked Claude to set it up by controlling the laptop (19:21 ET); Claude does not create accounts or
+  handle keys, so when a card earns paper he creates the account and puts its keys in .env as ALPACA2_API_KEY /
+  ALPACA2_SECRET_KEY.
+- Tradier sandbox: free with an account, fills on 15-minute delayed quotes, OTOCO brackets in the API. Needs a new
+  adapter and adds nothing over Alpaca paper. Not built.
+- IBKR paper: needs an open IBKR Pro account and a desktop gateway that is logged in by hand every day. No.
+- tastytrade sandbox: positions are wiped every 24 hours. Useless for swing holds.
+- No account needed: the shadow ledger already forward-tests every `shadow_only` strategy at next-open prices.
+
+Batch 5 (owner 12:54 ET: "scrape as many possible online traders ... integrate as many more methodologies as
+possible"): the research thread checked 49 ideas, kept 15 strategies and one filter
+(docs/proposals/swing-methods-2026-10/batch5/). All 15 are coded (`swing_engine/strategies/`, joins
+`data/b5_events.py`, `data/b5_fundamentals.py`, shared `strategies/_b5.py`), registered disabled, tested on
+synthetic panels (2,705 tests pass), and checked to run on real bars (signal counts only).
+
+Owner, 13:14 ET: "keep running". Done since:
+- **Income view** (docs/income_view.md, `research/income_view.py`): the 11 portfolios already replayed, read the way
+  he defined winning. Steadiest: dividend_month_premium (7.9% and 6.2% a year, 63% and 68% of months up, deepest
+  drops 12% and 9%, about half invested), volatility_managed_spy, large_cap_gross_profitability,
+  large_cap_net_repurchasers. All are long stock in rising markets and none beat SPY; a selection made after the fact.
+- **Forward tracking, no orders**: dividend_month_premium, large_cap_net_repurchasers and
+  large_cap_gross_profitability are `shadow_only` in config/live.yaml. The nightly now joins their inputs
+  (`join_share_issuance`, `join_dividends`; a failed join is logged, never fatal) and refetches the current month
+  of dividends in its ingest step. First signals: the October month end. Checked read-only on real data for
+  2026-09-30 (40, 25 and 46 signals).
+- NOT built: paper trading of a 50-name monthly book. The live sizer has one set of limits (8 positions, 5 new
+  orders a day); a book needs per-strategy limits there and in the autopilot's daily cap. Build it when a book
+  earns it in the shadow ledger, or on the owner's word.
+
+Owner's answers, 2026-10-13 12:53 ET (his words are in the thread; summary):
+- **Paper probation: yes**, about a quarter of normal risk. Built: `strategies.<name>: {enabled: false, probation: true}`
+  is scanned and sized at `risk.probation_risk_mult` (0.25) in every regime, and `execution.autopilot` drops such
+  intents on anything but a paper broker. Nothing is on probation yet: no candidate exists until the small-cap map.
+  A small-cap candidate also needs the live scan to cover that universe (the nightly screens the top 1,500).
+- **Winning** = consistent revenue he can scale, not "beat SPY" as such. Report money made and size of drops first,
+  the SPY comparison beside it. About a $10k account; small or thin stocks are fine.
+- **Weekly one-page report: yes.** The nightly already writes and Telegrams it on the week's last session
+  (`agent/weekly.py`); it now also lists the week's research verdicts, probation strategies and the
+  "waiting for the owner" lines of this file.
+- **Method sweep**: "scrape as many possible online traders ... integrate as many more methodologies as possible".
+  Handed to a cloud research thread through the coordinator (13:00 ET); cards are to arrive on branch
+  `claude/batch5-cards` under docs/proposals/swing-methods-2026-10/batch5/ with index.json. Then: pre-register the
+  batch as a map (as the small-cap one), implement with the add-strategy skill, replay on both universes.
+
+Owner, 2026-10-13 12:48 ET: "double down on testing ... high priority to winning trade methods ... don't aim for
+perfection". Done since:
+- **Edge map** (docs/edge_map.md, `research/edge_map.py`): all strategies split by the stock's dollar volume, graded
+  against SPY. 0 of 711 cells are positive in both windows at t >= 1 (luck alone would give about 18): on the 1,500
+  most liquid stocks these methods are worse than nothing. 2,637 cells logged (6,742 trials).
+- Found: every replay so far used only the 1,500 most liquid names (`universe.max_symbols`). The small-cap run above
+  is the first look anywhere else. `universe.skip_top`, `research run --no-rebuild`, `edge_map --windows/--tag`.
+- `execution.reuse_exiting_slots` (replay only, default off) fixes half-invested monthly books for future cards.
+
+## Fourth session (2026-10-13, branch claude/project-thread-4wq9xa, PR https://github.com/Jackpep-bot/Swing-T/pull/2; includes PR 1's commits)
+No jobs running. Nothing enabled on paper (config/live.yaml enables no strategy). 2,574 tests pass. No strategy has
+passed anything: every pre-registered card to date is FAIL and the leaderboard has no survivors.
+
+Owner said yes to both questions on 2026-10-13 11:48 ET ("1 and 2 yes to both"):
+- **Live store repaired** 11:49 ET: `repair.merge_duplicates` on data/live/market.duckdb, run id
+  `20261013T154911779985Z` (373 merged, 315,230 duplicate bars deleted, 19,923 moved, 693 bars of earlier ticker
+  holders dropped; bars 15,842,907 -> 15,546,907). Copy from just before: data/live/market_premerge_20261013.duckdb.
+  Undo: `swing --settings config/live.yaml repair-store --undo 20261013T154911779985Z`. Unresolved, left alone:
+  EEQ~20181219 / EE~20181219.
+- **Dividends**: `swing ingest-dividends` -> `dividends` table in the live store (367,989 rows, 2016-01 on; rerun
+  to refresh). `data/dividends.py` maps a row to the store's series on its ex-date, split-adjusts rates, builds the
+  `div_season` flag and `total_return_adjust` (research copies only). data/live/replay_tr.duckdb is the
+  total-return copy (config/prereg_div.yaml).
+- **Dividend-month card**: pre-registered (docs/preregistration/2026-10-13-dividend-month.md, commit 433c292).
+  Run once 2026-10-13 (results file beside it): **FAIL**. Alpha vs total-return SPY +0.3% a year (t 0.11) in
+  2017-24, -1.5% (t -0.34) in 2024-26. The book ran about half invested (`no_free_slot`: a month's outgoing names
+  hold their slots when the next month's are sized); noted in the results, not re-run.
+
+Still waiting for the owner:
+1. Always-on free host (Oracle Always Free VM) for the nightly and forward tests: yes or no? He quoted the question
+   on 2026-10-13 without answering it. Not started.
+2. Delete old lane store copies in data/live (replay*.duckdb except replay_p3 and replay_tr, market_prerepair.duckdb,
+   regrade_1r.duckdb: about 25 GB)? Keep research_20261010-033614_l0/l1 (the current board reads them).
+
+Done this session, in queue order:
+- **Residual momentum 2024-26** merged from the v2c-resmom re-replay (rows copied into lane 1's ledger, noted in the
+  run manifest): 2,556 signals, net +0.056R at 20d, -0.088R against SPY, t -1.69. Batch 3's verdict is about
+  `large_cap_residual_momentum` and does not change.
+- **Renamed tickers.** Not two pairs but 373 duplicate series: 63 renames inside the Massive window (BK/BNY, ERJ/EMBJ,
+  MMC/MRSH, FI/FISV ...) and 310 `TICKER~date` delisted keys whose ticker was renamed or reused (some hold the wrong
+  company: P~20190301 is Pure Storage, not Pandora). `data.repair.find_duplicates / merge_duplicates`, exact undo,
+  tests. `research.cards.drop_renamed` removes the doubled signals from existing ledgers when they are read:
+  384,311 of 17.8M rows (2.15%), largest change in net R 0.049, no haircut-Sharpe sign flips, no survivors either way.
+  Known limit: a ticker handed from one company to another (Barrick GOLD -> B) is not re-homed; needs a ticker-change feed.
+- **SPY-relative grading is the leaderboard default** (also cards `vs SPY` column and the reality check):
+  net R minus SPY's R over the same holding span, beta 1. `--absolute` for the old yardstick. 846 new looks logged
+  (4,099 trials before intraday round 2). No survivors. docs/leaderboard_liq*.md and _t1r.md are still absolute.
+- **Next card batch**: the card branches hold nothing unreplayed. A new search (docs/proposals/swing-methods-2026-10/
+  batch4/) checked 15 ideas, kept 1 (`month_end_rebalancing_avoidance_spy`) and shows it cannot reach the alpha-t rule
+  in a 2-year window even if the paper is right. NOT pre-registered or run: a test that cannot pass only spends a trial.
+- **Intraday round 2** (docs/preregistration/2026-10-13-intraday-round2*.md, `research/intraday_momentum.py`,
+  4 trials, 4,103 total): `noise_area_momentum` (Zarattini-Aziz-Barbon 2024) FAIL, `first_half_hour_momentum`
+  (Gao et al. 2018) FAIL. The noise-area rule has the paper's gross edge in 2016-23 (+2.9 bp a trade) but +0.9 bp
+  after 1 bp a side, and +0.8 bp gross after publication. Round-1 cards were not touched.
+- **Day clock**: the intraday chart now builds ETF structure from regular-hours bars like the replay (it used
+  extended hours, so PDH/PDL differed). Chain trades (entry, path, stop, target) and refused setups are chart layers
+  with their receipt; `chains_dir` on the dashboard data class.
+- **Receipts**: strategy filter drops (min_stop, reward_risk, geometry) become refusals in the nightly (capped at
+  100 per strategy per night: check the volume after the first run); `swing paper --from-intents` writes fires /
+  refusals; `receipts.link_outcomes` ties an outcome to its fire or refusal (dashboard inspector shows
+  `decision_event_id`). Only 1 backfilled refusal has step `unknown`, so no re-backfill was written.
+- **Dashboard**: vocabulary filter box; deep link `#charts/intraday/SPY/2026-06-03/5m`; a zone's later events are
+  listed in its box's receipt instead of drawn; the old Buy / Sell / Signal markers give way to a receipt marker on
+  the same bar.
+- **Bug found and fixed (paper)**: Alpaca's open-orders listing leaves out a filled bracket's `held` stop leg, so the
+  position manager saw no stop and tried to arm a second one every night (4 errors on 10-12 and 10-13; harmless,
+  the broker refused). `AlpacaBroker.open_orders` now lists the filled parent with both legs; breakeven and trail
+  can find the stop again. Three paper positions are open from 2026-10-08 (BNS, PFG, DNTH; rsi2_meanrev), each
+  with its stop and target at the broker.
+
+Seen, not fixed:
+- The 2026-10-13 nightly's ingest step failed (no network at 06:40 ET: DNS error), so the store ends 2026-10-09.
+  The next nightly's ingest catches up; or run `swing --settings config/live.yaml ingest` by hand.
+- Card front matter says `status: enabled` for the first five strategies; config/live.yaml enables none. The
+  Vocabulary page shows the card's word.
+- Monthly books under-invest in replay: names sold at a month's first open still hold their slots when that
+  month's buys are sized (`no_free_slot`), so a full rotation fills about half the book (dividend card: 48% exposure;
+  batch 2 and 3 were less affected because they hold for months). An engine change; any re-test is a new trial.
+- Rename merge does not touch `panel` (nightly rebuilds it) or the event tables keyed by the old ticker.
+
+Next: a `swing research run` on the repaired store only if a new candidate needs it (the read-time dedupe already
+gives the corrected board; lane stores of run 20261010-033614 predate the repair). Refresh dividends with
+`swing ingest-dividends` before any further dividend work; a bad row in the feed has ex_date 3026-03-31 (harmless).
 
 ## Done (committed)
 - Rounds 1-4: data, features, 7 strategies + 5 research strategies (shadow-only), backtester, ranker, risk,
@@ -6,7 +318,7 @@
   doctor/nightly, outcomes, playbook router + market breadth, historical replay, shadow ledger. All review
   findings through round 4 fixed. 1,193 tests pass.
 - Settings files support `extends:`; config/live.yaml = settings.yaml + real-data store paths.
-- Real data: data/market.duckdb holds Massive grouped daily bars for every US ticker, 2024-10-07..2026-10-06
+- Real data: data/live/market.duckdb (moved 2026-10-08) holds Massive grouped daily bars for every US ticker, 2024-10-07..2026-10-06
   (501 sessions, 16,027 tickers, splits table). scripts/extend_history_alpaca.py adds Alpaca SIP split-adjusted
   daily bars 2016-01-04..2024-10-06 for 4,770 liquid names + index/sector ETFs (survivorship bias before
   2024-10-07; recorded in ingest_meta 'alpaca_extension'). DONE 2026-10-07: 7,354,836 bars for 4,326 symbols,
@@ -15,20 +327,106 @@
 - Claude Code add-ons (new sessions): ponytail plugin (enabled in ~/.claude/settings.json), graphify skill
   (`/graphify .`; CLI `graphify`), Anthropic Agent Skills already synced. OmniRoute NOT installed (gateway, not a
   plugin; user has not decided).
-- caffeinate was left running at the user's request; stop with `pkill caffeinate` when done.
+- caffeinate (-dims) is running at the user's request (2026-10-08); stop with `pkill caffeinate` when done.
 
-## Stopped mid-way (resume these)
-1. Dashboard (swing_engine/dashboard/, uncommitted): built, integrated, reviewed; the final fix pass was
-   interrupted. Resume: Workflow scriptPath .../workflows/scripts/swing-dashboard-*.js with
-   resumeFromRunId wf_5867e398-c24 (cached agents replay), or finish the fixes by hand; then
-   `uv run pytest tests/test_dashboard_*.py`, wire `swing dashboard`, and check every tab in a browser.
-2. Research layer (docs/research-raw/brands/*.json written; docs/catalog/ in progress): resume
-   swing-research-layer-*.js with resumeFromRunId wf_2011a74c-b99 (4 sweeps cached), then catalog -> cards ->
-   fact-check; then an implementation round for everything the catalog marks implement/approximate.
+## Done in the second session (branch claude/project-thread-jdz24e, PR https://github.com/Jackpep-bot/Swing-T/pull/1)
+- Dashboard committed; `swing dashboard`; all 8 tabs checked on config/live.yaml; review fixes (newest live ledger row,
+  SRI on the chart library). Monitor fix: Form 4 code A (grant) no longer counts as a buy.
+- Research layer: catalog (281 items) and 130 strategy cards in docs/strategies/ (each ends with a pending
+  `## Empirical (replay)` section). Partial fact-check table at the end of docs/catalog/CATALOG.md.
+- Signal/OrderIntent `entry_type` (open | stop | limit): backtest/replay (`research.backtest.entry_fill`) and the shadow
+  ledger fill stop/limit entries on the next session; the broker layer refuses non-open entries for now.
+- Replay 2024-10-07..2026-10-05 (11 strategies, router on): -20.2%, PF 0.78, Sharpe -1.01, 666 trades, costs $9.5k.
+  Shadow ledger gross R: breakout_52w +0.08, momentum_burst +0.07, rsi2 +0.05, sr_bounce +0.03; sr_breakout -0.13,
+  pullback_trend -0.06, holy_grail -0.07, power_gap -0.21; qullamaggie_flag (3) and episodic_pivot (2) barely fire
+  (suspect filters). (That JSON was overwritten by a 2026-10-08 timing run; the numbers above are the record.) `swing shadow report --replay`.
+- Work-in-progress committed (all off by default, existing 1,219 tests pass, NEW CODE NOT YET TESTED):
+  strategy hooks `engine_trail` / `trail_stop` (position manager + backtest), chandelier and extra exits,
+  14 new breadth columns, data/edgar.py earnings 8-K + companyfacts, data/fundamentals.py.
 
-## Next after that
-1. `uv run swing --settings config/live.yaml replay --start 2024-10-07 --end 2026-10-05` (survivorship-free
-   window) and `--start 2017-01-01 --end 2024-10-04` (longer, biased); per-strategy and per-regime results go
-   into each strategy's knowledge card as an Empirical section.
-2. First real nightly on Alpaca paper: `uv run swing --settings config/live.yaml nightly --broker alpaca --execute`.
-3. scripts/install-launchd.sh so nightly and monitor run on weekdays.
+## Done in the third session (2026-10-08, same branch / PR)
+- Tests for the trail hooks, the 14 breadth columns and EDGAR earnings/fundamentals; bugs fixed: Zweig thrust fired
+  twice per setup; a through-close strategy trail discarded a valid engine stop; chandelier on unsorted panels;
+  per-day NYSE size breakpoint; EDGAR acceptanceDateTime is UTC (checked on MSFT), floored at the filing date.
+- `swing ingest-edgar`; data.fundamentals.join_edgar adds sue, rev_surprise, gross_prof, shares_outstanding,
+  turnover, days_since_earnings, is_earnings_window, days_since_filing to replay / CLI / nightly panels (cached
+  `fundamental_events` table, rebuilt after each ingest).
+- Fact-check fixes applied (CMP 82bp is long-short alpha; 80-20 direction; NR7 period; IBS borrow per day; Kaufman gap
+  momentum formula; Ehlers caveat dropped).
+- Risk tools (all off by default): Turtle N units and unit limits, monthly loss stop, drawdown-scaled equity, book
+  vol scaling, rank hysteresis, Harvey-Liu haircut; deflated Sharpe now counts ALL trials; gates.md gate 2 spelled out.
+- features/market_school.py (distribution days, follow-through days) and playbook overlays (market_school_pressure /
+  correction, hill_bearish, mcclellan_negative, q25_bearish), all off by default, risk-reducing only.
+- features/extra.py: ~220 on-demand indicators (exact and parametric names); strategies declare `extra_features`.
+- 115 catalog strategies (docs/catalog decision implement -> shadow_only; implement_disabled_for_comparison ->
+  disabled). Skipped: williams_oops (same-day gap entry), connors_cvr3_vix (no VIX), stine_insider_superstock_weekly
+  (no float/PE). Review workflow: 54 confirmed defects fixed with regression tests; tests/test_strategies_all.py checks
+  every registered strategy for point-in-time behaviour.
+- `should_exit(row, bars_held, position)` gets a PositionContext (entry price, stops, best price, entry signal
+  features); 7 strategies gained their card exits; intents persist signal features for live exits.
+- Live/sample separation: config/live.yaml -> data/live/market.duckdb, state/live/orders.sqlite,
+  state/live/limits.json; sample artifacts archived in data/sample_archive/ and state/sample_archive/.
+  config/replay.yaml runs research replays on a copy (data/live/replay.duckdb).
+- install-launchd.sh --settings (SWING_SETTINGS for both agents). `swing replay --tag`.
+- 2,229 tests pass.
+
+## Video-model work (2026-10-13, plan: docs/proposals/video-model-plan.md)
+No jobs in flight. Weekend research finished: corrected-universe leaderboard (3,214 trials) has no survivors; batch 3
+fails the alpha-vs-SPY rule. All strategies stay shadow-only.
+
+Plan P0 (farm features on the swing engine) is DONE and usable:
+- Receipts: `events` table (`ops/receipts.py`), every fire / refusal / exit / outcome with the deciding step and
+  inputs, stamped with `engine_sig` (`core/signature.py`). `swing receipts backfill|show`. Backfilled 953 rows.
+- Daily study: nightly `study` step writes `docs/studies/DATE.md` (`ops/study.py`, `swing study [--all]`), named in Telegram.
+- Dashboard (`dashboard/farm.py`): chart layer toggles + Inspector (receipt JSON), intraday chart 2m-4h with
+  market-structure layers, Studies tab, Vocabulary tab, coverage tiles and heatmap. Checked in the browser.
+- Vocabulary: `uv run python -m swing_engine.ops.vocabulary` -> docs/vocabulary.md; rulings in docs/rulings.md.
+
+Plan P1 (intraday lane) first pass is DONE:
+- `swing ingest-intraday` -> data/live/intraday.duckdb (free Alpaca SIP 1-minute, SPY QQQ IWM GLD from 2016, BTC/USD
+  from 2021, ~10M rows; resumable). `data/intraday.py` resamples without look-ahead.
+- `features/market_structure.py` (21 event kinds, docs/market-structure.md, truncation test).
+- Pre-registered docs/preregistration/2026-10-13-intraday-chains.md, run once by `research/intraday_chains.py`:
+  all 3 cards FAIL net of costs (results file beside it). Gross R is about zero; costs decide it. 6 trials logged.
+
+Also done 2026-10-13: zones drawn as filled boxes (app.js series primitive); broker stop/target fills logged as
+`exit` receipts (`ops/reconcile.py`, nightly `reconcile` step, `swing receipts reconcile --since DATE`; 2 target fills found).
+
+No jobs are running. Mac is on power (owner, 10:21 ET). Dashboard preview may be up on port 8765.
+
+The queue that stood here was worked through in the fourth session: see the top section.
+
+## Older resume notes (superseded by the section above) - updated 2026-10-09 22:30 ET
+No survivors anywhere. Evidence: docs/leaderboard.md (2,394+ trials), docs/reality_check.md (White RC / SPA: no
+window or horizon rejects "no edge"), pre-registered groups all FAIL: three picks, two picks, walk-forward ensemble
+(docs/preregistration/*-results.md). Paper trading off; nightly scans shadow strategies and pushes to Telegram.
+
+Running unattended (2026-10-10 09:00 ET, Mac on AC), detached with nohup:
+a. Full leaderboard re-run on the corrected universe: `swing research run` (run 20261010-033614, 2 lanes, log
+   data/logs/research/full_rerun.log); 2024-26 done, 2017-24 in progress. It rebuilds cards, leaderboard and
+   reality check and Telegrams the summary at the end. Then: commit docs/leaderboard.md, docs/strategies, docs/reality_check.md.
+b. scripts/after_rerun_b3.sh (started 13:00 ET, runs beside (a) within a 44GB budget) runs the batch 3 pre-registered group
+   (docs/preregistration/2026-10-10-batch3.md; results -> ...-batch3-results.md, Telegram), then re-replays
+   residual_momentum on 2024-26 (tag v2c-resmom, store replay_p3) because its earlier row had 3 graded signals
+   (replay warm-up was too short for its 756-bar fit; fixed with per-strategy warmup_calendar_days).
+c. 1R-exit family test (docs/preregistration/2026-10-10-exit-1r.md): regrade from existing ledgers into
+   data/live/regrade_1r.duckdb -> docs/leaderboard_t1r.md (a worker is running it).
+Done today: batch 2 (repurchasers PASS on its rule, zero alpha vs SPY, not enabled; FOMC and vol-managed SPY FAIL),
+regime-cell walk-forward FAIL, docs/attribution.md (most gross edge is market drift; targets almost never hit).
+Card branches: origin/claude/batch2-cards, origin/claude/batch3-cards (fetch for new files).
+
+Queue:
+1. New candidate cards arrive in docs/proposals/ from the "Online swing methodologies" thread. For each batch:
+   research-ingest -> pre-registration doc committed BEFORE any replay -> `python -m swing_engine.research.prereg_run`
+   (parallel, 40GB budget, identical to serial) -> results into the cards.
+2. New data sources need Jack's approval before building.
+3. Keep the Mac on AC power for long runs (it sleeps on battery / lid closed).
+
+## Research commands
+- Full research pass (every registered strategy, both windows, parallel lanes sized from free memory up to 40 GB,
+  cards + leaderboard + Telegram summary at the end; refuses on battery and while the live store is being written):
+  `nohup uv run swing --settings config/live.yaml research run --windows short,long > /dev/null 2>&1 &`
+  Progress `tail -f data/logs/research/<run-id>.log`; manifest `data/live/runs/research/<run-id>.json`.
+- Resume unfinished chunks: `uv run swing --settings config/live.yaml research run --resume latest`.
+- Cards + leaderboard again over the latest run's lane stores: `uv run swing --settings config/live.yaml research rebuild`.
+- The old scripts/lane_r*.sh and run_research_replays.sh are gone; replay_r1/r2.duckdb stay as the v2 record.

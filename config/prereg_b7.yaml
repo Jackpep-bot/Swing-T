@@ -1,0 +1,8 @@
+# Batch 7 (docs/proposals/swing-methods-2026-10/batch7/; pre-registration docs/preregistration/2026-10-14-batch7.md).
+# Store: the research copy built by scripts/build_b7_store.py (the batch-6 store plus table `form_events`: DEFM14A,
+# SC TO-T and 424B filings from EDGAR); prereg_run copies it per job. Never point this at the live store.
+# The screen is batch 5's (everything with close >= $1, $1M a day and 100k shares); each strategy applies its own
+# floors. Research replays only; never used by the nightly.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_b7.duckdb

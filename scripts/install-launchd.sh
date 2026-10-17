@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Install (or re-install) the swing-engine LaunchAgents for the current macOS user. Idempotent, no sudo.
 #
-#   scripts/install-launchd.sh [--monitor] [--nightly] [--hour H] [--minute M]
-#                              [--hc-monitor URL] [--hc-nightly URL] [--dry-run]
+#   scripts/install-launchd.sh [--monitor] [--nightly] [--deadman] [--hour H] [--minute M]
+#                              [--hc-monitor URL] [--hc-nightly URL] [--settings PATH] [--dry-run]
 #
 # With neither --monitor nor --nightly both agents are installed. --dry-run renders the plists to stdout
-# and validates them with plutil without touching ~/Library/LaunchAgents or launchd.
+# and validates them with plutil without touching ~/Library/LaunchAgents or launchd. --settings (default
+# config/settings.yaml, the sample data) becomes SWING_SETTINGS for both agents; use config/live.yaml for real data.
 #
 # What it does for each agent:
 #   1. fills the @@PLACEHOLDERS@@ in deploy/launchd/<label>.plist (repo dir, uv dir, HOME, schedule, pings)
@@ -24,11 +25,13 @@ ET_ZONE="America/New_York"
 
 want_monitor=0
 want_nightly=0
+want_deadman=0
 dry_run=0
 hour=$DEFAULT_HOUR
 minute=$DEFAULT_MINUTE
 hc_monitor=""
 hc_nightly=""
+settings_file="config/settings.yaml"
 
 usage() { sed -n '2,15p' "$0"; exit "${1:-0}"; }
 
@@ -36,17 +39,19 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --monitor) want_monitor=1 ;;
     --nightly) want_nightly=1 ;;
+    --deadman) want_deadman=1 ;;
     --hour) hour="$2"; shift ;;
     --minute) minute="$2"; shift ;;
     --hc-monitor) hc_monitor="$2"; shift ;;
     --hc-nightly) hc_nightly="$2"; shift ;;
+    --settings) settings_file="$2"; shift ;;
     --dry-run) dry_run=1 ;;
     -h|--help) usage 0 ;;
     *) echo "unknown argument: $1" >&2; usage 2 ;;
   esac
   shift
 done
-if [ "$want_monitor" -eq 0 ] && [ "$want_nightly" -eq 0 ]; then
+if [ "$want_monitor" -eq 0 ] && [ "$want_nightly" -eq 0 ] && [ "$want_deadman" -eq 0 ]; then
   want_monitor=1
   want_nightly=1
 fi
@@ -67,6 +72,10 @@ if [ -z "$uv_bin" ]; then
 fi
 uv_dir="$(dirname "$uv_bin")"
 
+if [ ! -f "$repo_dir/$settings_file" ]; then
+  echo "install-launchd: settings file $repo_dir/$settings_file not found" >&2
+  exit 2
+fi
 if [ ! -f "$repo_dir/.env" ]; then
   echo "install-launchd: warning: $repo_dir/.env is missing; the agents will exit until it exists" >&2
 fi
@@ -90,6 +99,7 @@ render() {
     -e "s|<key>Minute</key><integer>$DEFAULT_MINUTE</integer>|<key>Minute</key><integer>$minute</integer>|g" \
     -e "s|@@HEALTHCHECKS_MONITOR_URL@@|$hc_monitor|g" \
     -e "s|@@HEALTHCHECKS_NIGHTLY_URL@@|$hc_nightly|g" \
+    -e "s|@@SWING_SETTINGS@@|$settings_file|g" \
     "$1"
 }
 
@@ -123,6 +133,7 @@ install_agent() {
 
 [ "$want_monitor" -eq 1 ] && install_agent com.swing.monitor
 [ "$want_nightly" -eq 1 ] && install_agent com.swing.nightly
+[ "$want_deadman" -eq 1 ] && install_agent com.swing.deadman
 
 if [ "$dry_run" -eq 0 ]; then
   echo

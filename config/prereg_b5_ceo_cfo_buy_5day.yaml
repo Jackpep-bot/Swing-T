@@ -1,0 +1,10 @@
+# Book of ceo_cfo_buy_5day in batch 5 (docs/preregistration/2026-10-13-batch5.md). Fixed before any run.
+# 15 positions, equal weight: the position cap sizes (the risk budget covers any stop up to 50% of the price).
+extends: prereg_b5.yaml
+risk:
+  risk_per_trade_pct: 3.3333
+  max_position_pct: 6.6667
+  max_open_positions: 15
+execution:
+  max_new_orders_per_day: 15
+  reuse_exiting_slots: true

@@ -21,5 +21,13 @@ def test_missing_base_is_an_error(tmp_path: Path) -> None:
 
 def test_repo_live_yaml_matches_settings_except_paths() -> None:
     base, live = load_settings.__wrapped__(), load_settings.__wrapped__(Path(__file__).parents[1] / "config" / "live.yaml")
-    assert live.data.store_path == "data/market.duckdb" and live.playbook == base.playbook
-    assert live.strategies == base.strategies and live.risk == base.risk
+    assert live.data.store_path == "data/live/market.duckdb" and live.playbook == base.playbook
+    paper_off = {"sr_bounce", "sr_breakout", "pullback_trend", "breakout_52w", "rsi2_meanrev",
+                 # monthly books tracked forward in the shadow ledger since 2026-10-13, no orders
+                 "dividend_month_premium", "large_cap_net_repurchasers", "large_cap_gross_profitability"}
+    assert {k: v for k, v in live.strategies.items() if k not in paper_off} == {
+        k: v for k, v in base.strategies.items() if k not in paper_off}
+    assert not any((live.strategies[k] or {}).get("enabled", True) for k in paper_off)  # leaderboard: no survivors
+    assert not any((cfg or {}).get("enabled", True) or (cfg or {}).get("probation") for cfg in live.strategies.values())
+    assert live.risk.model_copy(update={"limits_state_file": base.risk.limits_state_file}) == base.risk
+    assert live.risk.limits_state_file == "state/live/limits.json" and live.execution.ledger_file == "state/live/orders.sqlite"

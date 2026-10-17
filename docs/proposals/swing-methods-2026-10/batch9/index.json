@@ -1,0 +1,32 @@
+{
+  "batch": "batch9",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 2,
+  "cards": [
+    {
+      "slug": "sp500_momentum_index_replica",
+      "source": "S&P DJI S&P 500 Momentum index (SPMO live record)",
+      "universe": "500 largest by mcap_pit",
+      "holding_period": "semiannual (Mar/Sep)",
+      "data_needed": "daily bars, mcap_pit",
+      "rule": "Top 100 of 500 by vol-adjusted 12-1 momentum z, weight mcap x score, caps 9% / 3x cap weight, buffer 80/120, rebalance after third Friday of Mar/Sep.",
+      "card": "sp500_momentum_index_replica.md",
+      "kind": "strategy",
+      "evidence_grade": "B-",
+      "weights_card": true
+    },
+    {
+      "slug": "leveraged_sp500_trend_switch",
+      "source": "Gayed & Bilello 2016",
+      "universe": "SSO / BIL, SPY signal",
+      "holding_period": "until a 200-day cross (1% band)",
+      "data_needed": "SPY, SSO, BIL daily bars",
+      "rule": "Hold SSO when SPY >= 1.01 x its 200-day SMA, BIL when <= 0.99 x; next-open fills.",
+      "card": "leveraged_sp500_trend_switch.md",
+      "kind": "strategy",
+      "evidence_grade": "C",
+      "weights_card": true
+    }
+  ]
+}

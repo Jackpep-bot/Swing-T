@@ -29,6 +29,21 @@ Regime, first match wins (docs/methods.md 0 item 5, 2a, 3c):
 ``select_strategies(state, settings)`` maps the regime through ``settings.playbook.regimes`` to
 ``{strategy: risk multiplier in [0, 1]}`` for enabled strategies; a name absent from the table is not
 allowed.
+
+Overlays (``settings.playbook.overlays``, every one off by default; catalog kind "overlay", docs/catalog/catalog.json)
+only scale a multiplier down (``multiplier`` 0 blocks), never up. ``market_state`` lists the enabled ones that
+fire in ``MarketState.overlays``; replay / shadow labels append them to the regime (``choppy+q25_bearish``):
+
+- ``market_school_pressure`` / ``market_school_correction``  ``features.market_school`` state on the market
+  symbol is under_pressure / correction (catalog ``ibd_market_school_ftd_dd``; params = its keyword thresholds)
+- ``hill_bearish``        at least ``min_votes`` (2) of Hill's 3: ad_pct_ema10 < -30, the % above 200-day line
+                          off, hl_pct < -10 (catalog ``hill_breadth_model``; doc 06 C)
+- ``mcclellan_negative``  mcclellan_osc < 0 (Keller's healthy bull needs MCO > 0; ``mcclellan_oscillator``)
+- ``q25_bearish``         q25_ratio < 1: fewer stocks up 25% in a quarter than down (``stockbee_primary_q25``)
+- ``vix_high``            the market symbol's joined ``vix_close`` > 30 (``vix_level_regime``) or ``vix9d_close`` /
+                          ``vix_close`` > 1 (term-structure backwardation); needs ``swing ingest-vix``
+
+An input that is NaN or missing never fires an overlay.
 Every number here is arithmetic on panel columns and settings; nothing calls a model.
 """
 
@@ -48,6 +63,9 @@ from swing_engine.features._common import session_key
 from swing_engine.features.breadth import breadth_as_of, market_breadth
 from swing_engine.features.cross_section import VOL_WINDOWS, WINDOW_52W, realized_vol
 from swing_engine.features.indicators import sma
+from swing_engine.features.market_school import CORRECTION as MS_CORRECTION
+from swing_engine.features.market_school import UNDER_PRESSURE as MS_UNDER_PRESSURE
+from swing_engine.features.market_school import market_school
 from swing_engine.features.regime import (
     TREND_DOWN,
     TREND_FAST_WINDOW,
@@ -85,6 +103,19 @@ MARKET_VOL_COL = "market_vol_regime"
 VOL_CODES: dict[int, VolState] = {0: "low", 1: "normal", 2: "high"}
 PCT = 100.0
 
+#: Overlay name -> default thresholds (``settings.playbook.overlays.<name>.params`` overrides them).
+OVERLAYS: dict[str, dict[str, float]] = {
+    "market_school_pressure": {},
+    "market_school_correction": {},
+    "hill_bearish": {"ad_pct_below": -30.0, "hl_pct_below": -10.0, "min_votes": 2},
+    "mcclellan_negative": {"osc_below": 0.0},
+    "q25_bearish": {"ratio_below": 1.0},
+    "vix_high": {"vix_above": 30.0, "term_ratio_above": 1.0},
+}
+MS_OVERLAY_STATES = {"market_school_pressure": MS_UNDER_PRESSURE, "market_school_correction": MS_CORRECTION}
+#: features.market_school states as numbers for ``MarketState.inputs``
+MS_STATE_CODES = {"confirmed_uptrend": 1.0, MS_UNDER_PRESSURE: 0.0, MS_CORRECTION: -1.0}
+
 if set(PLAYBOOK_REGIMES) != {HEALTHY_UPTREND, NARROW_UPTREND, CHOPPY, CORRECTION, HIGH_VOL_SELLOFF}:
     raise RuntimeError("strategies.playbook regimes drifted from core.config.PLAYBOOK_REGIMES")
 
@@ -99,6 +130,7 @@ class MarketState(BaseModel):
     regime: Regime = REGIME_WITHOUT_MARKET
     notes: list[str] = Field(default_factory=list)
     inputs: dict[str, float] = Field(default_factory=dict)
+    overlays: list[str] = Field(default_factory=list)  # enabled overlays that fired (they only reduce risk)
 
 
 # --------------------------------------------------------------------------------------------- helpers
@@ -337,6 +369,72 @@ def classify_regime(
     return CHOPPY, ["SPY above its 200-day without a clean trend -> choppy"]
 
 
+def _market_school_state(panel: pd.DataFrame, as_of: date, cfg: PlaybookConfig, params: dict[str, float]) -> str | None:
+    """``features.market_school`` state of the market symbol on its last bar on or before ``as_of``."""
+    need = {SYMBOL, TS, HIGH, "low", CLOSE, "volume"}
+    if not need <= set(panel.columns):
+        return None
+    rows = _on_or_before(panel.loc[panel[SYMBOL] == cfg.market_symbol], as_of)
+    if rows.empty:
+        return None
+    kw = {k: int(v) if k in {"dd_window", "ftd_min_day", "dd_pressure", "dd_correction"} else v for k, v in params.items()}
+    return str(market_school(rows, **kw)["ms_state"].iloc[-1])
+
+
+def fired_overlays(
+    panel: pd.DataFrame, as_of: date, brow: pd.Series | None, slow_on: bool | None, cfg: PlaybookConfig
+) -> tuple[list[str], list[str], dict[str, float]]:
+    """``(fired names, notes, inputs)`` for the enabled overlays on ``as_of`` (see the module docstring)."""
+    unknown = sorted(set(cfg.overlays) - set(OVERLAYS))
+    if unknown:
+        raise ValueError(f"playbook.overlays: unknown overlay(s) {unknown}; known {sorted(OVERLAYS)}")
+    on = {n: {**OVERLAYS[n], **o.params} for n, o in cfg.overlays.items() if o.enabled}
+    fired: list[str] = []
+    inputs: dict[str, float] = {}
+    ms_names = [n for n in on if n in MS_OVERLAY_STATES]
+    if ms_names:
+        ms_params = {k: v for n in ms_names for k, v in on[n].items()}
+        ms = _market_school_state(panel, as_of, cfg, ms_params)
+        if ms is not None:
+            inputs["ms_state"] = MS_STATE_CODES[ms]
+        fired += [n for n in ms_names if ms == MS_OVERLAY_STATES[n]]
+    row = brow if brow is not None else pd.Series(dtype="float64")
+    if "hill_bearish" in on:
+        p = on["hill_bearish"]
+        ad, hl, p200 = _f(row.get("ad_pct_ema10")), _f(row.get("hl_pct")), _f(row.get("pct_above_200"))
+        votes = int(_finite(ad) and ad < p["ad_pct_below"]) + int(_finite(hl) and hl < p["hl_pct_below"])
+        votes += int(_finite(p200) and slow_on is False)
+        inputs["hill_bearish_votes"] = float(votes)
+        if votes >= p["min_votes"]:
+            fired.append("hill_bearish")
+    for name, col, key in (("mcclellan_negative", "mcclellan_osc", "osc_below"), ("q25_bearish", "q25_ratio", "ratio_below")):
+        val = _f(row.get(col))
+        if name in on and _finite(val) and val < on[name][key]:
+            fired.append(name)
+    if "vix_high" in on:
+        vix, ratio = _vix_inputs(panel, as_of, cfg)
+        for key, val in (("vix_close", vix), ("vix9d_vix_ratio", ratio)):
+            if _finite(val):
+                inputs[key] = val
+        p = on["vix_high"]
+        if (_finite(vix) and vix > p["vix_above"]) or (_finite(ratio) and ratio > p["term_ratio_above"]):
+            fired.append("vix_high")
+    notes = [f"overlays fired: {', '.join(fired)} (risk scaled down)"] if fired else []
+    return fired, notes, inputs
+
+
+def _vix_inputs(panel: pd.DataFrame, as_of: date, cfg: PlaybookConfig) -> tuple[float, float]:
+    """(VIX close, VIX9D / VIX) on the market symbol's last row on or before ``as_of``; NaN without the columns."""
+    if "vix_close" not in panel.columns:
+        return math.nan, math.nan
+    rows = _on_or_before(panel.loc[panel[SYMBOL] == cfg.market_symbol], as_of)
+    if rows.empty:
+        return math.nan, math.nan
+    last = rows.sort_values(TS).iloc[-1]
+    vix, v9 = _f(last.get("vix_close")), _f(last.get("vix9d_close"))
+    return vix, (v9 / vix if _finite(v9) and _finite(vix) and vix > 0 else math.nan)
+
+
 # --------------------------------------------------------------------------------------------- public API
 def market_state(
     panel: pd.DataFrame,
@@ -362,7 +460,8 @@ def market_state(
     vol, v_notes = classify_vol(spy, cfg)
     bstate, b_notes = classify_breadth(brow, cfg, slow_on=slow_on)
     regime, r_notes = classify_regime(spy, trend, vol, bstate)
-    notes = [*t_notes, *v_notes, *b_notes, *r_notes]
+    overlays, o_notes, o_inputs = fired_overlays(panel, day, brow, slow_on, cfg)
+    notes = [*t_notes, *v_notes, *b_notes, *r_notes, *o_notes]
     if (
         spy is not None
         and _finite(spy.dist_52w_high)
@@ -396,9 +495,11 @@ def market_state(
                 inputs[str(key)] = float(val)
     if slow_on is not None:
         inputs["pct_above_200_on"] = 1.0 if slow_on else 0.0
+    inputs.update(o_inputs)
 
     state = MarketState(
-        as_of=day, spy_trend=trend, vol_regime=vol, breadth=bstate, regime=regime, notes=notes, inputs=inputs
+        as_of=day, spy_trend=trend, vol_regime=vol, breadth=bstate, regime=regime, notes=notes, inputs=inputs,
+        overlays=overlays,
     )
     log.debug(
         "playbook.market_state",
@@ -425,7 +526,9 @@ def select_strategies(state: MarketState, settings: Settings | None = None) -> d
     """``{strategy: risk multiplier in (0, 1]}`` allowed to open new trades in ``state.regime``, by name.
 
     Only enabled strategies present in ``settings.playbook.regimes[state.regime]`` with a multiplier above 0
-    are returned; absent means not allowed. With ``playbook.enabled = false`` every enabled strategy gets 1.0.
+    are returned; absent means not allowed. Each fired, enabled overlay in ``state.overlays`` then multiplies its
+    strategies by its ``multiplier`` (<= 1, so it only reduces; 0 drops the name). With ``playbook.enabled =
+    false`` every enabled strategy gets 1.0 (overlays included: the router is off).
     """
     settings = settings if settings is not None else load_settings()
     enabled = enabled_strategy_names(settings)
@@ -437,6 +540,14 @@ def select_strategies(state: MarketState, settings: Settings | None = None) -> d
         for name in enabled
         if name in table and _finite(table[name]) and float(table[name]) > 0.0
     }
+    for ov_name in state.overlays:
+        ov = settings.playbook.overlays.get(ov_name)
+        if ov is None or not ov.enabled:
+            continue
+        for name in list(out):
+            if not ov.strategies or name in ov.strategies:
+                out[name] *= float(np.clip(ov.multiplier, 0.0, 1.0))
+    out = {name: m for name, m in out.items() if m > 0.0}
     log.debug("playbook.select", regime=state.regime, allowed=out)
     return out
 
@@ -447,12 +558,14 @@ __all__ = [
     "HEALTHY_UPTREND",
     "HIGH_VOL_SELLOFF",
     "NARROW_UPTREND",
+    "OVERLAYS",
     "MarketState",
     "classify_breadth",
     "classify_regime",
     "classify_trend",
     "classify_vol",
     "enabled_strategy_names",
+    "fired_overlays",
     "market_state",
     "select_strategies",
     "slow_line_on",

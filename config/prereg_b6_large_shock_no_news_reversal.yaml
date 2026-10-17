@@ -1,0 +1,10 @@
+# Book of large_shock_no_news_reversal in batch 6 (docs/preregistration/2026-10-13-batch6.md). Fixed before any run.
+# 8 positions, equal risk: 1% of equity at risk on the strategy's own stop, capped per name.
+extends: prereg_b6.yaml
+risk:
+  risk_per_trade_pct: 1.0
+  max_position_pct: 12.5
+  max_open_positions: 8
+execution:
+  max_new_orders_per_day: 8
+  reuse_exiting_slots: true

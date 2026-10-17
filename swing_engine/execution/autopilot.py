@@ -26,6 +26,9 @@
    accepted), counted from the audit file plus any intent of this run that the ledger shows an autopilot
    already sent (a run killed before its audit write).
 7. Full audit appended to ``<store dir>/runs/autopilot/<date>.json``.
+8. ``receipts`` (optional callback, ``ops.receipts.autopilot_recorder``) is handed the finished report, the
+   intents and the exit actions so every fire, refusal and exit lands in the ``events`` table. Recording only: it
+   runs after every decision is made and a failure in it is logged and ignored.
 
 ``dry_run`` reconciles and plans (statuses ``planned``) but never mutates the broker or the limits state.
 Entry orders are GTC brackets; see ``execution.alpaca_broker`` for the time-in-force reasoning and doc links.
@@ -35,7 +38,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -69,6 +72,7 @@ VETO_DECISIONS = frozenset({ReviewDecision.REJECT, ReviewDecision.NEEDS_MORE_INF
 ENTRY = "entry"
 LOCK_FILENAME = "autopilot.lock"
 KILL_ALLOWED_EXITS = frozenset({ExitKind.CANCEL_ORDER})  # cancelling an unfilled entry only removes exposure
+Receipts = Callable[["AutopilotReport", list[OrderIntent], list[ExitAction]], None]
 
 
 class AutopilotMode(StrEnum):
@@ -145,6 +149,8 @@ class AutopilotReport(BaseModel):
 # ----------------------------------------------------------------------------------------------------------
 # helpers
 # ----------------------------------------------------------------------------------------------------------
+PROBATION_KEY = "probation"  # strategies.<name>.probation (ops.nightly): quarter-risk forward test, paper only
+
 def is_paper_broker(broker: Any) -> bool:
     """Fail closed: only the in-memory simulator and an Alpaca session constructed with paper=True count."""
     if isinstance(broker, PaperSimBroker):
@@ -407,7 +413,7 @@ def load_pending(settings: Settings, as_of: date) -> tuple[list[OrderIntent], li
 
 def run_pending(
     settings: Settings, secrets: Secrets, as_of: date, broker: Any, approved_by: str, *,
-    ledger: OrderLedger | None = None,
+    ledger: OrderLedger | None = None, receipts: Receipts | None = None,
 ) -> AutopilotReport:
     """Execute exactly the staged plan for ``as_of`` with a named human approver: the staged exits, then the
     staged intents (already filtered by review vetoes and the daily cap when they were staged). Every other gate
@@ -417,7 +423,8 @@ def run_pending(
     if plan is None:
         raise FileNotFoundError(f"no staged plan at {run_path(settings, PENDING_KIND, as_of)}")
     intents, exits = plan
-    return run_autopilot(settings, secrets, as_of, broker, intents, None, exits, ledger=ledger, approved_by=approved_by)
+    return run_autopilot(settings, secrets, as_of, broker, intents, None, exits, ledger=ledger, approved_by=approved_by,
+                         receipts=receipts)
 
 
 def _audit(settings: Settings, report: AutopilotReport, prior: list[dict[str, Any]]) -> Path:
@@ -443,6 +450,7 @@ def run_autopilot(
     ledger: OrderLedger | None = None,
     env: Mapping[str, str] | None = None,
     approved_by: str | None = None,
+    receipts: Receipts | None = None,
 ) -> AutopilotReport:
     """Reconcile, then exits, then entries; see the module docstring for every gate. Never raises for a
     single order: refusals and broker errors are recorded on the report. ``secrets`` is accepted for the
@@ -468,14 +476,28 @@ def run_autopilot(
         approved_by=approver, dry_run=dry_run, started_at=datetime.now(UTC),
         max_new_orders_per_day=cfg.max_new_orders_per_day,
     )
+    if not paper:  # a probation strategy is a forward test of an unproven candidate: paper accounts only, always
+        probation = {n for n, c in settings.strategies.items() if (c or {}).get(PROBATION_KEY)}
+        dropped = [i for i in intents_l if i.strategy in probation]
+        if dropped:
+            intents_l = [i for i in intents_l if i.strategy not in probation]
+            report.errors.append(f"{len(dropped)} intents of probation strategies dropped: paper brokers only "
+                                 f"({', '.join(sorted({i.symbol for i in dropped}))})")
+            log.error("autopilot_probation_on_live_refused", symbols=sorted({i.symbol for i in dropped}))
     with _exclusive(lock_path(settings)) as locked:
         if not locked:
             report.mode, report.approved_by = AutopilotMode.ABORTED, None
             report.errors.append(f"another autopilot run holds {lock_path(settings)}; nothing was sent")
             report.finished_at = datetime.now(UTC)
             log.error("autopilot_locked", lock=str(lock_path(settings)))
-            return report
-        return _run_locked(settings, report, broker, intents_l, reviews, exits_l, approver, ledger)
+        else:
+            _run_locked(settings, report, broker, intents_l, reviews, exits_l, approver, ledger)
+    if receipts is not None:
+        try:
+            receipts(report, intents_l, exits_l)
+        except Exception as exc:  # noqa: BLE001 - a receipt never changes or fails the run it describes
+            log.error("autopilot_receipts_failed", error=f"{type(exc).__name__}: {exc}")
+    return report
 
 
 def _run_locked(

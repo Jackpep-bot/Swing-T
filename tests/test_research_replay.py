@@ -418,3 +418,83 @@ def test_replay_scans_and_measures_breadth_on_the_point_in_time_universe(monkeyp
     run_replay(Settings(), _universe_store(), "2024-03-01", "2024-04-30", strategies=[unscreened], trials_path=None,
                record_shadow=False, screen_universe=False)
     assert "THIN" in unscreened.seen
+
+
+def test_screened_symbol_prefilter_leaves_results_unchanged(monkeypatch):
+    syms = ["SPY", *SampleProvider().stocks[:15]]
+    bars = SampleProvider().daily_bars(syms, date(2023, 9, 1), date(2025, 4, 30))
+    junk = []
+    for k in range(6):  # sub-$5, thinly traded names the universe screen never admits
+        j = bars.loc[bars["symbol"] == syms[1 + k]].copy()
+        j["symbol"] = f"JUNK{k}"
+        for c in ("open", "high", "low", "close"):
+            j[c] = j[c] / 40.0
+        j["volume"] = 1_000.0
+        junk.append(j)
+    settings = Settings(
+        risk=RiskConfig(max_open_positions=6),
+        strategies={"rsi2_meanrev": {"enabled": True, "min_reward_risk": 0.0}, "sr_bounce": {"enabled": True},
+                    "pullback_trend": {"enabled": True}},
+    )
+
+    def go() -> Any:
+        store = Store()
+        store.write_bars(pd.concat([bars, *junk], ignore_index=True))
+        res = run_replay(settings, store, "2024-09-03", "2025-04-15", use_router=False, trials_path=None)
+        shadow = store.read_table(REPLAY_SHADOW_TABLE).sort_values(["strategy", "symbol", "as_of"])
+        return res, shadow.drop(columns=["recorded_at"], errors="ignore").reset_index(drop=True)
+
+    kept: list[int] = []
+    real = replay_mod._screened_symbols_only
+
+    def spy(panel, *a, **k):
+        out = real(panel, *a, **k)
+        kept.append(out["symbol"].nunique())
+        return out
+
+    monkeypatch.setattr(replay_mod, "_screened_symbols_only", spy)
+    fast, fast_shadow = go()
+    monkeypatch.setattr(replay_mod, "_screened_symbols_only", lambda panel, *a, **k: panel)
+    full, full_shadow = go()
+    assert kept and kept[0] < len(syms) + 6  # the junk names were dropped
+    assert fast.summary["n_signals"] == full.summary["n_signals"] > 0
+    pd.testing.assert_frame_equal(pd.DataFrame(fast.trades), pd.DataFrame(full.trades))
+    pd.testing.assert_frame_equal(fast_shadow, full_shadow)
+
+
+def test_record_events_is_opt_in_and_matches_the_replay_counts(tmp_path):
+    from swing_engine.ops import receipts
+
+    store, sched, _ = _planted_store(0.08)
+    _replay(store, sched, tmp_path, record_shadow=False)
+    assert not store.has_table(receipts.EVENTS_TABLE)  # default: no per-signal rows from research replays
+    res = _replay(store, sched, tmp_path, record_shadow=False, record_events=True)
+    events = receipts.read_events(store)
+    assert set(events["source"]) == {"replay"} and events["run_id"].nunique() == 1
+    assert int((events["kind"] == "fire").sum()) == res.summary["n_orders"]
+    assert int((events["kind"] == "exit").sum()) == res.summary["trades"]
+    refusals = events.loc[events["kind"] == "refusal"]
+    assert len(refusals) == sum(res.summary["skip_reasons"].values()) and set(refusals["step"]) <= {
+        "daily_cap", "slot", "reward_risk", "sizing", "fill"}
+
+
+def test_reuse_exiting_slots_lets_a_rotation_refill_the_book(tmp_path):
+    """One slot. B signals on the session A's time stop decides to sell A at the next open."""
+    store, planted, panel = _planted_store(0.0)
+    days = sorted({t.date() for t in panel["ts"]})
+    base = _replay(store, planted, tmp_path, record_shadow=False).trades
+    a = base.loc[base["exit_reason"] == "time"].iloc[0]
+    first_leg = {(str(a["symbol"]), a["signal_date"])}
+    decided = days[days.index(a["exit_ts"].date()) - 1]  # the close on which A's exit was queued
+
+    def run(schedule: set, reuse: bool):
+        settings = _settings(max_open_positions=1)
+        settings.execution.reuse_exiting_slots = reuse
+        return _replay(store, schedule, tmp_path, settings=settings, record_shadow=False)
+
+    others = [s for s in sorted(panel["symbol"].unique()) if s != a["symbol"]][:6]
+    on = next(r for r in (run(first_leg | {(s, decided)}, True) for s in others) if len(r.trades) == 2)  # B's open fills
+    b = on.trades.iloc[1]
+    assert b["entry_ts"] == a["exit_ts"] and on.equity_curve["n_positions"].max() == 1  # bought at the open A left
+    off = run(first_leg | {(str(b["symbol"]), decided)}, False)
+    assert list(off.trades["symbol"]) == [a["symbol"]] and off.summary["skip_reasons"] == {"no_free_slot": 1}

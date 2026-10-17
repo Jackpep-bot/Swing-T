@@ -148,3 +148,18 @@ def test_fill_at_the_limit_never_exceeds_the_risk_budget():
         intent = size_signal(sig, EQUITY, RiskConfig(risk_per_trade_pct=1.0, max_position_pct=100.0))
         assert intent is not None
         assert intent.qty * (intent.entry_limit - stop) <= EQUITY * 0.01 + 1e-9
+
+
+def test_rule_exit_signal_without_target_sizes_only_under_a_zero_floor():
+    sig = make_signal(target=None)
+    intent, why = size_signal_detail(sig, EQUITY, RiskConfig(), min_reward_risk=0.0)
+    assert intent is not None and intent.target is None and "rule-exit" in intent.notes
+    intent, why = size_signal_detail(sig, EQUITY, RiskConfig())  # portfolio floor 2.0 still needs a target
+    assert intent is None and why.startswith("reward_risk unknown")
+
+
+def test_target_at_exactly_the_floor_passes_despite_float_error():
+    entry, stop = 47.31, 45.17
+    target = entry + 2.0 * (entry - stop)  # (target - entry) / risk can land a hair under 2.0
+    intent, why = size_signal_detail(make_signal(entry=entry, stop=stop, target=target), EQUITY, RiskConfig())
+    assert intent is not None, why

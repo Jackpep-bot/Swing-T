@@ -1,0 +1,12 @@
+# Batch 5 (docs/proposals/swing-methods-2026-10/batch5/; pre-registration docs/preregistration/2026-10-13-batch5.md).
+# The cards define their own universes (SMALLMID = market-cap ranks 501-3,000, and a few others), so the replay
+# screens wide and each strategy filters: everything with close >= $1, $1M a day and 100k shares (about 6,400
+# names in 2026; max_symbols is set above that so the cap never binds). Only about 55% of those rows have a market
+# cap from filed share counts, and the cards' ranks run to 3,200 among them, so a 4,000-name screen was too narrow.
+# Research replays only; never used by the nightly.
+extends: live.yaml
+universe:
+  min_price: 1.0
+  min_avg_dollar_volume: 1000000
+  min_avg_volume: 100000
+  max_symbols: 8000

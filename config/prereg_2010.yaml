@@ -1,0 +1,7 @@
+# The 2010-2026 research store (scripts/build_store_2010.py; docs/plan-store-2010.md): batch 9's store plus Tiingo bars
+# from 2010-01-04 for the 2009-2015 large caps (dead ones keyed TICKER~YYYYMMDD), their splits and dividends, and EDGAR
+# fundamentals for dead CIKs. Not built until TIINGO_API_KEY exists. Grading on 2010-2015 needs the owner's word;
+# research modules still start at b9_books.DATA_START (2016-01-04) until then.
+extends: prereg_b6.yaml
+data:
+  store_path: data/live/replay_2010.duckdb

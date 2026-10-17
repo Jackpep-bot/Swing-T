@@ -1,9 +1,10 @@
 """Insider cluster-buy follow-through (long).
 
-docs/research-monitor.md: insider cluster = >= 3 distinct insiders with open-market buys (Form 4 codes P/A)
-within 30 days, rejecting clusters with >= 80% identical date+price. The cluster scoring itself lives with
-the EDGAR ingest; this strategy only consumes an OPTIONAL panel column `insider_cluster_score` and returns
-no signals when the column is absent (settings.yaml ships it disabled until Form 4 ingest exists).
+docs/research-monitor.md: insider cluster = >= 3 distinct insiders with open-market buys (Form 4 code P)
+within 30 days, rejecting clusters with >= 80% identical date+price. The score is produced by `data.insiders`
+(`swing ingest-insiders`, joined via `data.fundamentals.join_edgar`: distinct buyers / 3, so >= 1 is a cluster);
+this strategy only consumes the OPTIONAL panel column `insider_cluster_score` and returns no signals when it is
+absent.
 """
 from __future__ import annotations
 

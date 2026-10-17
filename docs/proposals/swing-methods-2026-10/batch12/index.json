@@ -1,0 +1,39 @@
+{
+  "batch": "batch12",
+  "generated": "2026-10-14",
+  "kept": 2,
+  "rejected": 5,
+  "grading": "two halves or pooled 2017-01-01..2026-10-05; alpha (r-BIL) on (SPY-BIL)",
+  "cards": [
+    {
+      "slug": "multi_asset_trend_long_flat",
+      "source": "Moskowitz, Ooi & Pedersen (2012); Hurst, Ooi & Pedersen (2017)",
+      "universe": "SPY, EFA, EEM, VNQ, IEF, TLT, GLD, DBC, UUP",
+      "holding_period": "monthly rebalance",
+      "data_needed": "daily bars of the nine ETFs from 2016-01 (free)",
+      "rule": "Hold each ETF with 12-month return > 0 at weight (0.10/9)/63d vol, cap 0.30, sum <= 1; rest in BIL.",
+      "card": "multi_asset_trend_long_flat.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "cross_asset_trend",
+      "family_trials": 1,
+      "expected_turnover": "150-250%/yr"
+    },
+    {
+      "slug": "industry_neutral_momentum_sp500",
+      "source": "Asness, Porter & Stevens (2000); Moskowitz & Grinblatt (1999)",
+      "universe": "500 largest by mcap_pit, close >= $10",
+      "holding_period": "quarterly (Mar/Jun/Sep/Dec)",
+      "data_needed": "daily bars, mcap_pit, sic2",
+      "rule": "Top 100 by 12-1 return minus sic2 industry median, buffer 150, equal weight 1%; unused weight in SPY.",
+      "card": "industry_neutral_momentum_sp500.md",
+      "kind": "strategy",
+      "evidence_grade": "B",
+      "weights_card": true,
+      "family": "momentum",
+      "family_trials": 4,
+      "expected_turnover": "160-200%/yr"
+    }
+  ]
+}
